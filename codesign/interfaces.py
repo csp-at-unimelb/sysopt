@@ -1,33 +1,74 @@
-from typing import List, Tuple, NewType
-Expression = NewType('Expression', None)
+import numpy as np
 
 
-class DesignParameter:
-    def __init__(self, value, minimum=None, maximum=None):
-        self.min = minimum
-        self.max = maximum
-        self.value = value
+class Block:
+    def __init__(self, name):
+        if name is None:
+            name = f"{self.__class__.__name__}_{self.__class__._n}"
+            self.___class__._n += 1
+        self.name = name
 
-
-class Model:
-    def variables(self) -> Tuple[List[str]]:
+    def _call(self, *args):
         raise NotImplemented
 
-    def initial_state(self):
-        if self.variables()[0]:
-            raise NotImplemented
+    def input_shape(self):
+        raise NotImplemented
+
+    def parameter_shape(self):
+        raise NotImplemented
+
+    def output_shape(self):
+        raise NotImplemented
+
+    def state_shape(self):
+        raise NotImplemented
+
+
+class Function(Block):
+    def state_shape(self):
+        return 0
+
+
+class Variable:
+    def __init__(self, name, initial_value, bounds=None):
+        pass
+
+
+def shape_of(x):
+    if isinstance(x, np.ndarray):
+        return x.shape
+    raise NotImplemented
+
+
+class OdeBlock(Block):
+    def __init__(self, name, f,
+                 u_dim,
+                 parameters=None,
+                 x0=None,
+                 *args, **kwargs):
+        super(OdeBlock).__init__(name)
+        self._f = f
+        self._params = parameters
+        self._initial_state = x0
+        self._input_shape = u_dim
+
+    def _call(self, ):
+
+    def input_shape(self):
+        return self._input_shape,
+
+    def output_shape(self):
+        return shape_of(self._initial_state)
+
+    def state_shape(self):
+        return shape_of(self._initial_state)
+
+    def parameter_shape(self):
+        if isinstance(self._params, dict):
+            count = len([p for p in self._params.values() if isinstance(p, Variable)])
         else:
-            return None
+            count = len([p for p in self._params if isinstance(p, Variable)])
 
-    def get_residual(self, dt, dx, t, x, u, y, p) -> List[Expression]:
-        raise NotImplemented
+        count += len([v for v in self._initial_state if isinstance(v, Variable)])
+        return count
 
-    def get_system_constraints(self, t, x, u, y, p):
-        return None
-
-    def get_parameter_constraints(self, p):
-        raise None
-
-    @property
-    def signature(self):
-        return [len(name_list) for name_list in self.variables()]
