@@ -3,14 +3,18 @@ import termios
 import matplotlib.pyplot as plt
 import numpy as np
 import scikits.odes as sko
-# from codesign.direct import direct
-# Cart function
-
-from matplotlib.widgets import Rectangle, Line2D, Circle
 from matplotlib.animation import TimedAnimation
 
+# hack to get codesign imported while we're still building it out
+import sys
+from os.path import dirname as d
+from os.path import abspath, join
+root_dir = d(d(abspath(__file__)))
+sys.path.append(root_dir)
 
-b = 0.1
+from codesign.direct import direct
+
+b = 0
 g = 1
 
 # c_0 = 1 -> M_c =0, m = 1, l = 1, I =0
@@ -93,7 +97,7 @@ def pfl_shaping_controller(x, p):
     c3 = np.cos(x[3])
     s3 = np.sin(x[3])
     # m dtheta^2 /2 + mlg * (cos theta - 1)
-    energy = p0 * x[1]**2 - p1 * g * c3  # min at c3 -1 -> theta = pi
+    energy = 0.2 * p0 * x[1]**2 - p1 * g * c3  # min at c3 -1 -> theta = pi
 
     # Energy Shaping Control and PD
     u_d = k0 * energy * c3 * x[1] - k1 * x[2] - k2 * x[0]
@@ -205,10 +209,9 @@ def solve(params, loss_only=False):
 def search():
     from codesign.direct import direct
     params = (controller_params, plant_params)
+    anim = CartPoleAnimation()
 
     def func(x, loss_only=True):
-        #params[1]._value[3] = x[0]
-        # params[0]._value[0:4] = _map_params(params[1].value)
         params[0]._value[-3:] = x
         t, path = solve(params)
         x_final = path[:, -1]
@@ -231,11 +234,16 @@ def search():
     plt.xlabel('Angle from -z')
     plt.ylabel('Angular Velocity')
     plt.show()
-
-    params[0]._value[-3:] = sol.argmin[1:]
+    params[0]._value[-3:] = sol.argmin
 
     plot_control_effort(t, Y, params[0].value)
+    plt.show()
     plot_optimisation_path(history)
+    plt.show()
+    anim = CartPoleAnimation()
+    plt.show()
+    anim = CartPoleAnimation(sol.argmin)
+    plt.show()
 
 
 def plot_optimisation_path(rects):
@@ -249,15 +257,15 @@ def plot_optimisation_path(rects):
     ax1.plot(p3, label='p_3')
     ax2.semilogy(v, label='Loss')
     ax2.set_xlabel('Step')
-    plt.show()
 
 
 class CartPoleAnimation(TimedAnimation):
-    def __init__(self):
+    def __init__(self, gains=None):
         self.figure = plt.figure()
         self.axis = self.figure.add_subplot(111)
         self.params = (controller_params, plant_params)
-        self.params[0]._values[-3:] = [1.1, 0.01, 0.01]
+        if gains is not None:
+            self.params[0]._value[-3:] = gains
         self.cart = plt.Rectangle(xy=(-0.25, -0.125), width=0.5, height=0.25, fill=None)
         self.pole = plt.Line2D([0, 0], [0, -1])
         self.axis.add_artist(self.cart)
@@ -345,15 +353,16 @@ def sweep3d():
     ax.set_xlabel('Pole Length')
     ax.set_ylabel('ES. Gain')
     ax.set_zlabel('Terminal Error')
-    plt.show()
+
 
 def sweep2d():
-    n = 150
+    n = 151
     params = (controller_params, plant_params)
-    L = np.linspace(0.5, 1.5, n)
+    L = np.linspace(0.5, 2, n)
 
     def func(x, loss_only=True):
-        params[1].value[3] = x[0]
+        params[1]._value[3] = x
+
         t, path = solve(params)
         x_final = path[:, -1]
         loss = one_step_loss(x_final, 0)
@@ -364,19 +373,18 @@ def sweep2d():
 
     LOSS = np.empty_like(L)
     for i in range(n):
-            LOSS[i] = func(L)
+        LOSS[i] = func(L[i])
 
     plt.plot(L, LOSS)
     ax = plt.gca()
     ax.set_xlabel('Pole Length')
     ax.set_ylabel('Terminal Error')
-    plt.show()
+
 
 def plot_control_effort(t, x, p):
-
     u = np.empty_like(t)
     for i in range(len(u)):
-        u[i] = controller(x[i,:], p)
+        u[i] = controller(x[i, :], p)
     fig, (ax1, ax2, ax3) = plt.subplots(
         nrows=3, ncols=1, sharex=True)
     ax1.plot(t, x[:, 3], label='Angle')
@@ -389,11 +397,11 @@ def plot_control_effort(t, x, p):
     ax3.set_xlabel('t')
     ax3.legend()
     ax1.set_title('Optimized solution')
-    plt.show()
 
 
 if __name__ == '__main__':
     # animate()
     # main()
-    # search()
-    sweep2d()
+    search()
+    # sweep2d()
+    plt.show()
