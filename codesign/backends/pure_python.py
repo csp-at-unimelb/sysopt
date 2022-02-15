@@ -6,6 +6,7 @@ from codesign import ExpressionNode, Atomic, Vector, DenseArray, Ops
 
 
 def evaluate_atom(atom: Atomic, subs):
+    assert not isinstance(atom, ExpressionNode)
     try:
         return float(atom)
     except (TypeError, ValueError):
@@ -24,14 +25,12 @@ def evaluate_atom(atom: Atomic, subs):
 
 def evaluate(self: ExpressionNode, subs):
     # recursive case
-    try:
+    if isinstance(self, ExpressionNode):
         lhs, rhs = evaluate(self.lhs, subs), evaluate(self.rhs, subs)
         return apply(self.op, lhs, rhs)
-    except AttributeError:
-        pass
 
     # base case
-    if isinstance(self, numbers.Number):
+    if isinstance(self, (numbers.Number, np.ndarray)):
         return self
 
     if isinstance(self, (Vector, DenseArray)):
@@ -42,9 +41,11 @@ def evaluate(self: ExpressionNode, subs):
 
 
 def apply(op, lhs, rhs):
+    assert not isinstance(lhs, ExpressionNode)
+    assert not isinstance(rhs, ExpressionNode)
     if op == Ops.add:
         return lhs + rhs
-    elif op == '-':
+    elif op == Ops.sub:
         return lhs - rhs
     elif op == Ops.mul:
         return lhs * rhs
@@ -59,7 +60,11 @@ def apply(op, lhs, rhs):
 class lambdify:
     def __init__(self, expr, *arguments: Atomic):
 
-        assert not set(expr.atoms()) - set(arguments), \
+        atoms = set()
+        for arg in arguments:
+            atoms |= arg.atoms()
+
+        assert not set(expr.atoms()) - set(atoms), \
             "Result has unevaluated symbols"
 
         self._expr = expr
@@ -72,18 +77,19 @@ class lambdify:
                 f" but got {len(args)} "
             )
         for arg in args:
-            if not isinstance(arg, numbers.Number):
+            if not isinstance(arg, (numbers.Number, np.ndarray)):
                 raise TypeError(f"Cannot evaluate expression with type {type(arg)}")
 
         substitutions = list(zip(self._args, args))
 
         if self._expr.op == Ops.eq:
-            return evaluate(self._expr.lhs - self._expr.rhs, substitutions)
+            return evaluate(self._expr.lhs, substitutions) - evaluate(self._expr.rhs, substitutions)
         elif self._expr.op == Ops.leq:
             # a <= b -> 0 <= b - a
             # so return f = max(a - b, 0) so that f == 0 implies a < b
             return max(
-                evaluate(self._expr.lhs - self._expr.rhs, substitutions), 0
+                evaluate(self._expr.lhs, substitutions) -
+                evaluate(self._expr.rhs, substitutions), 0
             )
 
         return evaluate(self._expr, substitutions)

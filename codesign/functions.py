@@ -1,5 +1,6 @@
 from codesign.core import ExpressionNode, t, Ops
 from codesign.core import Derivative, Variable
+from numpy import sin, cos
 
 
 def dot(x, y):

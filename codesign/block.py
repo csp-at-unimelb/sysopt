@@ -1,6 +1,25 @@
 from codesign.core import Signature, Vector, Atomic, Parameter, Variable, Number
 
-from typing import Iterable, Set, Optional, Union, NewType, Tuple
+from typing import Iterable, List, Set, Optional, Union, NewType, Tuple
+
+from dataclasses import dataclass
+
+
+@dataclass
+class Metadata:
+    inputs: List[str]
+    outputs: List[str]
+    state: List[str]
+    parameters: List[str]
+
+    @property
+    def signature(self):
+        return Signature(
+            inputs=len(self.inputs),
+            outputs=len(self.outputs),
+            state=len(self.state),
+            parameters=len(self.parameters)
+        )
 
 
 class Block:
@@ -33,7 +52,14 @@ class Block:
             result |= atoms
         return result
 
-    def expressions(self) -> 'Vector':
+    def expressions(self) -> Tuple[Vector, Vector, Vector]:
+        """
+        Returns vector expressions (f, g, h) such that
+            \dot{x} = f(t, x,u, p)
+            y = g(t, x, u)
+            0 = h(t, x, u)
+
+        """
         raise NotImplementedError
 
 
@@ -69,4 +95,13 @@ class System:
         for component in self.components:
             signature += component.signature
         return signature
+
+    def dynamic_expressions(self) -> Vector:
+        raise  NotImplementedError
+
+    def constraint_expressions(self) -> Vector:
+        raise NotImplementedError
+
+    def output_expressions(self) -> Vector:
+        raise NotImplementedError
 

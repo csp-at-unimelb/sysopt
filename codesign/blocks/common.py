@@ -39,10 +39,9 @@ class LinearSystem(Block):
 
     def expressions(self):
         x = self.state
-        dx = diff(x)
-        y = self.outputs
         u = self.inputs
-        return [dx == self.A @ x + self.B @ u, y == self.C @ x]
+        return (self.A @ x + self.B @ u,
+                self.C @ x, [])
 
 
 class Gain(Block):
@@ -67,6 +66,7 @@ class Gain(Block):
         super().__init__(signature=sig, parameters=params)
 
     def expressions(self):
-        return [
-            u * k == y for u, y, k in zip(self.inputs, self.outputs, self.gain)
-        ]
+        return ([],
+                [self.inputs * self.gain],
+                [])
+

@@ -131,6 +131,9 @@ class ExpressionNode(Algebraic):
         self.lhs = lhs
         self.rhs = rhs
 
+    def __repr__(self):
+        return f"{str(self.op)}({self.lhs}, {self.rhs})"
+
     def __hash__(self):
         return hash((hash(self.op), hash(self.lhs), hash(self.rhs)))
 
