@@ -12,7 +12,7 @@ class LinearSystem(Block):
         n_u, m_u = B.shape
 
         self.C = C if C is not None else eye(n_x)
-        n_y, m_y = C.shape
+        n_y, m_y = self.C.shape
 
         assert n_x == len(x0), "A matrix not same size as Initial coniditions"
         assert n_x == m_x,  "A matrix is not square"
@@ -21,11 +21,12 @@ class LinearSystem(Block):
         m_u = max(m_u, 1)   # take care of the edge case where b is a vector
         self.x0 = x0
 
-        params = set(A.atoms()) | set(B.atoms())
-        try:
-            params |= set(x0.atoms())
-        except AttributeError:
-            pass
+        params = set()
+        for var in (A, B, x0):
+            try:
+                params |= set(var.atoms())
+            except AttributeError:
+                pass
 
         super().__init__(
             signature=Signature(
@@ -40,8 +41,7 @@ class LinearSystem(Block):
     def expressions(self):
         x = self.state
         u = self.inputs
-        return (self.A @ x + self.B @ u,
-                self.C @ x, [])
+        return (self.A @ x + self.B @ u), (self.C @ x), None
 
 
 class Gain(Block):
@@ -66,7 +66,6 @@ class Gain(Block):
         super().__init__(signature=sig, parameters=params)
 
     def expressions(self):
-        return ([],
-                [self.inputs * self.gain],
-                [])
+        return None, self.inputs * self.gain, None
+
 

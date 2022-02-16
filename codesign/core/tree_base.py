@@ -1,8 +1,8 @@
-from typing import NewType, Union
-import numpy as np
-from numbers import Number
 import abc
-from dataclasses import dataclass
+from numbers import Number
+from typing import NewType, Union
+
+import numpy as np
 
 Numeric = NewType('Numeric', Union[Number, np.ndarray])
 
@@ -143,21 +143,6 @@ class ExpressionNode(Algebraic):
     @property
     def children(self):
         return self.lhs, self.rhs
-
-    # def __cmp__(self, other):
-    #     try:
-    #         if self.op != other.op:
-    #             return False
-    #
-    #         lhs, rhs = other.children
-    #     except AttributeError:
-    #         return False
-    #     result = compare(self.lhs, lhs) and compare(self.rhs, rhs)
-    #     if is_symmetric(self.op):
-    #         result = result or (
-    #                 compare(self.lhs, rhs) and compare(self.rhs, lhs)
-    #         )
-    #     return result
 
     def atoms(self):
         atoms = set()

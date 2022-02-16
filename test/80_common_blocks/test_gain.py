@@ -1,7 +1,7 @@
 import numpy as np
 from codesign.core import Signature, Parameter
-from codesign.blocks.common import LinearSystem, Gain
-from codesign.backends.pure_python import evaluate, lambdify
+from codesign.blocks.common import Gain
+from codesign.backends.pure_python import lambdify
 
 
 class TestGain:
@@ -35,13 +35,13 @@ class TestGain:
         f, g, h = block.expressions()
 
         assert not f
-        assert len(g) == 1
+        assert g is not None
         assert not h
 
         inputs = np.array([1, 1/2, 1/3])
         parameters = np.array([3, 5])
         outputs = np.array([3, 5/2, 2/3])
-        expression = block.outputs == g[0]
+        expression = block.outputs == g
         arguments = block.inputs,  block.parameters, block.outputs
         correct_args = inputs, parameters,  outputs
         wrong_args = inputs, parameters, np.array([0, 0, 0])

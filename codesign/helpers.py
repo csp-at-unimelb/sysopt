@@ -20,3 +20,7 @@ def lobatto_gauss_legendre_scheme(n, dtype=float, tolerance=1e-9):
     weights = 2 / (size * n * P[:, n] * P[:, n])
 
     return x, weights
+
+
+def flatten(the_list):
+    return [i for sublist in the_list for i in sublist]

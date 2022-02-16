@@ -55,9 +55,9 @@ class Block:
     def expressions(self) -> Tuple[Vector, Vector, Vector]:
         """
         Returns vector expressions (f, g, h) such that
-            \dot{x} = f(t, x,u, p)
-            y = g(t, x, u)
-            0 = h(t, x, u)
+            \dot{x} = f(t, x, u, p)
+            y = g(t, x, u, p)
+            0 = h(t, x, u, p)
 
         """
         raise NotImplementedError
@@ -71,9 +71,8 @@ class Problem:
         raise NotImplemented
 
 
-Connection = NewType(
-    'Connection', Union[Tuple[Variable, Variable],
-                        Tuple[Iterable[Variable], Iterable[Variable]]])
+Connection = NewType('Connection',
+                     Union[Tuple[Variable, Variable], Tuple[Vector, Vector]])
 
 
 class System:
@@ -96,12 +95,9 @@ class System:
             signature += component.signature
         return signature
 
-    def dynamic_expressions(self) -> Vector:
-        raise  NotImplementedError
 
-    def constraint_expressions(self) -> Vector:
-        raise NotImplementedError
 
-    def output_expressions(self) -> Vector:
-        raise NotImplementedError
+def example_use_case():
+
+    class
 

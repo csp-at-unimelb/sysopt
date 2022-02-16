@@ -6,8 +6,8 @@ __type_registry = defaultdict(set)
 
 
 def get_default_name(obj):
-    for template, clses in __type_registry.items():
-        for cls in clses:
+    for template, classes in __type_registry.items():
+        for cls in classes:
             if isinstance(obj, cls):
                 return template
     raise NotImplementedError(f"Default name not registered "
@@ -16,7 +16,7 @@ def get_default_name(obj):
 
 def register_default_name(name):
     def register_method(cls):
-        __type_registry[name].add(cls)
+        register(cls, name)
         return cls
 
     return register_method
@@ -35,10 +35,8 @@ def register_or_create_name(obj, name):
 
     idx = 0
     while True:
-        # hacky, fix me
         name = get_default_name(obj) + f"{idx}"
         if name not in __registry:
             __registry[name] = ref(obj)
             return name
         idx += 1
-

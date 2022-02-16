@@ -5,23 +5,25 @@ from codesign.core import ExpressionNode,  Parameter, Atomic, Numeric,  Signatur
 from codesign.block import System
 from codesign.core.tree_operations import is_inequality, partition_derivatives, substitute
 from codesign.core.vectors import Vector
-from typing import Optional, List, Dict, Tuple, NewType, Callable, Union
+from codesign.helpers import flatten
+from typing import Optional, List, Dict, Tuple, NewType, Callable, Union, Iterable
 from dataclasses import dataclass
+from collections import namedtuple
 
 Path = NewType('Path', Callable[[float], Vector])
 
 
 @dataclass
-class CasadiSystemData:
-    X: casadi.MX        # Dyanmics
-    U: casadi.MX        # Inputs
-    Y: casadi.MX        # Outputs
-    P: casadi.MX        # Parameters
-    S: casadi.MX        # Slack variables
-    f: casadi.Function  # Explicit Dynamics
-    g: casadi.Function  # Algebraic constraints
-    j: casadi.Function  # Quadratures
-    x0: np.ndarray      # Initial values
+class FlattenedSystem:
+    X: Iterable             # Dynamics
+    U: Iterable             # Inputs
+    Y: Iterable             # Outputs
+    P: Iterable             # Parameters
+    S: Optional[Iterable]   # Slack variables
+    f: Callable             # Explicit Dynamics
+    g: Callable             # Algebraic constraints
+    j: Callable             # Quadratures
+    x0: np.ndarray          # Initial values
     t0: float
     tf: float
 
@@ -32,26 +34,18 @@ class Solution:
     argmin: Dict[Parameter, Union[float, Path]]
     window: Tuple[float]
 
-
-ops = {
-    Ops.mul: lambda x, y: x * y,
-    Ops.add: lambda x, y: x + y,
-    Ops.matmul: lambda x, y: x @ y,
-    Ops.power: lambda x, y: pow(x, y)
-}
-
-
-def apply(op_str, lhs, rhs):
-    return ops[op_str](lhs, rhs)
-
-
-def bake_tree(tree: ExpressionNode, substitutions: Dict[Atomic, Numeric]):
-    try:
-        children = (tree.lhs, tree.rhs)
-    except AttributeError:
-        return bake_atom(tree, substitutions)
-
-    return apply(tree.op, *children)
+#
+# ops = {
+#     Ops.mul: lambda x, y: x * y,
+#     Ops.add: lambda x, y: x + y,
+#     Ops.matmul: lambda x, y: x @ y,
+#     Ops.power: lambda x, y: pow(x, y),
+#     Ops.sub: lambda x, y: x - y
+# }
+#
+#
+# def apply(op_str, lhs, rhs):
+#     return ops[op_str](lhs, rhs)
 
 
 class Minimise:
@@ -69,34 +63,25 @@ class Minimise:
                 yield a
 
 
-def flatten(the_list):
-    return [i for sublist in the_list for i in sublist]
+class VariableIndexMap:
+    def __init__(self, state, inputs, outputs, parameters):
+        self.maps = [dict()
+              for _ in (state, inputs, outputs, parameters)
+         ]
+        self.next_index = 0
 
-
-def find_index_of(x, lookup) -> Union[int, slice]:
-    # cases:
-    # - x is a Variable, so we need to find and index
-    # - x is a contiguous vector, so we need to find a slice
-    n = 0
-    print(f"Looking for {x} in {lookup}")
-    if isinstance(x, Vector):
-        for entry, item in lookup:
-            if x is entry:
-                return slice(n, n + len(item))
-            n += len(item)
-        raise IndexError("Item not in list")
-
-    else:
-        for entry, item in lookup:
-            try:
-                idx = entry.index(x)
-                if idx >= 0:
-                    return n + idx
-            except AttributeError:
-                pass
-            n += len(item)
-
-    raise IndexError("Cound not find item")
+    def push_block(self, component):
+        variables = (
+            component.state, component.inputs,
+            component.outputs, component.parameters
+        )
+        component_index = self.next_index
+        for v_map, var in zip(self.maps, variables):
+            if var is None:
+                continue
+            for offset, v in enumerate(var):
+                v_map.update({(component_index, offset): len(v_map)})
+        self.next_index += 1
 
 
 def flatten_model(model: System, symbols, t):
@@ -105,52 +90,48 @@ def flatten_model(model: System, symbols, t):
     #   U = [u_{0; 0}, ..., u_{n; k_u}]   (inputs)
     #   Y = [y_{0; 0}, ..., y_{n; k_y}]   (output)
     #   P = [p_{0; 0}, ..., p_{n;_k_p}]   (parameters)
-    #   S = [s_{0, 0}, ..., s_{n, k_s}]   (slack variables)
     #
     # split expressions into
-    #    \dot{J} = j(X, U, P)
     #    \dot{X} = F(X, U, Z, P)
     #          Y = G_{eq}(X, U, P)
-    #          S = G_{ineq}(X, U, P)
     #          0 = G_{dae}(X, U, Z, P)
     #          U = LY
     #
 
-    inverse_map = [(cd.t, t)]
+    var_map = VariableIndexMap(*symbols)
+    dxdt = []
+    algebraic = []
+    outputs = []
 
-    G_eq = []
-    F_eq = []
-    Dx_eq = []
-    coupling_vars = []
-    offset = Signature()
-    for component in model.components:
-        this_map = []
-        this_sig = component.signature
-        variables = (
-            component.inputs, component.state,
-            component.outputs, component.parameters
-        )
-        for var, symbol, start, length in zip(variables, symbols,
-                                              offset, this_sig):
-            if not length:
-                continue
-            this_map.append((var, symbol[start:start + length]))
+    # step one
+    #
+    # build tables:
+    #   key | component | state | inputs | outputs | parameters
+    #
+    #  (for each variable class)
+    #    target index | component index | offset
+    #
 
-        for expr in component.expressions():
-            assert not is_inequality(expr), \
-                "Inequalities within models are not yet supported"
+    for i, component in enumerate(model.components):
+        var_map.push_block(component)
+        f, g, h = component.expressions()
+        if f is not None:
+            dxdt.append(f)
+        if g is not None:
+            outputs.append(g)
+        if h is not None:
+            algebraic.append(h)
 
-            ode_pairs, g, slack_vars = partition_derivatives(expr)
-            for dx, f in ode_pairs:
-                Dx_eq.append(dx)
-                F_eq.append(f)
-            G_eq += g
-            coupling_vars += slack_vars
+    algebraic += [i - j for i, j in model.wires]
 
-        inverse_map += this_map
-        offset += this_sig
-
-    G_eq += [i == j for i, j in model.wires]
+    data = FlattenedSystem(
+        *symbols,
+        f=vectorise(substitute(f_i, var_map) for f_i in dxdt),
+        g=vectorise(substitute(g_i,  var_map) for g_i in g),
+        h=vectorise(substitute(h_i, var_map) for h_i in h),
+        t0=0,
+        tf=1
+    )
 
 
 def casadi_bake(problem):
