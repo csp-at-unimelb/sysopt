@@ -17,13 +17,23 @@ Release 0.0.4:
 
 Release 0.1.0: Parametric Optimisation
  - Handle derived parameters, and how derived parameter gradients can be computed.
- - Specify constraints on parameters from within a composite block.
  - Specify an optimisation objective in terms of a functional, as well as path constraints
  - Evaluate a path with respect to the objective function, and take gradients with respect to design parameters
  - Run optimisation cycles with respect to the loss function
 
+Release 0.2.0: Serialisation and Logging
+ - Deterministically serialise and deserialise models into a schema-based format
+ - Selectivly log diagnostic information and intermediate steps in the optimisation loop
+
+Accepted
+--------
+- Uncertainty propogation
+- Matlab bindings
+- Parametric constraints within composite blocks
+
 
 Proposed
 --------
-- Alternative autodiff backends.
+- Alternative/more suitable autodiff backends.
 - Units tracking
+- Model visualisation tools
