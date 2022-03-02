@@ -130,3 +130,6 @@ dmypy.json
 
 # Ide
 .idea/
+
+# Pytest
+.pytest_cache
