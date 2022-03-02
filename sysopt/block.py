@@ -105,23 +105,6 @@ class Block:
         )
 
 
-def generate_expressions(self, context):
-    r"""
-    Returns vector expressions (f, g, h) such that
-        \dot{x} = f(t, x,u, p)
-        y = g(t, x, u)
-        0 = h(t, x, u)
-
-    """
-    x, z, u, p = context.get_or_create_symbols(self)
-    t = context.t()
-    f = context.wrap_function(self.compute_dynamics, t, x, z, u, p)
-    g = context.wrap_function(self.compute_outputs, t, x, z, u, p)
-    h = context.wrap_function(self.compute_residuals, t, x, z, u, p)
-
-    return dx == f, y == g, 0 == h
-
-
 class Problem:
     def __init__(self, model, constraints=None, loss=None):
         self.model = model
