@@ -1,4 +1,0 @@
-pint
-numpy
-scipy
-casadi
