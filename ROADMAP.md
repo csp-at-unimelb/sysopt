@@ -15,9 +15,6 @@ Release 0.0.4:
     - Infinite Horizon LQR
  - Implement the cart-pole demo
 
-Release 0.0.5:
- -  
-
 Release 0.1.0: Parametric Optimisation
  - Handle derived parameters, and how derived parameter gradients can be computed.
  - Specify constraints on parameters from within a composite block.
