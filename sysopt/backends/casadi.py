@@ -2,7 +2,6 @@ import casadi
 import numpy as np
 
 from sysopt.backend import CodesignSolverContext, FlattenedSystem
-from sysopt.types import Signature
 
 
 class CasadiOdeSolver:
@@ -43,7 +42,9 @@ class CasadiOdeSolver:
             'grid': [i / n for i in range(n + 1)],
             'output_t0': True
         }
-        integrator = casadi.integrator('F', 'idas', self.dae_spec, solver_options)
+        integrator = casadi.integrator(
+            'F', 'idas', self.dae_spec, solver_options
+        )
 
         p_prime = casadi.vertcat(t, p)
         x0 = self.x0(p)
@@ -135,8 +136,8 @@ class CasadiBackend(CodesignSolverContext):
             return arg
         elif isinstance(arg, (list, tuple, np.ndarray)):
             return casadi.SX(arg)
-        else:
-            raise NotImplementedError(f"Don't know how to cast {arg.__class__}")
+
+        raise NotImplementedError(f"Don't know how to cast {arg.__class__}")
 
     @property
     def t(self):
@@ -196,7 +197,7 @@ class CasadiBackend(CodesignSolverContext):
         if system.X is None:
             return self.nlp(system)
         if system.U is not None:
-            raise ValueError(f"System has unassigned inputs")
+            raise ValueError("System has unassigned inputs")
         return CasadiOdeSolver(self.t, system)
 
     def _recursively_flatten(self, block):
@@ -229,7 +230,8 @@ class CasadiBackend(CodesignSolverContext):
                 idx = uuids[src.parent.uuid()]
                 g_idx = flattened_systems[idx].g
                 g_dict.update({
-                    i: g_idx[j] for i, j in zip(src.get_iterator(), dest.get_iterator())
+                    i: g_idx[j]
+                    for i, j in zip(src.get_iterator(), dest.get_iterator())
                 })
             else:
                 idx = uuids[src.parent.uuid()]
@@ -240,8 +242,14 @@ class CasadiBackend(CodesignSolverContext):
                     for u_i, j in zip(symbols, src.get_iterator())
                 ]
                 z_new += list(self._get_input_symbols_for(dest))
-        U_flat = [u_i for _, u_i in sorted(U_dict.items(), key=lambda item: item[0])]
-        g_flat = [g_i for _, g_i in sorted(g_dict.items(), key=lambda item: item[0])]
+
+        U_flat = [
+            u_i for _, u_i in sorted(U_dict.items(), key=lambda item: item[0])
+        ]
+
+        g_flat = [
+            g_i for _, g_i in sorted(g_dict.items(), key=lambda item: item[0])
+        ]
         return FlattenedSystem(
             X=self.concatenate(*x_flat),
             U=self.concatenate(*U_flat),
@@ -260,4 +268,6 @@ class CasadiBackend(CodesignSolverContext):
         if lazy_reference in block.inputs:
             return iter(u[i] for i in lazy_reference.get_iterator())
 
-        raise ValueError(f"Can't get input symbols for {lazy_reference.parent}")
+        raise ValueError(
+            f"Can't get input symbols for {lazy_reference.parent}"
+        )

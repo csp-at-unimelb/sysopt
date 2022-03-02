@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from sysopt import Signature, Block
 from sysopt.blocks import InputOutput
@@ -32,20 +31,17 @@ class BlockMock(Block):
             signature=Signature(inputs=2, outputs=2)
         )
 
-    def compute_outputs(self, t, state, inputs, parameters):
+    def compute_outputs(self, t, x, z, inputs, parameters):
         return t * inputs
-
 
 
 def mock_block_factory():
     sig = Signature(inputs=2, outputs=2)
 
-    def g(t, u):
+    def g(t, u, _):
         return t * u
 
-    block = InputOutput(
-        signature=sig, output_function=g
-    )
+    return InputOutput(sig, g)
 
 
 # ------------------- Tests
@@ -63,7 +59,6 @@ def test_block_oop_api():
     assert len(block.constraints) == 0
 
 
-@pytest.mark.xfail
 def test_block_factory():
     block = mock_block_factory()
 
@@ -71,11 +66,6 @@ def test_block_factory():
     T = 2
     truth = np.array([2, 6], dtype=float)
 
-    result = block.compute_outputs(T, state=None, inputs=arg, parameters=None)
+    result = block.compute_outputs(T, None, None, arg, None)
 
     assert (result - truth == 0).all()
-
-@pytest.mark.xfail
-def test_identity():
-    block1 = BlockMock()
-
