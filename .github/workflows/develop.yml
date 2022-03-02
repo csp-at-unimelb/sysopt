@@ -46,7 +46,7 @@ jobs:
           pip install -r requirements.txt
       - name: Test with pytest
         run: |
-          pytest --cov=sysopt tests
+          pytest . --cov=sysopt
 
   lint:
     runs-on: ubuntu-latest
