@@ -32,7 +32,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.7", "3.8", "3.9", "3.10"]
-        fail-fast: false
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
@@ -47,9 +46,7 @@ jobs:
       - name: Test with pytest
         run: |
           pytest tests --cov=sysopt --cov-report=xml --junitxml=junit/test-results.xml
- 
-
-  lint:
+   lint:
     runs-on: ubuntu-latest
     needs: flake8
     steps:
