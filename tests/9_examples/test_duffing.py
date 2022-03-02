@@ -1,5 +1,4 @@
-from examples.driven_duffing_system import DuffingComponent, DuffingSystem
-from sysopt import Signature
+from examples.driven_duffing_system import DuffingComponent
 
 
 def duffing_test_values():
@@ -42,7 +41,7 @@ def test_duffing_component_numeric():
     assert dX == expected_result[0]
     assert ddX == expected_result[1]
 
-    y = component.compute_outputs(0, test_state,[], [u], test_parameters)
+    y = component.compute_outputs(0, test_state, [], [u], test_parameters)
     assert y[0] == test_state[0]
     assert y[1] == test_state[1]
 
@@ -50,7 +49,7 @@ def test_duffing_component_numeric():
 def test_duffing_casadi_symbolic():
     import casadi as cs
 
-    ps = [cs.SX.sym(f'p_i') for i in range(3)]
+    ps = [cs.SX.sym(f'p_{i}') for i in range(3)]
     xs = [cs.SX.sym('x'), cs.SX.sym('v')]
     us = [cs.SX.sym('u')]
     ts = cs.SX.sym('t')
@@ -71,5 +70,3 @@ def test_duffing_casadi_symbolic():
     result = f(*args)
     assert result[0] == expected_result[0]
     assert result[1] == expected_result[1]
-
-

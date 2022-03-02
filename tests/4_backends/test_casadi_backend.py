@@ -1,13 +1,9 @@
-# Backend Funcitonality
-# - Take a set of models, with a wiring diagram
-#
-#
-
 import numpy as np
 
 from sysopt.blocks.common import Gain, LowPassFilter, Oscillator
 from sysopt.block import Composite
 from sysopt.backends.casadi import CasadiBackend, CasadiVector
+from sysopt.backend import get_default_backend
 
 
 def test_vector_class():
@@ -38,7 +34,7 @@ def test_create_variables():
 
 
 def test_create_flattened_system_leaf():
-    ctx = CasadiBackend()
+    ctx = get_default_backend()
 
     block = Gain(2)
     block2 = Gain(1)
@@ -68,7 +64,7 @@ def test_create_flattened_system_leaf():
 
 
 def test_create_flattened_system_composite():
-    ctx = CasadiBackend()
+    ctx = get_default_backend()
 
     osc = Oscillator()
     lpf = LowPassFilter()

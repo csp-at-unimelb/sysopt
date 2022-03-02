@@ -38,4 +38,4 @@ class InputOutput(Block):
         self.output_function = function
 
     def compute_outputs(self, t, _1, _2, inputs, parameters):
-        return self.output_function(inputs, parameters)
+        return self.output_function(t, inputs, parameters)

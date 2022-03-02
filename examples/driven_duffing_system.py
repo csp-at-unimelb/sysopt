@@ -73,4 +73,3 @@ def simulate():
     X = np.zeros(shape=(len(T), 2))
     for i, t in enumerate(T):
         X[i, :] = func.compute_outputs(10, [], [], default_parameters)
-
