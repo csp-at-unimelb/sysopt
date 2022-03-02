@@ -47,7 +47,8 @@ jobs:
       - name: Test with pytest
         run: |
           ls
-          pytest test/ --cov=sysopt 
+          pytest tests --cov=sysopt --cov-report=xml --junitxml=junit/test-results.xml
+ 
 
   lint:
     runs-on: ubuntu-latest
