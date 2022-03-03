@@ -44,7 +44,6 @@ def mock_block_factory():
     return InputOutput(sig, g)
 
 
-# ------------------- Tests
 def test_block_oop_api():
     block = BlockMock()
 
@@ -54,9 +53,6 @@ def test_block_oop_api():
 
     assert len(block.inputs) == 2
     assert len(block.outputs) == 2
-    assert len(block.parameters) == 0
-    assert len(block.state) == 0
-    assert len(block.constraints) == 0
 
 
 def test_block_factory():

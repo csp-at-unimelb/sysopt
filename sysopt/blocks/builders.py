@@ -1,10 +1,39 @@
-from sysopt.types import Metadata
+"""Wrapper functions for common block builders.
+
+This module contains the classes for constructing blocks with common
+functionality; for example stateless input-output maps.
+
+See Also:
+     :class:`sysopt.Block`
+
+"""
+
+from typing import Union, Optional
+
+from sysopt.types import (
+    Metadata, Signature, ParameterisedConstant, StatelessFunction, VectorField
+)
 from sysopt.block import Block
 
 
 class FullStateOutput(Block):
+    """Block representing a nonlinear dynamic system.
 
-    def __init__(self, metadata, dxdt, x0=None):
+    Args:
+        metadata: An instance of sysopt.Metadata or sysopt.Signature describing
+            the dimensions of the input,state and parameters spaces. The
+            number of algebraic constraints must be zero (which is default).
+        dxdt: The parameterised function defining the block.
+        x0: The initial conditions as a function of parameters, or None which
+            implies x0 is zero. If `x0` is specified, it must take as an
+            argument a numeric array of the same size as `metadata.parameters`
+            and return a numeric array of the same size as `metadata.state`
+
+    """
+    def __init__(self,
+                 metadata: Union[Metadata, Signature],
+                 dxdt: VectorField,
+                 x0: Optional[ParameterisedConstant] = None):
         assert not metadata.constraints, \
             f"{type(self)} must have no constraints"
 
@@ -16,26 +45,39 @@ class FullStateOutput(Block):
         )
 
         super().__init__(metadata)
-        self.dxdt = dxdt
-        self.x0 = x0 if x0 is not None else lambda p: [0] * len(metadata.state)
+        self._dxdt = dxdt
+        self._x0 = x0 if x0 is not None else lambda p: [0] * len(metadata.state)
 
     def initial_state(self, parameters):
-        return self.x0(parameters)
+        return self._x0(parameters)
 
-    def compute_dynamics(self, t, state, _, inputs, parameters):
-        return self.dxdt(t, state, inputs, parameters)
+    def compute_dynamics(self, t, state, algebraics, inputs, parameters):
+        return self._dxdt(t, state, inputs, parameters)
 
-    def compute_outputs(self, t, state, *args):
+    def compute_outputs(self, t, state, algebraics, inputs, parameters):
         return state
 
 
 class InputOutput(Block):
-    def __init__(self, metadata, function):
+    """Block representing a stateless input-output system.
+
+    Args:
+         metadata: An instance of `sysopt.Metadata` or `sysopt.Signature` that
+            defines the input, output and parameter dimension of this block.
+         function: A function that maps inputs and outputs to parameters.
+           The input dimension should
+
+
+    """
+
+    def __init__(self,
+                 metadata: Union[Metadata, Signature],
+                 function: StatelessFunction):
         assert not metadata.state and not metadata.constraints,\
             f"{type(self)} must not have state"
 
         super().__init__(metadata)
-        self.output_function = function
+        self._output_function = function
 
-    def compute_outputs(self, t, _1, _2, inputs, parameters):
-        return self.output_function(t, inputs, parameters)
+    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+        return self._output_function(t, inputs, parameters)

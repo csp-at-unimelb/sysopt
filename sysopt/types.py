@@ -1,11 +1,39 @@
 from dataclasses import dataclass
 from numbers import Number
-from typing import Union, NewType, List, Optional
+from typing import NewType, Iterable, Optional, Union, Callable, List
 import numpy as np
-from collections import namedtuple
 
-slice_args = namedtuple('slice_args', ['start', 'stop'])
-Numeric = NewType('Numeric', Union[Number, np.ndarray])
+
+Numeric = NewType(
+    'Numeric',
+    Union[Iterable[Number], np.ndarray]
+)
+
+Time = NewType("Time", Number)
+States = NewType("States", Optional[Numeric])
+Algebraics = NewType("Algebraics", Optional[Numeric])
+Inputs = NewType("Inputs", Optional[Numeric])
+Parameters = NewType("Parameters", Optional[Numeric])
+
+BlockFunction = NewType(
+    'BlockFunction',
+    Callable[[Time, States, Algebraics, Inputs, Parameters],
+             Numeric]
+)
+
+ParameterisedConstant = NewType(
+    "ParameterisedConstant", Callable[[Parameters], Numeric]
+)
+
+VectorField = NewType(
+    "VectorField",
+    Callable[[Time, States, Inputs, Parameters], Numeric]
+)
+
+StatelessFunction = NewType(
+    "StatelessFunction",
+    Callable[[Time, Inputs, Parameters], Numeric]
+)
 
 
 @dataclass
@@ -54,14 +82,3 @@ class Metadata:
         )
 
 
-def get_size(index_or_slice, max_value):
-    if isinstance(index_or_slice, slice):
-        start = get_size(index_or_slice.start, max_value)
-        stop = get_size(index_or_slice.stop, max_value)
-        step = abs(index_or_slice.step) or 1
-        return abs(stop - start) // step
-
-    if -max_value < index_or_slice < max_value:
-        return 1
-
-    raise KeyError(f"Invalid key {index_or_slice}")

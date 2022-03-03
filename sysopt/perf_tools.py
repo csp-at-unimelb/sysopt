@@ -1,3 +1,5 @@
+"""Performance tools and helpers"""
+
 import time
 
 
@@ -6,6 +8,7 @@ class TimerException(Exception):
 
 
 class Timer:
+    """Timer context manager."""
     def __init__(self, name=None, quiet=False):
         self.name = name
         self.tstart = None
@@ -25,6 +28,6 @@ class Timer:
 
     def elapsed(self):
         if not self.tstart:
-            raise TimerException("Timer has not been started")
+            raise TimerException('Timer has not been started')
 
         return time.time() - self.tstart

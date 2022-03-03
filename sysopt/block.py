@@ -1,5 +1,8 @@
+"""Base classes for block-based modelling."""
+
 import weakref
-from sysopt.types import Signature, Metadata
+from sysopt.types import (Signature, Metadata, Time, States, Parameters,
+                          Inputs, Algebraics, Numeric)
 from typing import Iterable, Optional, Union, NewType, Tuple
 
 Pin = NewType('Pin', Union['LazyReference', 'LazyReferenceChild'])
@@ -7,12 +10,22 @@ Connection = NewType('Connection', Tuple[Pin, Pin])
 
 
 class LazyReference:
-    def __init__(self, parent, size=0):
+    """Holds a unique identifier for a input/output port on a block.
+
+    Args:
+
+
+
+    """
+
+    def __init__(self, parent: 'Block', size: int = 0):
         self._parent = weakref.ref(parent)
         self.size = size
+        """(int) Number of 'channel' on this port"""
 
     @property
     def parent(self):
+        """The block that this port is from."""
         return self._parent()
 
     def __len__(self):
@@ -49,16 +62,29 @@ class LazyReferenceChild:
     def parent(self):
         return self.reference.parent
 
-    def get_iterator(self):
+    def __iter__(self):
         return iter([self.index])
 
 
 class Block:
+    """Base class for component models.
+
+    Attributes:
+        signature: An instance of `sysopt.Signature` describing the dimensions
+            of input, state, algebraic, output and parameter spaces.
+        metadata: An optional instance of `sysopt.Metadata` describing the
+            metadata (eg. names) of each term in the input, output, state
+            algebraic and parameter spaces.
+        inputs:
+
+
+    """
     def __init__(self,
                  signature: Union[Signature, Metadata]):
 
         if isinstance(signature, Metadata):
             self.signature = signature.signature
+
             self.metadata = signature
         else:
             self.signature = signature
@@ -66,41 +92,43 @@ class Block:
 
         self.inputs.size = self.signature.inputs
         self.outputs.size = self.signature.outputs
-        self.state.size = self.signature.state
-        self.parameters.size = self.signature.parameters
-        self.constraints.size = self.signature.constraints
 
     def __new__(cls, *args, **kwargs):
         obj = super(Block, cls).__new__(cls)
         obj.inputs = LazyReference(obj)
         obj.outputs = LazyReference(obj)
-        obj.state = LazyReference(obj)
-        obj.parameters = LazyReference(obj)
-        obj.constraints = LazyReference(obj)
 
         return obj
 
     def uuid(self):
         return id(self)
 
-    def compute_dynamics(self, t, state, algebraics, inputs, parameters):
-        return None
+    def compute_dynamics(self,
+                         t: Time,
+                         state: States,
+                         algebraics: Algebraics,
+                         inputs: Inputs,
+                         parameters: Parameters):
+        raise NotImplementedError
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
-        return None
+    def compute_outputs(self,
+                        t: Time,
+                        state: States,
+                        algebraics: Algebraics,
+                        inputs: Inputs,
+                        parameters: Parameters) -> Numeric:
+        raise NotImplementedError
 
-    def compute_residuals(self, t, state, algebraics, inputs, parameters):
-        return None
+    def compute_residuals(self,
+                          t: Time,
+                          state: States,
+                          algebraics: Algebraics,
+                          inputs: Inputs,
+                          parameters: Parameters) -> Numeric:
+        raise NotImplementedError
 
-    def initial_state(self, parameters):
-        return None
-
-    def call(self, t, state, algebraic, inputs, parameters):
-        return (
-            self.compute_dynamics(t, state, algebraic, inputs, parameters),
-            self.compute_outputs(t, state, algebraic, inputs, parameters),
-            self.compute_residuals(t, state, algebraic, inputs, parameters)
-        )
+    def initial_state(self, parameters: Parameters) -> Numeric:
+        raise NotImplementedError
 
 
 class ConnectionList(list):
@@ -123,11 +151,11 @@ class ConnectionList(list):
         elif not dest.size and src.size:
             dest.size = src.size
         elif not src.size and not dest.size:
-            raise ConnectionError(f"Cannot connect {src} to {dest}, "
-                                  f"both have unknown dimensions")
+            raise ConnectionError(f'Cannot connect {src} to {dest}, '
+                                  f'both have unknown dimensions')
         elif src.size != dest.size:
-            raise ConnectionError(f"Cannot connect {src} to {dest}, "
-                                  f"incomaptible dimensions")
+            raise ConnectionError(f'Cannot connect {src} to {dest}, '
+                                  f'incompatible dimensions')
         self.append((src, dest))
 
 

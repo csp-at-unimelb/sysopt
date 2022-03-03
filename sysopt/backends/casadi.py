@@ -172,11 +172,19 @@ class CasadiBackend(CodesignSolverContext):
 
         variables = self.get_or_create_variables(block)
         t = self.t
-        f = block.compute_dynamics(t, *variables)
-        g = block.compute_outputs(t, *variables)
-        h = block.compute_residuals(t, *variables)
-        x0 = block.initial_state(variables[-1])
-        print(x0)
+        try:
+            f = block.compute_dynamics(t, *variables)
+            x0 = block.initial_state(variables[-1])
+        except NotImplementedError:
+            f, x0 = None, None
+        try:
+            g = block.compute_outputs(t, *variables)
+        except NotImplementedError:
+            g = None
+        try:
+            h = block.compute_residuals(t, *variables)
+        except NotImplementedError:
+            h = None
         try:
             f = self.concatenate(*f) if f is not None else None
             g = self.concatenate(*g) if g is not None else None
