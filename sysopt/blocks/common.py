@@ -6,10 +6,9 @@ class Gain(Block):
     def __init__(self, channels):
         sig = Signature(inputs=channels,
                         outputs=channels,
-                        state=0,
                         parameters=channels)
 
-        super().__init__(signature=sig)
+        super().__init__(sig)
 
     def compute_outputs(self, t, state, algebraic, inputs, parameters):
         return [gain * signal for signal, gain in zip(inputs, parameters)]

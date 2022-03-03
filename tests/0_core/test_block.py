@@ -28,7 +28,7 @@ from sysopt.blocks import InputOutput
 class BlockMock(Block):
     def __init__(self):
         super().__init__(
-            signature=Signature(inputs=2, outputs=2)
+            Signature(inputs=2, outputs=2)
         )
 
     def compute_outputs(self, t, x, z, inputs, parameters):

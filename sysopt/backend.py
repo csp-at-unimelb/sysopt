@@ -1,6 +1,3 @@
-"""
-
-"""
 
 import warnings
 from dataclasses import dataclass
@@ -71,8 +68,8 @@ def get_backend():
 
     if not __backend:
         __backend = get_default_backend()
-        warning = "Symbolic backend not specified " \
-                  f"- using default {__backend.name}"
+        warning = 'Symbolic backend not specified ' \
+                  f'- using default {__backend.name}'
         warnings.warn(warning, UserWarning, stacklevel=1)
         return __backend
     return __backend

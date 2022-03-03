@@ -231,7 +231,7 @@ class CasadiBackend(CodesignSolverContext):
             if src in block.inputs:
                 U_dict.update({
                     i: u
-                    for i, u in zip(src.get_iterator(),
+                    for i, u in zip(src,
                                     self._get_input_symbols_for(dest))
                 })
             elif dest in block.outputs:
@@ -239,7 +239,7 @@ class CasadiBackend(CodesignSolverContext):
                 g_idx = flattened_systems[idx].g
                 g_dict.update({
                     i: g_idx[j]
-                    for i, j in zip(src.get_iterator(), dest.get_iterator())
+                    for i, j in zip(src, dest)
                 })
             else:
                 idx = uuids[src.parent.uuid()]
@@ -247,7 +247,7 @@ class CasadiBackend(CodesignSolverContext):
                 symbols = self._get_input_symbols_for(dest)
                 h_new += [
                     u_i - g_idx[j]
-                    for u_i, j in zip(symbols, src.get_iterator())
+                    for u_i, j in zip(symbols, src)
                 ]
                 z_new += list(self._get_input_symbols_for(dest))
 
@@ -274,7 +274,7 @@ class CasadiBackend(CodesignSolverContext):
         _, _, u, _ = self.get_or_create_variables(block)
 
         if lazy_reference in block.inputs:
-            return iter(u[i] for i in lazy_reference.get_iterator())
+            return iter(u[i] for i in lazy_reference)
 
         raise ValueError(
             f"Can't get input symbols for {lazy_reference.parent}"
