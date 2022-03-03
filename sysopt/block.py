@@ -119,7 +119,7 @@ class Block:
         self.inputs.size = self.signature.inputs
         self.outputs.size = self.signature.outputs
 
-    def __new__(cls, *args, **kwargs):  # noqa: W0613
+    def __new__(cls, *args, **kwargs):  # noqa
         obj = super().__new__(cls)
         obj.inputs = Port(obj)
         obj.outputs = Port(obj)
@@ -211,10 +211,11 @@ class Composite(Block):  # noqa
 
     """
 
-    def __init__(self, # noqa (no call to super by
+    def __init__(self,
                  components: Optional[Iterable[Block]] = None,
                  wires: Optional[Iterable[Connection]] = None
                  ):
+        # pylint: disable=super-init-not-called
         self._wires = ConnectionList(self)
 
         self.components = components or []      # type: Iterable[Block]

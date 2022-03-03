@@ -1,3 +1,5 @@
+"""Fundamental types and type annotations for `sysopt`."""
+
 from dataclasses import dataclass
 from numbers import Number
 from typing import NewType, Iterable, Optional, Union, Callable, List
@@ -9,11 +11,11 @@ Numeric = NewType(
     Union[Iterable[Number], np.ndarray]
 )
 
-Time = NewType("Time", Number)
-States = NewType("States", Optional[Numeric])
-Algebraics = NewType("Algebraics", Optional[Numeric])
-Inputs = NewType("Inputs", Optional[Numeric])
-Parameters = NewType("Parameters", Optional[Numeric])
+Time = NewType('Time', Number)
+States = NewType('States', Optional[Numeric])
+Algebraics = NewType('Algebraics', Optional[Numeric])
+Inputs = NewType('Inputs', Optional[Numeric])
+Parameters = NewType('Parameters', Optional[Numeric])
 
 BlockFunction = NewType(
     'BlockFunction',
@@ -22,22 +24,23 @@ BlockFunction = NewType(
 )
 
 ParameterisedConstant = NewType(
-    "ParameterisedConstant", Callable[[Parameters], Numeric]
+    'ParameterisedConstant', Callable[[Parameters], Numeric]
 )
 
 VectorField = NewType(
-    "VectorField",
+    'VectorField',
     Callable[[Time, States, Inputs, Parameters], Numeric]
 )
 
 StatelessFunction = NewType(
-    "StatelessFunction",
+    'StatelessFunction',
     Callable[[Time, Inputs, Parameters], Numeric]
 )
 
 
 @dataclass
 class Signature:
+    """The dimension of the corresponding spaces."""
     inputs: int = 0
     state: int = 0
     constraints: int = 0
@@ -65,6 +68,8 @@ class Signature:
 
 @dataclass
 class Metadata:
+    """Descriptions, and additional information for each subspace."""
+
     state: Optional[List[str]] = None
     constraints: Optional[List[str]] = None
     inputs: Optional[List[str]] = None
@@ -80,5 +85,3 @@ class Metadata:
             state=len(self.state) if self.state else 0,
             parameters=len(self.parameters) if self.parameters else 0
         )
-
-

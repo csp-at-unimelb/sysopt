@@ -63,8 +63,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 pip-tools flake8-docstrings
+          pip install pip-tools pylint
           pip-compile setup.cfg
           pip install -r requirements.txt
-      - name: Linting with flake8
-        run: flake8 .
+      - name: Linting with pylint
+        run: pylint --rcfile=pylintrc sysopt

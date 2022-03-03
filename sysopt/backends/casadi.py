@@ -1,14 +1,19 @@
+"""Casadi Backend Implementation."""
+
 import casadi
 import numpy as np
 
-from sysopt.backend import CodesignSolverContext, FlattenedSystem
+from sysopt.backend import ADContext, FlattenedSystem
+from sysopt.block import Block
 
 
 class CasadiOdeSolver:
+    """A casadi based solve for the given system."""
     def __init__(self, t, system: FlattenedSystem):
         assert system is not None
         assert system.X is not None
         assert system.f is not None
+        # pylint: disable=invalid-name
         self._T = casadi.SX.sym('T', 1, 1)
         dae_spec = {
             'x': casadi.vertcat(t, system.X),
@@ -62,11 +67,17 @@ class CasadiOdeSolver:
 
 
 class InterpolatedPath:
+    """Function that linearly interpolates between the data-points."""
     def __init__(self, t, x):
         self.t = t
         self.x = x
 
+    @property
+    def t_max(self):
+        return self.t[-1]
+
     def __call__(self, t):
+        """Get the value at `t`, assumed between 0 and T_max."""
         for i in range(self.t.shape[1] - 1):
             if self.t[i] <= t <= self.t[i + 1]:
                 dist = self.t[i + 1] - self.t[i]
@@ -74,12 +85,13 @@ class InterpolatedPath:
                 w1 = (t - self.t[i])/dist
                 return w0 * self.x[:, i] + w1*self.x[:, i+1]
 
-        raise ValueError(f"No data point for {t}")
+        raise ValueError(f'No data point for {t}')
 
 
 class CasadiVector(casadi.SX):
+    """Wrapper around Casadi.SX for vectors."""
     def __init__(self, *args, **kwarg):
-        pass
+        super().__init__()
 
     def __new__(cls, name, length):
         assert isinstance(length, int)
@@ -93,7 +105,9 @@ class CasadiVector(casadi.SX):
         )
 
 
-class CasadiBackend(CodesignSolverContext):
+class CasadiBackend(ADContext):
+    """Autodiff context based on the casadi library."""
+
     name = 'CasADI'
 
     def __init__(self):
@@ -108,7 +122,9 @@ class CasadiBackend(CodesignSolverContext):
     def wrap_function(self, function, *args):
         raise NotImplementedError
 
-    def get_or_create_variables(self, block):
+    def get_or_create_variables(self,
+                                block: Block):
+        """Creates or retrieves the symbolic variables for the given block."""
         assert not hasattr(block, 'components')
         try:
             return self._variables[block.uuid()]
@@ -137,13 +153,14 @@ class CasadiBackend(CodesignSolverContext):
         elif isinstance(arg, (list, tuple, np.ndarray)):
             return casadi.SX(arg)
 
-        raise NotImplementedError(f"Don't know how to cast {arg.__class__}")
+        raise NotImplementedError(f'Don\'t know how to cast {arg.__class__}')
 
     @property
     def t(self):
         return self._t
 
     def concatenate(self, *vectors):
+        """Concatenate arguments into a casadi symbolic vector."""
         try:
             v0, *v_n = vectors
         except ValueError:
@@ -163,12 +180,14 @@ class CasadiBackend(CodesignSolverContext):
 
         return result
 
-    def get_flattened_system(self, block):
+    def get_flattened_system(self, block: Block):
         flat_system = self._recursively_flatten(block)
 
         return flat_system
 
-    def _flatten_leaf(self, block):
+    def _flatten_leaf(self, block: Block):
+
+        # pylint: disable=invalid-name
 
         variables = self.get_or_create_variables(block)
         t = self.t
@@ -190,9 +209,11 @@ class CasadiBackend(CodesignSolverContext):
             g = self.concatenate(*g) if g is not None else None
             h = self.concatenate(*h) if h is not None else None
             x0 = self.concatenate(*x0) if x0 is not None else None
-        except RuntimeError:
-            raise ValueError(f"Could not stack functions form block {block}: "
-                             "Are you sure they're returning a list or tuple?")
+        except RuntimeError as ex:
+            raise ValueError(
+                f"Could not stack functions form block {block}: "
+                "Are you sure they're returning a list or tuple?"
+            ) from ex
 
         return FlattenedSystem(
             *variables, f, g, h, X0=x0
@@ -205,10 +226,12 @@ class CasadiBackend(CodesignSolverContext):
         if system.X is None:
             return self.nlp(system)
         if system.U is not None:
-            raise ValueError("System has unassigned inputs")
+            raise ValueError('System has unassigned inputs')
         return CasadiOdeSolver(self.t, system)
 
-    def _recursively_flatten(self, block):
+    def _recursively_flatten(self, block: Block):
+
+        # pylint: disable=invalid-name
         try:
             flattened_systems = []
             uuids = {}
@@ -229,11 +252,9 @@ class CasadiBackend(CodesignSolverContext):
         z_new = []
         for src, dest in block.wires:
             if src in block.inputs:
-                U_dict.update({
-                    i: u
-                    for i, u in zip(src,
-                                    self._get_input_symbols_for(dest))
-                })
+                U_dict.update(
+                    dict(zip(src, self._get_input_symbols_for(dest)))
+                )
             elif dest in block.outputs:
                 idx = uuids[src.parent.uuid()]
                 g_idx = flattened_systems[idx].g
@@ -277,5 +298,5 @@ class CasadiBackend(CodesignSolverContext):
             return iter(u[i] for i in lazy_reference)
 
         raise ValueError(
-            f"Can't get input symbols for {lazy_reference.parent}"
+            f'Can\'t get input symbols for {lazy_reference.parent}'
         )
