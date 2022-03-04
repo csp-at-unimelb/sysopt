@@ -211,8 +211,8 @@ class CasadiBackend(ADContext):
             x0 = self.concatenate(*x0) if x0 is not None else None
         except RuntimeError as ex:
             raise ValueError(
-                f"Could not stack functions form block {block}: "
-                "Are you sure they're returning a list or tuple?"
+                f'Could not stack functions form block {block}:'
+                'Are you sure they\'re returning a list or tuple?'
             ) from ex
 
         return FlattenedSystem(
