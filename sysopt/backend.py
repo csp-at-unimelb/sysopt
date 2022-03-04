@@ -1,3 +1,7 @@
+"""API definitions for symbolic backends."""
+# pylint: disable=invalid-name
+
+from abc import ABCMeta
 import warnings
 from dataclasses import dataclass
 from typing import Iterable, Callable, Optional
@@ -5,6 +9,7 @@ from typing import Iterable, Callable, Optional
 
 @dataclass
 class FlattenedSystem:
+    """Intermediate representation of a systems model."""
     X: Optional[Iterable] = None            # Dynamics
     Z: Optional[Iterable] = None            # Coupling Variables
     U: Optional[Iterable] = None            # Inputs
@@ -39,8 +44,8 @@ class FlattenedSystem:
 __backend = None
 
 
-class CodesignSolverContext:
-
+class ADContext(metaclass=ABCMeta):
+    """Interface for automatic differentiation and solver backends."""
     def concatenate(self, *vectors):
         raise NotImplementedError
 
@@ -50,11 +55,14 @@ class CodesignSolverContext:
     def get_or_create_variables(self, block):
         raise NotImplementedError
 
+    @property
     def t(self):
         raise NotImplementedError
 
 
 def get_default_backend():
+    """Return the default solver backend (Casadi) """
+    # pylint: disable=import-outside-toplevel
     global __backend
     if not __backend:
         from sysopt.backends.casadi import CasadiBackend
@@ -63,16 +71,13 @@ def get_default_backend():
 
 
 def get_backend():
+    """Return the current solver backend."""
     global __backend
 
     if not __backend:
         __backend = get_default_backend()
-        warning = "Symbolic backend not specified " \
-                  f"- using default {__backend.name}"
+        warning = 'Symbolic backend not specified ' \
+                  f'- using default {__backend.name}'
         warnings.warn(warning, UserWarning, stacklevel=1)
         return __backend
     return __backend
-
-
-def is_leaf(block):
-    return not hasattr(block, 'components')

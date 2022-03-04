@@ -17,8 +17,6 @@ def test_duffing_component_numeric():
 
     assert len(component.inputs) == 1
     assert len(component.outputs) == 2
-    assert len(component.state) == 2
-    assert len(component.parameters) == 3
 
     test_parameters, test_state, test_control = duffing_test_values()
     delta, beta, alpha = test_parameters

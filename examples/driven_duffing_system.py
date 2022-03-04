@@ -9,15 +9,14 @@ class DuffingComponent(Block):
     def __init__(self,
                  initial_position=0,
                  initial_velocity=0):
-        self.metadata = Metadata(
+        metadata = Metadata(
             inputs=['force'],
             state=['position', 'velocity'],
             parameters=['damping', 'stiffness', 'nonlinearity'],
             outputs=['position', 'velocity']
         )
-        super().__init__(
-            signature=self.metadata.signature
-        )
+        super().__init__(metadata)
+
         self.x0 = [initial_position, initial_velocity]
 
     def initial_state(self, parameters):
