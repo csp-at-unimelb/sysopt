@@ -127,7 +127,7 @@ class CasadiBackend(ADContext):
         """Creates or retrieves the symbolic variables for the given block."""
         assert not hasattr(block, 'components')
         try:
-            return self._variables[block.uuid()]
+            return self._variables[block]
         except KeyError:
             pass
         n = block.signature.state
@@ -140,7 +140,7 @@ class CasadiBackend(ADContext):
         u = CasadiVector('u', k) if k > 0 else None
         p = CasadiVector('p', ell) if ell > 0 else None
         variables = (x, z, u, p)
-        self._variables[block.uuid()] = variables
+        self._variables[block] = variables
         return variables
 
     def cast(self, arg):
@@ -237,7 +237,7 @@ class CasadiBackend(ADContext):
             uuids = {}
             for i, component in enumerate(block.components):
                 flattened_systems.append(self._recursively_flatten(component))
-                uuids[component.uuid()] = i
+                uuids[component] = i
 
         except AttributeError:
             return self._flatten_leaf(block)
@@ -256,14 +256,14 @@ class CasadiBackend(ADContext):
                     dict(zip(src, self._get_input_symbols_for(dest)))
                 )
             elif dest in block.outputs:
-                idx = uuids[src.parent.uuid()]
+                idx = uuids[src.parent]
                 g_idx = flattened_systems[idx].g
                 g_dict.update({
                     i: g_idx[j]
                     for i, j in zip(src, dest)
                 })
             else:
-                idx = uuids[src.parent.uuid()]
+                idx = uuids[src.parent]
                 g_idx = flattened_systems[idx].g
                 symbols = self._get_input_symbols_for(dest)
                 h_new += [
