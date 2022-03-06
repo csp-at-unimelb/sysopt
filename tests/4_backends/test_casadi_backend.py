@@ -44,7 +44,7 @@ def test_create_flattened_system_leaf():
     assert len(ctx._variables) == 1
     flat_block_2 = ctx.get_flattened_system(block2)
     assert len(ctx._variables) == 2
-    assert block2.uuid() in ctx._variables
+    assert block2 in ctx._variables
 
     assert not flat_block_1.X
     assert not flat_block_1.Z

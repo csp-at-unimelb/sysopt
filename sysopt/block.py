@@ -123,11 +123,8 @@ class Block:
         obj = super().__new__(cls)
         obj.inputs = Port(obj)
         obj.outputs = Port(obj)
-
+        setattr(obj, '__hash__', lambda arg: id(obj))
         return obj
-
-    def uuid(self):
-        return id(self)
 
     def compute_dynamics(self,
                          t: Time,
