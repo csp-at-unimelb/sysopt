@@ -104,6 +104,9 @@ class CasadiVector(casadi.SX):
             [self[i] for i in range(self.shape[0])]
         )
 
+    def __len__(self):
+        return self.shape[0]
+
 
 class CasadiBackend(ADContext):
     """Autodiff context based on the casadi library."""
@@ -113,7 +116,7 @@ class CasadiBackend(ADContext):
     def __init__(self):
         self._t = casadi.SX.sym('t', 1)
         self._variables = {}
-
+        self._outputs = {}
         self._nx = 0
         self._nu = 0
         self._nz = 0
@@ -300,3 +303,19 @@ class CasadiBackend(ADContext):
         raise ValueError(
             f'Can\'t get input symbols for {lazy_reference.parent}'
         )
+
+    def get_or_create_outputs(self, block):
+        try:
+            y = self._outputs[block]
+        except KeyError:
+            y = CasadiVector(
+                'y', block.outputs.size
+            )
+            self._outputs[block] = y
+        return y
+
+    def sparse_matrix(self, shape):
+        return casadi.SX(*shape)
+
+
+    def get_or_create_decision_variable(self, block=None, parameters=None):

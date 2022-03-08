@@ -3,10 +3,11 @@
 import weakref
 from sysopt.types import (Signature, Metadata, Time, States, Parameters,
                           Inputs, Algebraics, Numeric)
-from typing import Iterable, Optional, Union, NewType, Tuple
+from typing import Iterable, Optional, Union, NewType, Tuple, List
 
 Pin = NewType('Pin', Union['Port', 'Channel'])
 Connection = NewType('Connection', Tuple[Pin, Pin])
+from sysopt.backend import signal
 
 
 class Port:
@@ -20,8 +21,22 @@ class Port:
 
     def __init__(self, parent: 'Block', size: int = 0):
         self._parent = weakref.ref(parent)
+        self._channels = []
         self.size = size
         """(int) Number of 'channel' on this port"""
+
+    @property
+    def size(self):
+        return len(self._channels)
+
+    @size.setter
+    def size(self, value):
+        difference = value - self.size
+        if difference >= 0:
+            offset = self.size
+            self._channels += [
+                Channel(self, [i + offset]) for i in range(difference)
+            ]
 
     @property
     def parent(self):
@@ -41,33 +56,46 @@ class Port:
             return item is self
 
     def __getitem__(self, item):
-        assert isinstance(item, int), \
-            f'Can\'t get a lazy ref for [{self.parent} {item}]'
+        if isinstance(item, slice):
+            self.size = max(item.stop, self.size)
+            indicies = list(
+                range(item.start, item.stop,
+                      item.step if item.step else 1)
+            )
+            return Channel(self, indicies)
 
-        self.size = max(item + 1, self.size)
+        elif isinstance(item, int):
+            self.size = max(item + 1, self.size)
+            return Channel(self, [item])
 
-        return Channel(self, item)
+        raise ValueError(f'Can\'t get a lazy ref for [{self.parent} {item}]')
 
     def __iter__(self):
-        return iter(range(self.size))
+        return iter(self._channels)
+
+    def __call__(self, t):
+        return signal(self, list(range(self.size)), t)
 
 
 class Channel:
     """A channel on the associated port."""
-    def __init__(self, port: Port, index: int):
+    def __init__(self, port: Port, indices: List[int]):
         self.port = port
-        self.index = index
+        self.indices = indices
+
+    def __call__(self, t):
+        return signal(self.port, self.indices, t)
 
     @property
     def size(self):
-        return 1
+        return len(self.indices)
 
     @property
     def parent(self):
         return self.port.parent
 
     def __iter__(self):
-        return iter([self.index])
+        return iter(self.indices)
 
 
 class Block:

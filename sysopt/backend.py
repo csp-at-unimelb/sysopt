@@ -55,8 +55,24 @@ class ADContext(metaclass=ABCMeta):
     def get_or_create_variables(self, block):
         raise NotImplementedError
 
+    def get_or_create_outputs(self, block):
+        raise NotImplementedError
+
     @property
     def t(self):
+        raise NotImplementedError
+
+    def get_or_create_port_variables(self, port):
+        if port is port.parent.inputs:
+            _, _, u, _ = self.get_or_create_variables(port.parent)
+            return u
+        if port is port.parent.outputs:
+            return self.get_or_create_outputs(port.parent)
+
+    def sparse_matrix(self, shape):
+        raise NotImplementedError
+
+    def get_or_create_decision_variable(self, block=None, parameters=None):
         raise NotImplementedError
 
 
@@ -81,3 +97,27 @@ def get_backend():
         warnings.warn(warning, UserWarning, stacklevel=1)
         return __backend
     return __backend
+
+
+def projection_matrix(indices, dimension):
+
+    matrix = __backend.sparse_matrix((len(indices), dimension))
+    for i, j in indices:
+        matrix[i, j] = 1
+
+    return matrix
+
+
+def signal(parent, indices, t):
+    backend = get_backend()
+
+    vector = backend.get_or_create_port_variables(parent)
+    matrix = projection_matrix(list(enumerate(indices)), len(vector))
+
+    # get parent signal
+    # construct a projection matrix onto the indices
+    # compose with evaluator
+    #
+    # dirac(t) * proj(indicis) @ parent.signal(t)
+
+    return matrix @ vector
