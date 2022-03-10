@@ -3,16 +3,15 @@ import casadi as cs
 
 from sysopt import Block, Metadata, Composite
 
-class FlatEarthGravity(Block):
+class NoThrust(Block):
     def __init__(self):
         metadata = Metadata(
             inputs=[],
             state=[],
             parameters=[],
-            outputs=['g']
+            outputs=['Ft']
         )
         super().__init__(metadata)
 
     def compute_outputs(self,t,state,algebraic,inputs,parameters):
-        g = 9.81 # m/s2
-        return [g]
+        return [0]
