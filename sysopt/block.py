@@ -1,7 +1,7 @@
 """Base classes for block-based modelling."""
 
 import weakref
-from sysopt.types import (Signature, Metadata, Time, States, Parameters,
+from sysopt.var_types import (Signature, Metadata, Time, States, Parameters,
                           Inputs, Algebraics, Numeric)
 from typing import Iterable, Optional, Union, NewType, Tuple
 

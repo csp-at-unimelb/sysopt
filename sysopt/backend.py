@@ -6,7 +6,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Iterable, Callable, Optional
 
-
+ 
 @dataclass
 class FlattenedSystem:
     """Intermediate representation of a systems model."""
@@ -42,7 +42,7 @@ class FlattenedSystem:
 
 
 __backend = None
-
+# FIXME: Need to allow switching between backends
 
 class ADContext(metaclass=ABCMeta):
     """Interface for automatic differentiation and solver backends."""
@@ -63,10 +63,11 @@ class ADContext(metaclass=ABCMeta):
 def get_default_backend():
     """Return the default solver backend (Casadi) """
     # pylint: disable=import-outside-toplevel
+    # FIXME: Allow backend switching
     global __backend
     if not __backend:
-        from sysopt.backends.casadi import CasadiBackend
-        __backend = CasadiBackend()
+        from sysopt.backends.sympy import SympyBackend
+        __backend = SympyBackend()
     return __backend
 
 

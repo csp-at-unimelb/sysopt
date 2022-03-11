@@ -1,7 +1,8 @@
 """Commonly used blocks for model building."""
 
 from sysopt import Block, Signature, Metadata
-from numpy import cos
+# from numpy import cos
+from sympy import cos
 
 
 class Gain(Block):
