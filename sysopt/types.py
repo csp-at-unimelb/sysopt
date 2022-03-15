@@ -6,10 +6,7 @@ from typing import NewType, Iterable, Optional, Union, Callable, List
 import numpy as np
 
 
-Numeric = NewType(
-    'Numeric',
-    Union[Iterable[Number], np.ndarray]
-)
+Numeric = NewType('Numeric', Union[Iterable[Number], np.ndarray])
 
 Time = NewType('Time', Number)
 States = NewType('States', Optional[Numeric])
@@ -84,4 +81,14 @@ class Metadata:
             constraints=len(self.constraints) if self.constraints else 0,
             state=len(self.state) if self.state else 0,
             parameters=len(self.parameters) if self.parameters else 0
+        )
+
+    @staticmethod
+    def from_signature(sig):
+        return Metadata(
+            inputs=[f'input {i}' for i in range(sig.inputs)],
+            outputs=[f'output {i}' for i in range(sig.outputs)],
+            state=[f'state {i}' for i in range(sig.state)],
+            constraints=[f'constraint {i}' for i in range(sig.constraints)],
+            parameters=[f'parameter {i}' for i in range(sig.parameters)]
         )

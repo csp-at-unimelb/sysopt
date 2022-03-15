@@ -1,4 +1,8 @@
-from examples.driven_duffing_system import DuffingComponent
+import pytest
+
+from examples.driven_duffing_system import DuffingComponent, DuffingSystem
+from sysopt.solver import SolverContext
+import numpy as np
 
 
 def duffing_test_values():
@@ -68,3 +72,21 @@ def test_duffing_casadi_symbolic():
     result = f(*args)
     assert result[0] == expected_result[0]
     assert result[1] == expected_result[1]
+
+
+def test_simulation():
+    duffing_system = DuffingSystem()
+    default_parameters =dict(zip(duffing_system.parameters,
+                                 [0.2, -1, 1, 0.3, 1, 0]))
+
+    # get an integrator
+
+    with SolverContext(model=duffing_system,
+                       t_final=10,
+                       constants=default_parameters) as solver:
+
+        x_t = solver.integrate()
+        T = np.linspace(0, 10, 25)
+        X = np.zeros(shape=(len(T), 2))
+        for i, t in enumerate(T):
+            X[i, :] = x_t(t)[0, :]

@@ -2,7 +2,6 @@ import numpy as np
 
 from sysopt import Block, Metadata, Composite
 from sysopt.blocks import Gain, Oscillator
-from sysopt.backend import get_default_backend
 
 
 class DuffingComponent(Block):
@@ -60,8 +59,7 @@ def simulate():
     default_parameters = [0.2, -1, 1, 0.3, 1, 0]
 
     # get an integrator
-    backend = get_default_backend()
-    model = backend.get_flattened_system(duffing_system)
+    model = get_flattened_system(duffing_system)
     func = backend.integrator(model)
 
     assert len(func.inputs) == 0
@@ -72,3 +70,7 @@ def simulate():
     X = np.zeros(shape=(len(T), 2))
     for i, t in enumerate(T):
         X[i, :] = func.compute_outputs(10, [], [], default_parameters)
+
+
+if __name__ == '__main__':
+    simulate()
