@@ -105,8 +105,10 @@ class Channel:
     def __iter__(self):
         return iter(self.indices)
 
+
 class ComponentBase:
-    __instance_count = 0
+    """Interface definition and recursive search methods for components."""
+    __instance_count = 0  # pylint: disable=invalid-name
 
     def __init__(self, name=None):
         self.__instance_count += 1
@@ -228,13 +230,13 @@ class Block(ComponentBase):
     @property
     def parameters(self):
         name = str(self)
-        return [ f"{name}/{p}" for p in self.metadata.parameters]
+        return [f'{name}/{p}' for p in self.metadata.parameters]
 
     def find_by_name(self, var_type, name):
         try:
             values = asdict(self.metadata)[var_type]
         except KeyError as ex:
-            msg = f"{var_type} is not a valid metadata field"
+            msg = f'{var_type} is not a valid metadata field'
             raise ValueError(msg) from ex
         return values.index(name)
 
@@ -277,25 +279,6 @@ class ConnectionList(list):
             raise ConnectionError(f'Cannot connect {src} to {dest}, '
                                   f'incompatible dimensions')
         self.append((src, dest))
-
-
-class ListIndexableByName(list):
-    def __getitem__(self, item):
-        if isinstance(item, str):
-            idx = self.find_by_name(item)
-            if idx < 0:
-                raise KeyError(f"{item} is not in list")
-
-            return self[idx]
-        else:
-            return super().__getitem__(item)
-
-    def find_by_name(self, name):
-        index = -1
-        for i, item in enumerate(self):
-            if str(item) == name:
-                return i
-        return index
 
 
 class Composite(ComponentBase):  # noqa

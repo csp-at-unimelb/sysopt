@@ -8,7 +8,6 @@ g = 9.81
 # Mocks
 
 
-
 class Rocket(Block):
     def __init__(self):
         metadata = Metadata(
@@ -126,11 +125,13 @@ def test_ballistic_model():
         problem = Minimise(cost, subject_to=constraints)
         assert p in problem.decision_variables
         assert t_f in problem.decision_variables
-        test_cost = context.evaluate(problem, { p:1, t_f:1} )
+        test_cost = context.evaluate(problem, {p: 1, t_f: 1})
 
         solution = context.solve(problem)
 
     assert test_cost.value
+    assert len(test_cost.constraints) == len(constraints)
+    assert all(c == 0 for c in test_cost.constraints)
 
     assert solution[p] > 0
     assert solution[p] < solution[t_f]

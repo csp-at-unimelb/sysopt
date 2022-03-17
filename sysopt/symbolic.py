@@ -1,3 +1,6 @@
+"""Interface for Symbolic Functions and AutoDiff."""
+
+# pylint: disable=wildcard-import,unused-wildcard-import
 from sysopt.backends import *
 
 

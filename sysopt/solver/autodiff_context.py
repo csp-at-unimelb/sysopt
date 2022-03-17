@@ -1,4 +1,4 @@
-from sysopt.symbolic import symbol, concatenate, list_symbols
+from sysopt.symbolic import SymbolicVector, concatenate, list_symbols, lambdify
 from sysopt.block import Block
 from sysopt.solver.flattened_system import FlattenedSystem
 from sysopt.optimisation import DecisionVariable
@@ -9,7 +9,7 @@ class ADContext:
 
     def __init__(self, t_final=1):
         self.t_final = t_final
-        self._t = symbol('t', 1)
+        self._t = SymbolicVector('t', 1)
         self._signals = {}
         self._outputs = {}
         self._model_variables = {}
@@ -17,8 +17,8 @@ class ADContext:
 
         if isinstance(t_final, DecisionVariable):
             self._free_variables['T'] = t_final
-
-        self._expressions = []
+        self.path_variables = []
+        self.expressions = []
 
     def get_or_create_signals(self, block: Block):
         """Creates or retrieves the symbolic variables for the given block."""
@@ -33,10 +33,10 @@ class ADContext:
         k = block.signature.inputs
         ell = block.signature.parameters
 
-        x = symbol('x', n) if n > 0 else None
-        z = symbol('z', m) if m > 0 else None
-        u = symbol('u', k) if k > 0 else None
-        p = symbol('p', ell) if ell > 0 else None
+        x = SymbolicVector('x', n) if n > 0 else None
+        z = SymbolicVector('z', m) if m > 0 else None
+        u = SymbolicVector('u', k) if k > 0 else None
+        p = SymbolicVector('p', ell) if ell > 0 else None
         variables = (x, z, u, p)
         self._signals[block] = variables
         return variables
@@ -158,7 +158,7 @@ class ADContext:
         try:
             y = self._outputs[block]
         except KeyError:
-            y = symbol('y', block.outputs.size)
+            y = SymbolicVector('y', block.outputs.size)
             self._outputs[block] = y
         return y
 
@@ -170,7 +170,7 @@ class ADContext:
             self._model_variables[block] = {}
 
         new_vars = {
-            i: symbol(f'{name}_{i}')
+            i: SymbolicVector(f'{name}_{i}')
             for i in indices
             if i not in self._model_variables[block]
         }
@@ -188,7 +188,7 @@ class ADContext:
             try:
                 var = self._free_variables[name]
             except KeyError:
-                var = symbol(name, 1)
+                var = SymbolicVector(name, 1)
                 self._free_variables[name] = var
         elif parameter is None:
             var = self._get_or_create_block_decision_variables(
@@ -221,13 +221,6 @@ class ADContext:
             if var in set(self._free_variables.values()) | block_parameters
         }
 
-    def evaluate(self, expression, t, name='s'):
-        # if t is a float, return a symbolic expression
-#         assert expression.shape[1] == 1
-        s = symbol(name, expression.shape[0])
-        self._expressions.append((s, t, expression))
-        return s
-
     def get_or_create_port_variables(self, port):
         if port is port.parent.inputs:
             _, _, u, _ = self.get_or_create_signals(port.parent)
@@ -235,7 +228,22 @@ class ADContext:
         if port is port.parent.outputs:
             return self.get_or_create_outputs(port.parent)
 
-    def get_parameter_offset(self, flattened_system, block, block_index):
-        x, z ,u, p = self.get_or_create_signals(block)
-
+    def get_parameter_offset(self, flattened_system, block):
+        x, z, u, p = self.get_or_create_signals(block)
         return flattened_system.P.index(p)
+
+    def get_path_variable(self, expression, args, name='v'):
+        assert isinstance(name, str)
+        s = SymbolicVector(name, expression.shape[0])
+        self.path_variables.append(
+            (s, lambdify(expression, [args], name))
+        )
+        return s
+
+    def get_point_variable(self, expression, t, args, name='s'):
+        assert isinstance(name, str)
+        s = SymbolicVector(name, expression.shape[0])
+        self.expressions.append(
+            (s, t, lambdify(expression, [args], name))
+        )
+        return s

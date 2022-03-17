@@ -3,11 +3,11 @@ import pytest
 
 from sysopt.blocks.common import Gain, LowPassFilter, Oscillator
 from sysopt.block import Composite
-from sysopt.backends.casadi import CasadiVector
+from sysopt.backends.casadi import SymbolicVector
 from sysopt.solver import ADContext, SolverContext
 
 def test_vector_class():
-    v = CasadiVector('v', 2)
+    v = SymbolicVector('v', 2)
 
     v0, v1 = v
     assert v0 == v[0]
