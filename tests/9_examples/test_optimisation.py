@@ -1,6 +1,6 @@
 from sysopt import Block, Metadata, Composite
 from sysopt.symbolic import heaviside
-from sysopt.optimisation import DecisionVariable
+from sysopt.symbolic import DecisionVariable, sign, exp
 from sysopt.solver import SolverContext
 
 import numpy as np
@@ -50,7 +50,7 @@ class DragModel(Block):
     def compute_outputs(self, t, state, algebraics, inputs, parameters):
         d_max, rho = parameters
         y = inputs
-        return d_max * np.exp(- rho * y),
+        return d_max * exp(- rho * y),
 
 
 class OpenLoopController(Block):
@@ -121,7 +121,7 @@ def test_ballistic_model():
             t_f > 0
         ]
 
-        problem = context.minimise(cost, subject_to=constraints)
+        problem = context.problem(cost, [t_f, p], subject_to=constraints)
         viable_cost = problem(1, 1)
 
         assert viable_cost < np.inf

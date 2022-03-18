@@ -1,7 +1,7 @@
 """Base classes for block-based modelling."""
 from typing import Iterable, Optional, Union, NewType, Tuple, List
 import weakref
-from dataclasses import  asdict
+from dataclasses import asdict
 from sysopt.types import (Signature, Metadata, Time, States, Parameters,
                           Inputs, Algebraics, Numeric)
 
@@ -61,11 +61,11 @@ class Port:
     def __getitem__(self, item):
         if isinstance(item, slice):
             self.size = max(item.stop, self.size)
-            indicies = list(
+            indices = list(
                 range(item.start, item.stop,
                       item.step if item.step else 1)
             )
-            return Channel(self, indicies)
+            return Channel(self, indices)
 
         elif isinstance(item, int):
             self.size = max(item + 1, self.size)

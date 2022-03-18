@@ -4,18 +4,17 @@ import pytest
 from sysopt.blocks.common import Gain, LowPassFilter, Oscillator
 from sysopt.block import Composite
 from sysopt.backends.casadi import SymbolicVector
-from sysopt.solver import ADContext, SolverContext
-
 def test_vector_class():
     v = SymbolicVector('v', 2)
 
     v0, v1 = v
     assert v0 == v[0]
     assert v1 == v[1]
+from sysopt.solver import SymbolDatabase, SolverContext
 
 
 def test_create_variables():
-    ctx = ADContext()
+    ctx = SymbolDatabase()
     block = Gain(channels=2)
 
     x, z, u, p = ctx.get_or_create_signals(block)
@@ -34,7 +33,7 @@ def test_create_variables():
 
 
 def test_create_flattened_system_leaf():
-    ctx = ADContext()
+    ctx = SymbolDatabase()
     block = Gain(2)
     block2 = Gain(1)
     flat_block_1 = ctx.get_flattened_system(block)
@@ -63,7 +62,7 @@ def test_create_flattened_system_leaf():
 
 
 def test_create_flattened_system_composite():
-    ctx = ADContext()
+    ctx = SymbolDatabase()
 
     osc = Oscillator()
     lpf = LowPassFilter()
