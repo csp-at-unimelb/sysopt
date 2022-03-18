@@ -1,6 +1,6 @@
 from sysopt import Block, Metadata, Composite
 from sysopt.symbolic import heaviside
-from sysopt.optimisation import DecisionVariable, Minimise
+from sysopt.optimisation import DecisionVariable
 from sysopt.solver import SolverContext
 
 import numpy as np
@@ -90,18 +90,17 @@ def test_ballistic_model():
 
     t_f = DecisionVariable()
     p = DecisionVariable(model.controller, 'cutoff time')
-    x_goal = 10000
-    y_max = 120000
-
+    x_goal = 10
+    y_max = 120
 
     parameters = {
         f'{model.name}/Rocket_1/mass in kg': 1,
-        f'{model.name}/Rocket_1/max_thrust': 10,
+        f'{model.name}/Rocket_1/max_thrust': 5,
         f'{model.name}/Rocket_1/dx0': 0,
         f'{model.name}/Rocket_1/dy0': 1,
         f'{model.name}/Rocket_1/y0': 1,
         f'{model.name}/DragModel_1/coeff': 1,
-        f'{model.name}/DragModel_1/exponent':1
+        f'{model.name}/DragModel_1/exponent': 1
     }
 
     with SolverContext(model, t_f, parameters) as context:
@@ -122,20 +121,7 @@ def test_ballistic_model():
             t_f > 0
         ]
 
-        problem = Minimise(cost, subject_to=constraints)
-        assert p in problem.decision_variables
-        assert t_f in problem.decision_variables
-        test_cost = context.evaluate(problem, {p: 1, t_f: 1})
+        problem = context.minimise(cost, subject_to=constraints)
+        viable_cost = problem(1, 1)
 
-        solution = context.solve(problem)
-
-    assert test_cost.value
-    assert len(test_cost.constraints) == len(constraints)
-    assert all(c == 0 for c in test_cost.constraints)
-
-    assert solution[p] > 0
-    assert solution[p] < solution[t_f]
-    assert solution[t_f] > 0
-    assert solution[cost] < test_cost
-
-
+        assert viable_cost < np.inf

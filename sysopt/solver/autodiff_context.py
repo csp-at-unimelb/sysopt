@@ -1,7 +1,53 @@
+"""
+
+"""
+
+from typing import Iterable, Callable, Optional, NamedTuple, Union
+from dataclasses import dataclass
+
+
 from sysopt.symbolic import SymbolicVector, concatenate, list_symbols, lambdify
 from sysopt.block import Block
-from sysopt.solver.flattened_system import FlattenedSystem
 from sysopt.optimisation import DecisionVariable
+
+BoundParameter = NamedTuple(
+    'BoundParameter',
+    [('block', Block), ('parameter', Union[int, str])]
+)
+
+
+@dataclass
+class FlattenedSystem:
+    """Intermediate representation of a systems model."""
+    X: Optional[Iterable] = None            # Dynamics
+    Z: Optional[Iterable] = None            # Coupling Variables
+    U: Optional[Iterable] = None            # Inputs
+    P: Optional[Iterable] = None            # Parameters
+    f: Optional[Callable] = None            # Explicit Dynamics
+    g: Optional[Callable] = None            # Outputs
+    h: Optional[Callable] = None            # Algebraic Constraints.
+    j: Optional[Callable] = None            # Quadratures
+    X0: Optional[Iterable] = None           # Initial values
+
+    def __iadd__(self, other):
+        assert isinstance(other, FlattenedSystem)
+        self.X = concatenate(self.X, other.X)
+        self.Z = concatenate(self.Z, other.Z)
+        self.U = concatenate(self.U, other.U)
+        self.P = concatenate(self.P, other.P)
+        self.f = concatenate(self.f, other.f)
+        self.g = concatenate(self.g, other.g)
+        self.h = concatenate(self.h, other.h)
+        self.j = concatenate(self.j, other.j)
+        self.X0 = concatenate(self.X0, other.X0)
+
+        return self
+
+    def __add__(self, other):
+        result = FlattenedSystem()
+        result += self
+        result += other
+        return result
 
 
 class ADContext:
@@ -162,53 +208,59 @@ class ADContext:
             self._outputs[block] = y
         return y
 
-    def _get_or_create_block_decision_variables(self,
-                                                name, block, indices
-                                                ):
-
-        if block not in self._model_variables:
-            self._model_variables[block] = {}
-
-        new_vars = {
-            i: SymbolicVector(f'{name}_{i}')
-            for i in indices
-            if i not in self._model_variables[block]
-        }
-        self._model_variables[block].update(new_vars)
-
-        return concatenate(
-            *(self._model_variables[block][i] for i in indices)
-        )
-
-    def get_or_create_decision_variable(self,
-                                        name: str,
-                                        block=None,
-                                        parameter=None):
-        if not block:
-            try:
-                var = self._free_variables[name]
-            except KeyError:
-                var = SymbolicVector(name, 1)
-                self._free_variables[name] = var
-        elif parameter is None:
-            var = self._get_or_create_block_decision_variables(
-                name, block, list(range(block.signature.parameters))
-            )
-
-        else:
-            try:
-                idx = block.metadata.parameters.index(parameter)
-            except ValueError as ex:
-                if 0 <= parameter < block.signature.parameters:
-                    idx = parameter
-                else:
-                    msg = f"Invalid parameter identified: {parameter}"
-                    raise ValueError(msg) from ex
-            var = self._get_or_create_block_decision_variables(
-                name, block, [idx]
-            )
-
-        return var
+    # def _get_or_create_block_decision_variables(self,
+    #                                             name, block, indices
+    #                                             ):
+    #
+    #     if block not in self._model_variables:
+    #         self._model_variables[block] = {}
+    #
+    #     new_vars = {
+    #         i: SymbolicVector(f'{name}_{i}')
+    #         for i in indices
+    #         if i not in self._model_variables[block]
+    #     }
+    #     self._model_variables[block].update(new_vars)
+    #
+    #     return concatenate(
+    #         *(self._model_variables[block][i] for i in indices)
+    #     )
+    #
+    # def get_or_create_decision_variable(
+    #         self, name: str, parameter: Optional[BoundParameter] = None):
+    #     """Get a symbol for a decision variable.
+    #
+    #
+    #     Args:
+    #         name:
+    #         parameter:
+    #
+    #     Returns:
+    #
+    #     """
+    #     if not parameter:
+    #         try:
+    #             var = self._free_variables[name]
+    #         except KeyError:
+    #             var = SymbolicVector(name, 1)
+    #             self._free_variables[name] = var
+    #         return var
+    #
+    #     block, param = parameter
+    #
+    #     try:
+    #         idx = block.metadata.parameters.index(param)
+    #     except ValueError as ex:
+    #         if 0 <= param < block.signature.parameters:
+    #             idx = param
+    #         else:
+    #             msg = f"Invalid parameter identified: {parameter}"
+    #             raise ValueError(msg) from ex
+    #     var = self._get_or_create_block_decision_variables(
+    #         name, block, [idx]
+    #     )
+    #
+    #     return var
 
     def list_variables(self, expression_or_equation):
         block_parameters = {

@@ -4,7 +4,7 @@ from sysopt import symbolic
 from sysopt.block import Block
 
 
-class DecisionVariable:
+class DecisionVariable(symbolic.SymbolicVector):
     """Symbolic variable for specifying optimisation targets.
 
     Decision variables are either free, or bound to a block and parameter.
@@ -26,6 +26,7 @@ class DecisionVariable:
     """
     _counter = 0
     is_symbolic = True
+    __registry = set()
 
     def __new__(cls, *args):
         name = f'w{DecisionVariable._counter}'
@@ -39,14 +40,15 @@ class DecisionVariable:
         assert is_valid, 'Invalid parameter definition'
 
         if is_block_vector:
-            obj = symbolic.SymbolicVector(name, args[0].signature.parameters)
+            obj = symbolic.SymbolicVector.__new__(
+                cls, name, args[0].signature.parameters)
             setattr(
                 obj, 'parameter', (args[0],
                                    slice(0, args[0].signature.parameters))
             )
 
         elif is_block_single:
-            obj = symbolic.SymbolicVector(name, 1)
+            obj = symbolic.SymbolicVector.__new__(cls, name, 1)
             block, param = args
             if isinstance(param, str):
                 idx = block.metadata.parameters.index(param)
@@ -62,29 +64,6 @@ class DecisionVariable:
                 )
             setattr(obj, 'parameter', (block, slice(idx, idx + 1)))
         else:
-            obj = symbolic.SymbolicVector(name, 1)
+            obj = symbolic.SymbolicVector.__new__(cls, name, 1)
 
         return obj
-
-
-class Minimise:
-    """Problem statement for single objective constrained optimisation.
-
-    Args:
-        cost: Symbolic expression for the cost function.
-
-    Keyword Args:
-        subject_to: Option list of symbolic inequalities.
-
-    """
-    def __init__(self, cost, subject_to=None):
-        self.cost = cost
-        self.constraints = subject_to or []
-
-    @property
-    def decision_variables(self):
-        atoms = set(symbolic.list_symbols(self.cost))
-        for constraint in self.constraints:
-            atoms |= set(symbolic.list_symbols(constraint))
-
-        return atoms

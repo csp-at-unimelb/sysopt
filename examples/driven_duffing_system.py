@@ -57,19 +57,21 @@ class DuffingSystem(Composite):
 def simulate():
     duffing_system = DuffingSystem()
     default_parameters = [0.2, -1, 1, 0.3, 1, 0]
+    from sysopt.solver import SolverContext
 
     # get an integrator
-    model = get_flattened_system(duffing_system)
-    func = backend.integrator(model)
+    with SolverContext(duffing_system, 10) as solver:
 
-    assert len(func.inputs) == 0
-    assert len(func.outputs) == 2
-    assert len(func.parameters) == len(default_parameters)
+        func = solver.get_integrator(50)
 
-    T = np.linspace(0, 10, 25)
-    X = np.zeros(shape=(len(T), 2))
-    for i, t in enumerate(T):
-        X[i, :] = func.compute_outputs(10, [], [], default_parameters)
+        assert len(func.inputs) == 0
+        assert len(func.outputs) == 2
+        assert len(func.parameters) == len(default_parameters)
+
+        T = np.linspace(0, 10, 25)
+        X = np.zeros(shape=(len(T), 2))
+        for i, t in enumerate(T):
+            X[i, :] = func.compute_outputs(10, [], [], default_parameters)
 
 
 if __name__ == '__main__':

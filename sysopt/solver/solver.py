@@ -6,13 +6,14 @@ from typing import Optional, Dict, List, Union
 from sysopt import symbolic
 from sysopt.solver.autodiff_context import ADContext
 from sysopt.block import Composite
-from sysopt.optimisation import DecisionVariable, Minimise
+from sysopt.optimisation import DecisionVariable
 
 
 @dataclasses.dataclass
 class CandidateSolution:
     """A candidate solution to a constrained optimisation problem. """
     cost: float
+    trajectory: object
     constraints: Optional[List[float]] = None
 
 
@@ -20,7 +21,7 @@ class SolverContext:
     """Context manager for model simulation and optimisation.
 
     Args:
-        model:  The model block diagram 
+        model:  The model block diagram
 
     """
     def __init__(self,
@@ -45,7 +46,7 @@ class SolverContext:
         else:
             obj = value
         assert not hasattr(value, 'context'), \
-            f'Variable is associated with another problem context.'
+            'Variable is associated with another problem context.'
         return obj
 
     def __enter__(self):
@@ -85,7 +86,7 @@ class SolverContext:
 
         return func, t_final
 
-    def evaluate(self, problem: Minimise,
+    def evaluate(self, problem,
                  decision_variables: Dict[DecisionVariable, float]):
 
         y_symbols = self.context.get_or_create_outputs(self.model)
@@ -145,11 +146,7 @@ class SolverContext:
                     y(t_final), dv_values, point_values)
                 constraints.append(constraint - 1)
 
-        return CandidateSolution(
-            value=value,
-            trajectory=y,
-            constraints=constraints
-        )
+        return CandidateSolution(value, y, constraints)
 
     def solve(self, problem):
         pass
@@ -203,3 +200,17 @@ class SolverContext:
                 return True
 
         return False
+
+    def minimise(self, cost, subject_to=None):
+
+        symbols = symbolic.list_symbols(cost)
+        for constraint in subject_to:
+            symbols |= symbolic.list_symbols(constraint)
+
+
+        arguments = [
+            # find all decision variables in cost function
+            # find all decision variables in constraint
+        ]
+        #
+        # construct function

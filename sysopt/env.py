@@ -1,4 +1,4 @@
-"""Sysopt Environment Variables
+"""Sysopt Environment Variables.
 
 Attributes:
      backend - the name of the backend to be used.
