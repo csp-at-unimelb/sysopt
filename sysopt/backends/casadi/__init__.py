@@ -3,11 +3,28 @@ import casadi as _casadi
 import numpy as np
 from sysopt.backends.casadi.math import fmin, fmax, heaviside
 
+
+
 epsilon = 1e-9
 
 
 class InterpolatedPath(_casadi.Callback):
-    def __init__(self, name, t, x, opts={}):
+    """Function class for 1d cubic interpolation between gridpoints.
+
+    Args:
+        name: Function name
+        t: 1xN Array of data for the independant variable
+        x: MxN array of data of M-dimensional vectors at the nth sample point.
+        opt: Casadi options.
+
+    """
+
+    # pylint: disable=dangerous-default-value
+    def __init__(self,
+                 name: str,
+                 t,
+                 x,        # As per CasADI docs.
+                 opts={}):
         super().__init__()
         self.t = t
         self.x = x
@@ -33,38 +50,40 @@ class InterpolatedPath(_casadi.Callback):
         return _casadi.Sparsity.dense((self.x.shape[0], 1))
 
     def eval(self, arg):
+
         t = fmax(fmin(arg[0], self.t[-1]), self.t[0])
 
         dt = self.t[1:] - self.t[:-1]
         dh = 1 / dt
         dx = self.x[:, 1:] - self.x[:, :-1]
 
-        DX = dx * _casadi.repmat(dh, (dx.shape[0], 1))
+        delta_x = dx * _casadi.repmat(dh, (dx.shape[0], 1))
         m = _casadi.horzcat(dx[:, 0] * dh[0],
-                    0.5 * (DX[: 1:] + DX[:, :-1]),
+                    0.5 * (delta_x[: 1:] + delta_x[:, :-1]),
                     dx[:, -1] * dh[-1])
 
-        T = self.t - t
-        r = -T[:-1] / dt
+        t_rel = self.t - t
+        r = -t_rel[:-1] / dt
         s = 1 - r
-        window = (heaviside(T[1:]) - heaviside(T[:-1]))
+        window = (heaviside(t_rel[1:]) - heaviside(t_rel[:-1]))
 
         rrr = window * r * r * r
         rrs = window * r * r * s
         ssr = window * r * s * s
         sss = window * s * s * s
 
-        P_0 = self.x[:, :-1]
+        # pylint: disable=invalid-names
+        p_0 = self.x[:, :-1]
 
-        P_1 = P_0 + m[:, :-1] / 3
-        P_3 = self.x[:, 1:]
-        P_2 = P_3 - m[:, 1:] / 3
+        p_1 = p_0 + m[:, :-1] / 3
+        p_3 = self.x[:, 1:]
+        p_2 = p_3 - m[:, 1:] / 3
 
         # Bezier Curve / Cubic Hermite Interpolation
-        result = P_0 @ sss.T\
-                 + 3 * P_1 @ ssr.T \
-                 + 3 * P_2 @ rrs.T\
-                 + P_3 @ rrr.T\
+        result = p_0 @ sss.T\
+                 + 3 * p_1 @ ssr.T \
+                 + 3 * p_2 @ rrs.T\
+                 + p_3 @ rrr.T\
                  + heaviside(self.t[0] - t) * self.x[:, 0]\
                  + heaviside(t - self.t[-1]) * self.x[:, -1]
 
@@ -127,7 +146,7 @@ class Integrator:
 def lambdify(expressions, arguments, name='f'):
     try:
         outputs = [concatenate(expr) for expr in expressions]
-    except Exception:
+    except ValueError:
         outputs = [expressions]
     return _casadi.Function(name, arguments, outputs)
 
@@ -138,25 +157,25 @@ def sparse_matrix(shape):
 
 class SymbolicVector(_casadi.SX):
     """Wrapper around SX for vectors."""
-    __names = {}
+    _names = {}
 
     def __init__(self, *args, **kwarg):
         super().__init__()
 
     def __repr__(self):
-        return self.__name
+        return self._name
 
     def __new__(cls, name, length=1):
         assert isinstance(length, int)
         obj = SymbolicVector.sym(name, length)
         try:
-            idx = SymbolicVector.__names[name]
+            idx = SymbolicVector._names[name]
         except KeyError:
-            SymbolicVector.__names[name] = 0
+            SymbolicVector._names[name] = 0
             idx = 0
 
-        SymbolicVector.__names[name] += 1
-        obj.__name = f'{name}_{idx}'
+        SymbolicVector._names[name] += 1
+        obj._name = f'{name}_{idx}'
         obj.__class__ = cls
         if cls is not SymbolicVector:
             obj.__bases__ = [SymbolicVector, _casadi.SX]

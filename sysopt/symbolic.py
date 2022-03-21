@@ -35,7 +35,6 @@ class DecisionVariable(SymbolicVector):
     """
     _counter = 0
     is_symbolic = True
-    __id_registry = set()
 
     def __new__(cls, *args):
         name = f'w{DecisionVariable._counter}'
@@ -75,9 +74,4 @@ class DecisionVariable(SymbolicVector):
         else:
             obj = SymbolicVector.__new__(cls, name, 1)
 
-        cls.__id_registry.add(id(obj))
         return obj
-
-    @staticmethod
-    def is_(other):
-        return id(other) in DecisionVariable.__id_registry

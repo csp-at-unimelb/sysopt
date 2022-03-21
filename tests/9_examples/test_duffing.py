@@ -76,8 +76,8 @@ def test_duffing_casadi_symbolic():
 
 def test_simulation():
     duffing_system = DuffingSystem()
-    default_parameters =dict(zip(duffing_system.parameters,
-                                 [0.2, -1, 1, 0.3, 1, 0]))
+    default_parameters = dict(zip(duffing_system.parameters,
+                                  [0.2, -1, 1, 0.3, 1, 0]))
 
     # get an integrator
 

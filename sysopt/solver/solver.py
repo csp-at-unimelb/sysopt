@@ -1,6 +1,7 @@
 """Methods and objects for solving system optimisation problems."""
 
 import dataclasses
+import weakref
 from typing import Optional, Dict, List, Union, Iterable
 
 from sysopt import symbolic
@@ -82,7 +83,6 @@ class SolverContext:
         )
 
         symbolic_evaluation = integrator(self.t, parameters)
-        print(symbolic_evaluation.x0(parameters))
 
         f = symbolic.lambdify(
             symbolic_evaluation, [self.t,
@@ -202,17 +202,24 @@ class SolverContext:
     def _get_parameter_vector(self):
         return [self.constants[p] for p in self.model.parameters]
 
-    def integrate(self, parameters=None, resolution=50):
+    def integrate(self, parameters=None, t_final=None, resolution=50):
+
         if not parameters:
             parameters = self._get_parameter_vector()
 
         func = self.get_integrator(resolution)
-        return func(self.symbol_db.t_final, parameters)
+        if not t_final:
+            t_final = self.symbol_db.t_final
+        return func(t_final, parameters)
+
+    @property
+    def flattened_system(self):
+        return self.symbol_db.get_flattened_system(self.model)
 
     def get_integrator(self, resolution=50):
         return symbolic.Integrator(
             self.symbol_db.t,
-            self.symbol_db.get_flattened_system(self.model),
+            self.flattened_system,
             resolution=resolution
         )
 
@@ -229,17 +236,44 @@ class SolverContext:
 
         return False
 
-    def _create_barrier(self, constraint, argument):
-        symbolic.lambdify(
-            symbolic.log(constraint),
-        )
-
     def problem(self, cost, arguments, subject_to=None):
+        return Problem(self, cost, arguments, subject_to)
 
-        y = self.get_symbolic_integrator(arguments)
 
-        barriers = [
-            self._create_barrier(constraint, arguments)
-            for constraint in subject_to
-        ]
+class Problem:
+    """Optimisation Problem.
 
+    Args:
+        context:        Model context for this problem.
+        cost:           Symbolic expression for cost function.
+        arguments:      Decision variables/arguments for cost.
+        constraints:    Path, terminal and parameter constraints for the
+            problem.
+
+    """
+
+    def __init__(self,
+                 context: SolverContext,
+                 cost,
+                 arguments: List,
+                 constraints: Optional[List]):
+        self._cost = cost
+        self._context = weakref.ref(context)
+        self.arguments = arguments
+        self.constraints = constraints if constraints else []
+
+    @property
+    def context(self):
+        return self._context()
+
+    @property
+    def cost(self):
+        return self._cost
+
+    def __call__(self, *args):
+        """Evaluate the problem with the given arguments."""
+        assert len(args) == len(self.arguments), \
+            f'Invalid arguments: expected {self.arguments}, received {args}'
+        arg_dict = dict(zip(self.arguments, args))
+
+        return self.context.evaluate(self, arg_dict)

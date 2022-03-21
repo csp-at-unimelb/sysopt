@@ -1,7 +1,5 @@
-"""
-
-"""
-
+"""Symbol Database for simulation and optimisation."""
+# pylint: disable=invalid-name
 from typing import Iterable, Callable, Optional, NamedTuple, Union
 from dataclasses import dataclass
 
@@ -71,7 +69,7 @@ class SymbolDatabase:
     def get_or_create_signals(self, block: Block):
         """Creates or retrieves the symbolic variables for the given block."""
         assert not hasattr(block, 'components'), \
-            f"cannot create signal for composite {block}"
+            f'cannot create signal for composite {block}'
         try:
             return self._signals[block]
         except KeyError:
@@ -140,7 +138,7 @@ class SymbolDatabase:
                 flattened_systems.append(self._recursively_flatten(component))
                 uuids[component] = i
 
-        except AttributeError as ex:
+        except AttributeError:
             return self._flatten_leaf(block)
 
         x_flat, z_flat, p_flat, f_flat, h_flat, x0_flat = zip(*[
@@ -227,7 +225,7 @@ class SymbolDatabase:
             return self.get_or_create_outputs(port.parent)
 
     def get_parameter_offset(self, flattened_system, block):
-        x, z, u, p = self.get_or_create_signals(block)
+        *_, p = self.get_or_create_signals(block)
         return flattened_system.P.index(p)
 
     def get_path_variable(self, expression, args, name='v'):
