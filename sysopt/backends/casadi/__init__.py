@@ -144,9 +144,11 @@ class Integrator:
 
 
 def lambdify(expressions, arguments, name='f'):
+    # CasADI api - throws general exception
+    # pylint: disable=broad-except
     try:
         outputs = [concatenate(expr) for expr in expressions]
-    except ValueError:
+    except Exception:
         outputs = [expressions]
     return _casadi.Function(name, arguments, outputs)
 
