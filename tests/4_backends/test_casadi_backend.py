@@ -1,16 +1,17 @@
 import numpy as np
-import pytest
 
+from sysopt.backends.casadi import SymbolicVector
 from sysopt.blocks.common import Gain, LowPassFilter, Oscillator
 from sysopt.block import Composite
-from sysopt.backends.casadi import SymbolicVector
+from sysopt.solver import SymbolDatabase, SolverContext
+
+
 def test_vector_class():
     v = SymbolicVector('v', 2)
 
     v0, v1 = v
     assert v0 == v[0]
     assert v1 == v[1]
-from sysopt.solver import SymbolDatabase, SolverContext
 
 
 def test_create_variables():
