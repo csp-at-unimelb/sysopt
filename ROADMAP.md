@@ -7,6 +7,8 @@ Scheduled
 Release 0.0.3: Documentation and UX.
  - Improve documentation
  - Improve usability tracking of metadata through system.
+ - index ins/outs by name
+ - print ins/outs references names from metadata
 
 Release 0.0.4:
  - Improve integrator functionality allowing the user to control tolerance etc.

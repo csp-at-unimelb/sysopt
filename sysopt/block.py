@@ -1,9 +1,9 @@
 """Base classes for block-based modelling."""
-
+from typing import Iterable, Optional, Union, NewType, Tuple, List
 import weakref
+from dataclasses import asdict
 from sysopt.types import (Signature, Metadata, Time, States, Parameters,
                           Inputs, Algebraics, Numeric)
-from typing import Iterable, Optional, Union, NewType, Tuple
 
 Pin = NewType('Pin', Union['Port', 'Channel'])
 Connection = NewType('Connection', Tuple[Pin, Pin])
@@ -18,10 +18,28 @@ class Port:
 
     """
 
-    def __init__(self, parent: 'Block', size: int = 0):
+    def __init__(self, port_type, parent: 'Block', size: int = 0):
         self._parent = weakref.ref(parent)
+        self.port_type = port_type
+        self._channels = []
         self.size = size
         """(int) Number of 'channel' on this port"""
+
+    def __str__(self):
+        return f'{str(self.parent)}->{self.port_type}'
+
+    @property
+    def size(self):
+        return len(self._channels)
+
+    @size.setter
+    def size(self, value):
+        difference = value - self.size
+        if difference >= 0:
+            offset = self.size
+            self._channels += [
+                Channel(self, [i + offset]) for i in range(difference)
+            ]
 
     @property
     def parent(self):
@@ -36,41 +54,128 @@ class Port:
 
     def __contains__(self, item):
         try:
-            return item.reference is self
+            return item.port is self
         except AttributeError:
             return item is self
 
     def __getitem__(self, item):
-        assert isinstance(item, int), \
-            f'Can\'t get a lazy ref for [{self.parent} {item}]'
+        if isinstance(item, slice):
+            self.size = max(item.stop, self.size)
+            indices = list(
+                range(item.start, item.stop,
+                      item.step if item.step else 1)
+            )
+            return Channel(self, indices)
 
-        self.size = max(item + 1, self.size)
-
-        return Channel(self, item)
+        elif isinstance(item, int):
+            self.size = max(item + 1, self.size)
+            return Channel(self, [item])
+        elif isinstance(item, str):
+            idx = self.parent.find_by_name(self.port_type, item)
+            if idx >= 0:
+                return Channel(self, [idx])
+        raise ValueError(f'Can\'t get a lazy ref for [{self.parent} {item}]')
 
     def __iter__(self):
-        return iter(range(self.size))
+        return iter(self._channels)
+
+    def __call__(self, t):
+        ctx = t.context
+        return ctx.signal(self, list(range(self.size)), t)
 
 
 class Channel:
     """A channel on the associated port."""
-    def __init__(self, port: Port, index: int):
+    def __init__(self, port: Port, indices: List[int]):
         self.port = port
-        self.index = index
+        self.indices = indices
+
+    def __call__(self, t):
+        ctx = t.context
+        return ctx.signal(self.port, self.indices, t)
 
     @property
     def size(self):
-        return 1
+        return len(self.indices)
 
     @property
     def parent(self):
         return self.port.parent
 
     def __iter__(self):
-        return iter([self.index])
+        return iter(self.indices)
 
 
-class Block:
+class ComponentBase:
+    """Interface definition and recursive search methods for components."""
+    __instance_count = 0  # pylint: disable=invalid-name
+
+    def __init__(self, name=None):
+        self.__instance_count += 1
+        self.name = name or f'{type(self).__name__}_{self.__instance_count}'
+
+    @property
+    def parent(self):
+        if self._parent:
+            return self._parent()
+        return None
+
+    @parent.setter
+    def parent(self, value):
+        if value is None:
+            self._parent = None
+        else:
+            assert isinstance(value,  Composite)
+            self._parent = weakref.ref(value)
+
+    def trunk(self):
+        node = self
+        tree = []
+        while node is not None:
+            tree.append(node)
+            node = node.parent
+        return reversed(tree)
+
+    def __str__(self):
+        return '/'.join([node.name for node in self.trunk()])
+
+    def compute_dynamics(self,
+                         t: Time,
+                         state: States,
+                         algebraics: Algebraics,
+                         inputs: Inputs,
+                         parameters: Parameters):
+        raise NotImplementedError
+
+    def compute_outputs(self,
+                        t: Time,
+                        state: States,
+                        algebraics: Algebraics,
+                        inputs: Inputs,
+                        parameters: Parameters) -> Numeric:
+        raise NotImplementedError
+
+    def compute_residuals(self,
+                          t: Time,
+                          state: States,
+                          algebraics: Algebraics,
+                          inputs: Inputs,
+                          parameters: Parameters) -> Numeric:
+        raise NotImplementedError
+
+    def initial_state(self, parameters: Parameters) -> Numeric:
+        raise NotImplementedError
+
+    def __new__(cls, *args, name=None, **kwargs):  # noqa
+        obj = super().__new__(cls)
+        obj.inputs = Port('inputs', obj)
+        obj.outputs = Port('outputs', obj)
+        setattr(obj, '__hash__', lambda arg: id(obj))
+        setattr(obj, '_parent', None)
+        return obj
+
+
+class Block(ComponentBase):
     r"""Base class for component models.
 
     Blocks represent the fundamental components in a model, and
@@ -105,53 +210,40 @@ class Block:
         outputs: An instance of `Port` used to define connections.
 
     """
+
     def __init__(self,
-                 metadata_or_signature: Union[Signature, Metadata]):
+                 metadata_or_signature: Union[Signature, Metadata],
+                 name=None
+                 ):
 
-        if isinstance(metadata_or_signature, Metadata):
-            self.signature = metadata_or_signature.signature
+        if isinstance(metadata_or_signature, Signature):
+            metadata_or_signature = Metadata.from_signature(
+                metadata_or_signature
+            )
 
-            self.metadata = metadata_or_signature
-        else:
-            self.signature = metadata_or_signature
-            self.metadata = None
+        self.metadata = metadata_or_signature
 
         self.inputs.size = self.signature.inputs
         self.outputs.size = self.signature.outputs
+        super().__init__(name)
 
-    def __new__(cls, *args, **kwargs):  # noqa
-        obj = super().__new__(cls)
-        obj.inputs = Port(obj)
-        obj.outputs = Port(obj)
-        setattr(obj, '__hash__', lambda arg: id(obj))
-        return obj
+    @property
+    def parameters(self):
+        name = str(self)
+        return [f'{name}/{p}' for p in self.metadata.parameters]
 
-    def compute_dynamics(self,
-                         t: Time,
-                         state: States,
-                         algebraics: Algebraics,
-                         inputs: Inputs,
-                         parameters: Parameters):
-        raise NotImplementedError
+    def find_by_name(self, var_type, name):
+        try:
+            values = asdict(self.metadata)[var_type]
+        except KeyError as ex:
+            msg = f'{var_type} is not a valid metadata field'
+            raise ValueError(msg) from ex
+        return values.index(name)
 
-    def compute_outputs(self,
-                        t: Time,
-                        state: States,
-                        algebraics: Algebraics,
-                        inputs: Inputs,
-                        parameters: Parameters) -> Numeric:
-        raise NotImplementedError
+    @property
+    def signature(self):
+        return self.metadata.signature
 
-    def compute_residuals(self,
-                          t: Time,
-                          state: States,
-                          algebraics: Algebraics,
-                          inputs: Inputs,
-                          parameters: Parameters) -> Numeric:
-        raise NotImplementedError
-
-    def initial_state(self, parameters: Parameters) -> Numeric:
-        raise NotImplementedError
 
 
 class ConnectionList(list):
@@ -189,7 +281,7 @@ class ConnectionList(list):
         self.append((src, dest))
 
 
-class Composite(Block):  # noqa
+class Composite(ComponentBase):  # noqa
     """Block that consists of a sub-blocks and connections.
 
     Instances of `sysopt.Block` can be added to a composite block.
@@ -210,13 +302,16 @@ class Composite(Block):  # noqa
 
     def __init__(self,
                  components: Optional[Iterable[Block]] = None,
-                 wires: Optional[Iterable[Connection]] = None
+                 wires: Optional[Iterable[Connection]] = None,
+                 name=None
                  ):
+        super().__init__(name)
         # pylint: disable=super-init-not-called
         self._wires = ConnectionList(self)
-
+        self._components = []
         self.components = components or []      # type: Iterable[Block]
         self.wires = wires or []                # type: Iterable[Connection]
+
 
     @property
     def wires(self):
@@ -230,3 +325,19 @@ class Composite(Block):  # noqa
                 self._wires.add(pair)
         elif value is self._wires:
             return
+
+    @property
+    def components(self):
+        return self._components
+
+    @components.setter
+    def components(self, values):
+        for item in values:
+            item.parent = self
+            self._components.append(item)
+
+    @property
+    def parameters(self):
+
+        return [p for sub_block in self.components
+                for p in sub_block.parameters]

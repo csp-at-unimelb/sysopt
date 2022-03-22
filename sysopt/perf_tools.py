@@ -1,4 +1,4 @@
-"""Performance tools and helpers"""
+"""Performance tools and helpers."""
 
 import time
 
