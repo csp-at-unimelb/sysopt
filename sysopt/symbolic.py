@@ -4,8 +4,8 @@
 import dataclasses
 
 from sysopt.backends import *
-from sysopt.block import Block
-from typing import NamedTuple, Tuple, Callable, Union, Iterable
+from sysopt.block import Block, Composite
+from typing import Tuple, Callable, Union, Iterable
 
 
 def projection_matrix(indices, dimension):
@@ -97,58 +97,65 @@ class Domain:
     parameters: int
 
     def __iter__(self):
-        return self.time, self.states, self.constraints, \
-               self.inputs, self.parameters
+        return iter((self.time, self.states, self.constraints,
+                    self.inputs, self.parameters))
+
+    def __getitem__(self, item):
+
+        return list(self)[item]
 
     def __iadd__(self, other):
         self.states += other.states
         self.constraints += other.constraints
         self.inputs += other.inputs
         self.parameters += other.parameters
+        return self
 
     def __add__(self, other):
         obj = Domain(*self)
         obj += other
         return obj
 
+    def __eq__(self, other):
+        return all(i == j for i, j in zip(self, other))
+
 
 class SimpleFunctionWrapper:
     def __init__(self,
                  domain: int,
-                 codomain:Union[int, Tuple[int, int]],
-                 function:Callable
+                 codomain: Union[int, Tuple[int, int], Tuple[int, ...]],
+                 function: Callable
                  ):
         self.domain = domain
         self.codomain = codomain
         self.function = function
 
-    def __call__(self, args):
+    def __call__(self, *args):
         return self.function(args)
 
     @staticmethod
     def concatenate(args: Iterable['SimpleFunctionWrapper']):
         domain = 0
-        codomain = [0, 0]
+        codomain = 0
         func_list = []
         for func in args:
-            try:
-                nx, nz = func.codomain
-                p = lambda x: func(x[domain: domain + func.domain])
 
-            except AttributeError:
-                nx = func.codomain
-                nz = 0
-                p = lambda x: func(x[domain: domain + func.domain]),
-
+            p = lambda x: func(x[domain: domain + func.domain]), \
+                slice(codomain, codomain+ func.codomain)
             domain += func.domain
-            codomain[0] += nx
-            codomain[1] += nz
+            codomain += func.codomain
             func_list.append(p)
+
+        def call(x):
+            result = [0] * codomain
+            for f, slc in func_list:
+                result[slc] = f(x)
+            return result
 
         return SimpleFunctionWrapper(
             domain,
-            tuple(codomain),
-            lambda x: list(zip(*[f(x) for f in func_list]))
+            codomain,
+            call
         )
 
 
@@ -163,7 +170,7 @@ class BlockFunctionWrapper:
     """
     def __init__(self,
                  domain: Union[Domain],
-                 codomain: Tuple[int, ...],
+                 codomain: int,
                  function: Callable):
         self.domain = domain
         self.codomain = codomain
@@ -177,15 +184,35 @@ class BlockFunctionWrapper:
         return self.function(args)
 
     @staticmethod
-    def concatenate(func_list: Iterable['FunctionWrapper'],
-                    shared_argument=None):
+    def concatenate(args: Iterable['BlockFunctionWrapper']):
+        d = Domain(1, 0, 0, 0, 0)
+
+        func_list = []
+        codomain = 0
+        for func in args:
+            _, n_x, n_z, n_u, n_p = func.domain
+            func_list.append(
+                lambda *X: func(X[0],
+                                X[1][d.states:d.states + n_x],
+                                X[2][d.constraints: d.constraints + n_z],
+                                X[3][d.inputs: d.inputs + n_u],
+                                X[4][d.parameters: d.parameters + n_p])
+            )
+            d += func.domain
+            codomain += func.codomain
+
+        def call(*args):
+            return concatenate(*[func(*args) for func in func_list])
+
+        return BlockFunctionWrapper(
+            domain=d,
+            codomain=codomain,
+            function=call
+        )
 
 
-        return
-
-
-def _create_functions_from_leaf_block(block:Block):
-    domain = (
+def _create_functions_from_leaf_block(block: Block):
+    domain = Domain(
         1,
         block.signature.state,
         block.signature.constraints,
@@ -199,7 +226,7 @@ def _create_functions_from_leaf_block(block:Block):
     if block.signature.state > 0:
         x0 = SimpleFunctionWrapper(
             domain=1,
-            codomain=(block.signature.state, block.signature.constraints),
+            codomain=block.signature.state,
             function=lambda args: block.initial_state(args[-1])
         )
         f = BlockFunctionWrapper(
@@ -224,7 +251,7 @@ def _create_functions_from_leaf_block(block:Block):
     return x0, f, g, h
 
 
-def create_functions_from_block(block: Block):
+def create_functions_from_block(block: Union[Block, Composite]):
     try:
         functions = [create_functions_from_block(component)
                      for component in block.components]
@@ -247,6 +274,3 @@ def create_functions_from_block(block: Block):
         h = BlockFunctionWrapper.concatenate(h_list)
 
     return x0, f, g, h
-
-
-

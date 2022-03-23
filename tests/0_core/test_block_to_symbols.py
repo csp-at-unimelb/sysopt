@@ -63,7 +63,7 @@ class TestSymbolicFunctionsFromLeafBlock:
         assert f.codomain == h.codomain == 1, 'Expected 1 output'
         assert g.codomain == 2, 'Expected 2 as per block definition'
         assert x0.domain == 1, 'Expected 1 (p)'
-        assert x0.codomain == (1, 1), 'Expected 2 (x0 and z0)'
+        assert x0.codomain == f.domain.states
 
     def test_call_functions_numerically(self):
 
@@ -122,4 +122,39 @@ class TestSymbolicFunctionsFromCompositeBlock:
         composite = MockComposite()
         x0, f, g, h = create_functions_from_block(composite)
 
+        assert x0.domain == 2
+        assert x0.codomain == 2
+        assert f.domain == (1, 2, 2, 2, 2)
+        assert g.domain == f.domain == h.domain
 
+    def test_compose_initial_condition_functions(self):
+        composite = MockComposite()
+        x0, f, g, h = create_functions_from_block(composite)
+        assert x0.domain == 2
+        result = x0([1, 1])
+        assert len(result) == x0.codomain
+
+        # test composite of composite
+        composite2 = Composite()
+        composite2.components = [composite, BlockMock('block')]
+        x0, f, g, h = create_functions_from_block(composite2)
+        assert x0.domain == 3
+        assert x0.codomain == 3
+        result = x0([1, 1, 1])
+        assert len(result) == x0.codomain
+
+    def test_evaluate_composite_initial_conditions_symbolically(self):
+        assert False
+
+    def test_composite_block_functions_dimensions(self):
+        assert False
+
+    def test_composite_block_functions_numerical_eval(self):
+        assert False
+
+    def test_composite_block_functions_numerical_symbolic(self):
+        assert False
+
+    # We're done one we've got these.
+    # Then, we need to make sure we can differentiate them.
+    
