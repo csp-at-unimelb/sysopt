@@ -1,7 +1,8 @@
 from sysopt.types import *
-from sysopt.blocks import Block
+from sysopt.block import Block, Composite
 from sysopt.symbolic import create_functions_from_block, SymbolicVector, is_symbolic
 from sysopt.blocks import Gain
+
 
 class BlockMock(Block):
     def __init__(self, name):
@@ -52,7 +53,7 @@ class BlockMock(Block):
 
 
 
-class TestSymbolicFunctionsFromBlock:
+class TestSymbolicFunctionsFromLeafBlock:
 
     def test_build_functions_from_block(self):
         block_1 = BlockMock("block_1")
@@ -93,9 +94,8 @@ class TestSymbolicFunctionsFromBlock:
         h_result, = h(*args)
         assert is_symbolic(h_result)
 
-
-class TestInputOutputBlock:
-    def test_build_functions_from_block(self):
+    def test_skip_not_implemented_functions(self):
+        # Makes sure we are skipping stuff that isn't defined.
         block = Gain(channels=2)
         x0, f, g, h = create_functions_from_block(block)
         assert not x0
@@ -106,6 +106,20 @@ class TestInputOutputBlock:
         assert g.codomain == 2
 
 
+class MockComposite(Composite):
+    def __init__(self):
+        super().__init__()
+        self.block_1 = BlockMock('block_1')
+        self.block_2 = BlockMock('block_2')
+        self.components = [
+            self.block_1, self.block_2
+        ]
 
+
+class TestSymbolicFunctionsFromCompositeBlock:
+
+    def test_composite_functions_are_built(self):
+        composite = MockComposite()
+        x0, f, g, h = create_functions_from_block(composite)
 
 
