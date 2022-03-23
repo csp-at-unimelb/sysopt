@@ -3,6 +3,7 @@
 # pylint: disable=wildcard-import,unused-wildcard-import
 from sysopt.backends import *
 from sysopt.block import Block
+from typing import NamedTuple, Tuple, Callable, Union
 
 
 def projection_matrix(indices, dimension):
@@ -75,3 +76,89 @@ class DecisionVariable(SymbolicVector):
             obj = SymbolicVector.__new__(cls, name, 1)
 
         return obj
+
+
+def as_vector(arg):
+    try:
+        len(arg)
+        return arg
+    except TypeError:
+        return arg,
+
+
+Domain = NamedTuple(
+    'Domain',
+    [('time', int),
+     ('states', int),
+     ('constraints', int),
+     ('inputs', int),
+     ('parameters', int)]
+)
+
+
+class FunctionWrapper:
+    """Wrapper for differentiable functions.
+
+    Args:
+        domain:     The dimensions of the input space.
+        codomain:   The dimensions of the output space.
+        function:   The function definition.
+
+    """
+    def __init__(self,
+                 domain: Union[Domain, int],
+                 codomain: Tuple[int, ...],
+                 function: Callable):
+        self.domain = domain
+        self.codomain = codomain
+
+        self.function = function
+
+    def __call__(self, *args):
+        args = [
+            as_vector(a) for a in args
+        ]
+        return self.function(args)
+
+
+def create_functions_from_block(block: Block):
+    if hasattr(Block, 'components'):
+        raise NotImplementedError
+
+    domain = (
+        1,
+        block.signature.state,
+        block.signature.constraints,
+        block.signature.inputs,
+        block.signature.parameters
+    )
+    x0 = None
+    f = None
+    g = None
+    h = None
+    if block.signature.state > 0:
+        x0 = FunctionWrapper(
+            domain=1,
+            codomain=(block.signature.state, block.signature.constraints),
+            function=lambda args: block.initial_state(args[-1])
+        )
+        f = FunctionWrapper(
+            domain=domain,
+            codomain=block.signature.state,
+            function=lambda args: block.compute_dynamics(*args)
+        )
+
+    if block.signature.outputs > 0:
+        g = FunctionWrapper(
+            domain=domain,
+            codomain=block.signature.outputs,
+            function=lambda args: block.compute_outputs(*args)
+        )
+    if block.signature.constraints > 0:
+        h = FunctionWrapper(
+            domain=domain,
+            codomain=block.signature.constraints,
+            function=lambda args: block.compute_residuals(*args)
+        )
+
+    return x0, f, g, h

@@ -312,7 +312,6 @@ class Composite(ComponentBase):  # noqa
         self.components = components or []      # type: Iterable[Block]
         self.wires = wires or []                # type: Iterable[Connection]
 
-
     @property
     def wires(self):
         return self._wires
