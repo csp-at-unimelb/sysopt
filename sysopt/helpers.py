@@ -1,8 +1,15 @@
 """Common helper functions."""
 
 
-def flatten(the_list):
-    return [i for sublist in the_list for i in sublist]
+def flatten(the_list, depth=1):
+    result = []
+    for item in the_list:
+        if depth > 0 and isinstance(item, (list, tuple)):
+            result += flatten(item, depth - 1)
+        else:
+            result.append(item)
+
+    return result
 
 
 def filter_by_class(iterable, cls):

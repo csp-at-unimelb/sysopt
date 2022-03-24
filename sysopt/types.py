@@ -92,3 +92,35 @@ class Metadata:
             constraints=[f'constraint {i}' for i in range(sig.constraints)],
             parameters=[f'parameter {i}' for i in range(sig.parameters)]
         )
+
+
+@dataclass
+class Domain:
+    time: int = 1
+    states: int = 0
+    constraints: int = 0
+    inputs: int = 0
+    parameters: int = 0
+
+    def __iter__(self):
+        return iter((self.time, self.states, self.constraints,
+                    self.inputs, self.parameters))
+
+    def __getitem__(self, item):
+
+        return list(self)[item]
+
+    def __iadd__(self, other):
+        self.states += other.states
+        self.constraints += other.constraints
+        self.inputs += other.inputs
+        self.parameters += other.parameters
+        return self
+
+    def __add__(self, other):
+        obj = Domain(*self)
+        obj += other
+        return obj
+
+    def __eq__(self, other):
+        return all(i == j for i, j in zip(self, other))
