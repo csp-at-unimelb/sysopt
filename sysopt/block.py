@@ -83,12 +83,20 @@ class Port:
         ctx = t.context
         return ctx.signal(self, list(range(self.size)), t)
 
+    @property
+    def indices(self) -> List[int]:
+        return list(range(self.size))
+
 
 class Channel:
     """A channel on the associated port."""
     def __init__(self, port: Port, indices: List[int]):
         self.port = port
-        self.indices = indices
+        self.indices = indices  # type: List[int]
+
+    @property
+    def port_type(self):
+        return self.port.port_type
 
     def __call__(self, t):
         ctx = t.context
@@ -268,6 +276,9 @@ class ConnectionList(list):
 
     def add(self, pair):
         src, dest = pair
+        if src is dest:
+            raise ConnectionError(f'Cannot connect {src} to {dest}, '
+                                  'both arguments are the same')
         if not src.size and dest.size:
             src.size = dest.size
         elif not dest.size and src.size:
@@ -318,6 +329,7 @@ class Composite(ComponentBase):  # noqa
 
     @wires.setter
     def wires(self, value):
+
         if isinstance(value, list):
             self._wires.clear()
             for pair in value:

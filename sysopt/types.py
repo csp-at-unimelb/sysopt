@@ -1,6 +1,6 @@
 """Fundamental types and type annotations for `sysopt`."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from numbers import Number
 from typing import NewType, Iterable, Optional, Union, Callable, List
 import numpy as np
@@ -110,6 +110,9 @@ class Domain:
 
         return list(self)[item]
 
+    def copy(self):
+        return Domain(*self)
+
     def __iadd__(self, other):
         self.states += other.states
         self.constraints += other.constraints
@@ -123,4 +126,13 @@ class Domain:
         return obj
 
     def __eq__(self, other):
-        return all(i == j for i, j in zip(self, other))
+        try:
+            return all(i == j for i, j in zip(self, other))
+        except TypeError:
+            return False
+
+    @staticmethod
+    def index_of_field(field_name):
+        return ['time', 'states', 'constraints', 'inputs', 'parameters'].index(
+            field_name
+        )

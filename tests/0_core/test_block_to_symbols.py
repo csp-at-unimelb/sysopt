@@ -129,7 +129,6 @@ class MockComposite(Composite):
             zip(*BlockMock.args))]
 
 
-
 class TestSymbolicFunctionsFromCompositeBlock:
 
     def test_composite_functions_are_built(self):
@@ -139,7 +138,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
         assert x0.domain == 2
         assert x0.codomain == 2
         assert f.domain == (1, 2, 2, 2, 2)
-        assert g.domain == f.domain == h.domain
+        assert f.domain == h.domain
 
     def test_compose_initial_condition_functions(self):
         composite = MockComposite()
@@ -234,12 +233,12 @@ class TestSymbolicFunctionsFromCompositeBlock:
         assert is_symbolic(f_result)
         assert len(f_result) == 3
 
-    def test_composite_block_functions_with_wires_dimensions(self):
+    def test_dimensions_of_composite_block_functions_with_wires(self):
         composite = MockComposite()
         composite.wires = [
             (composite.block_1.outputs[0], composite.block_2.inputs),
             (composite.inputs, composite.block_1.inputs),
-            (composite.block_2.outputs, composite.block_2.outputs)
+            (composite.block_2.outputs, composite.outputs)
         ]
         _, f, g, h = create_functions_from_block(composite)
         expected_domain = (1, 2, 3, 1, 2)
@@ -254,6 +253,25 @@ class TestSymbolicFunctionsFromCompositeBlock:
         # each block has 1 constraint, plus the internal connection
         assert h.codomain == 3
 
+    def test_numerical_evaluation_of_block_functions_with_wires(self):
+        composite = MockComposite()
+        composite.wires = [
+            (composite.block_1.outputs[0], composite.block_2.inputs),
+            (composite.inputs, composite.block_1.inputs),
+            (composite.block_2.outputs, composite.outputs)
+        ]
+        x0, f, g, h = create_functions_from_block(composite)
 
-    # We're done one we've got these.
-    # Then, we need to make sure we can differentiate them.
+        result = x0([1, 1])
+        assert len(result) == 2
+        assert result == [1, 1]
+
+        args = [1, (2, 1), (3, 7, 3), (5,), (0, 1, 0)]
+        assert f.domain == (1, 2, 3, 1, 2)
+        f_expected = [30, 21]
+        f_result = f(*args)
+        assert f_result == f_expected
+
+        g_expected = [1, 7]
+        g_result = g(*args)
+        assert g_result == g_expected

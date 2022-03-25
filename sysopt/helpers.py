@@ -12,6 +12,10 @@ def flatten(the_list, depth=1):
     return result
 
 
+def strip_nones(the_list):
+    return [l_i for l_i in the_list if l_i is not None]
+
+
 def filter_by_class(iterable, cls):
     for item in iterable:
         if isinstance(item, cls):

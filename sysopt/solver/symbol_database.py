@@ -5,7 +5,8 @@ from dataclasses import dataclass
 
 
 from sysopt.symbolic import (
-    SymbolicVector, concatenate, list_symbols, lambdify, DecisionVariable
+    SymbolicVector, concatenate_symbols, list_symbols, lambdify, DecisionVariable,
+    as_vector
 )
 from sysopt.block import Block
 
@@ -31,15 +32,15 @@ class FlattenedSystem:
 
     def __iadd__(self, other):
         assert isinstance(other, FlattenedSystem)
-        self.X = concatenate(self.X, other.X)
-        self.Z = concatenate(self.Z, other.Z)
-        self.U = concatenate(self.U, other.U)
-        self.P = concatenate(self.P, other.P)
-        self.f = concatenate(self.f, other.f)
-        self.g = concatenate(self.g, other.g)
-        self.h = concatenate(self.h, other.h)
-        self.j = concatenate(self.j, other.j)
-        self.X0 = concatenate(self.X0, other.X0)
+        self.X = concatenate_symbols(self.X, other.X)
+        self.Z = concatenate_symbols(self.Z, other.Z)
+        self.U = concatenate_symbols(self.U, other.U)
+        self.P = concatenate_symbols(self.P, other.P)
+        self.f = concatenate_symbols(self.f, other.f)
+        self.g = concatenate_symbols(self.g, other.g)
+        self.h = concatenate_symbols(self.h, other.h)
+        self.j = concatenate_symbols(self.j, other.j)
+        self.X0 = concatenate_symbols(self.X0, other.X0)
 
         return self
 
@@ -116,10 +117,10 @@ class SymbolDatabase:
         except NotImplementedError:
             h = None
         try:
-            f = concatenate(*f) if f is not None else None
-            g = concatenate(*g) if g is not None else None
-            h = concatenate(*h) if h is not None else None
-            x0 = concatenate(*x0) if x0 is not None else None
+            f = concatenate_symbols(*f) if f is not None else None
+            g = concatenate_symbols(*g) if g is not None else None
+            h = concatenate_symbols(*h) if h is not None else None
+            x0 = concatenate_symbols(*x0) if x0 is not None else None
         except RuntimeError as ex:
             raise ValueError(
                 f'Could not stack functions form block {block}:'
@@ -131,15 +132,14 @@ class SymbolDatabase:
     def _recursively_flatten(self, block: Block):
 
         # pylint: disable=invalid-name
-        try:
-            flattened_systems = []
-            uuids = {}
-            for i, component in enumerate(block.components):
-                flattened_systems.append(self._recursively_flatten(component))
-                uuids[component] = i
-
-        except AttributeError:
+        if not hasattr(block, 'components'):
             return self._flatten_leaf(block)
+
+        flattened_systems = []
+        uuids = {}
+        for i, component in enumerate(block.components):
+            flattened_systems.append(self._recursively_flatten(component))
+            uuids[component] = i
 
         x_flat, z_flat, p_flat, f_flat, h_flat, x0_flat = zip(*[
             (subsys.X, subsys.Z, subsys.P, subsys.f, subsys.h, subsys.X0)
@@ -177,14 +177,14 @@ class SymbolDatabase:
         ]
 
         return FlattenedSystem(
-            X=concatenate(*x_flat),
-            U=concatenate(*U_flat),
-            Z=concatenate(*z_flat, *z_new),
-            P=concatenate(*p_flat),
-            f=concatenate(*f_flat),
-            g=concatenate(*g_flat),
-            h=concatenate(*h_flat, *h_new),
-            X0=concatenate(*x0_flat)
+            X=concatenate_symbols(*x_flat),
+            U=concatenate_symbols(*U_flat),
+            Z=concatenate_symbols(*z_flat, *z_new),
+            P=concatenate_symbols(*p_flat),
+            f=concatenate_symbols(*f_flat),
+            g=concatenate_symbols(*g_flat),
+            h=concatenate_symbols(*h_flat, *h_new),
+            X0=concatenate_symbols(*x0_flat)
         )
 
     def _get_input_symbols_for(self, lazy_reference):
