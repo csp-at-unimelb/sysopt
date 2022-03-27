@@ -1,6 +1,6 @@
 """Fundamental types and type annotations for `sysopt`."""
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from numbers import Number
 from typing import NewType, Iterable, Optional, Union, Callable, List
 import numpy as np
@@ -96,6 +96,7 @@ class Metadata:
 
 @dataclass
 class Domain:
+    """Domain description of sysopt common function"""
     time: int = 1
     states: int = 0
     constraints: int = 0

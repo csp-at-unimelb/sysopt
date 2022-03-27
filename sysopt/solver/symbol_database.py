@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 
 from sysopt.symbolic import (
-    SymbolicVector, concatenate_symbols, list_symbols, lambdify, DecisionVariable,
-    as_vector
+    DecisionVariable, SymbolicVector, concatenate_symbols, list_symbols,
+    lambdify
 )
 from sysopt.block import Block
 

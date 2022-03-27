@@ -1,140 +1,62 @@
 """Interface for Symbolic Functions and AutoDiff."""
 
-# pylint: disable=wildcard-import,unused-wildcard-import
-
-from abc import ABCMeta
 import copy
-from typing import Tuple, Callable, Union, Iterable
+from typing import Callable, Union, Iterable
 
 from sysopt.types import Domain
-from sysopt.backends import *
+
 from sysopt.block import Block, Composite
 from sysopt.helpers import flatten, strip_nones
 
+from sysopt.symbolic.symbols import as_vector
+from sysopt.symbolic.tensor_ops import (
+    FunctionOp, Concatenate, project, compose)
 
-def require_equal_domains(func):
-    def validator(a, b):
-        if a.domain != b.domain:
-            msg = f'Domains {a.domain} != {b.domain} for arguments {a}, {b}'
-            raise TypeError(msg)
-        return func(a, b)
-    return validator
-
-
-def require_equal_order_codomain(func):
-    def validator(a, b):
-        if ((isinstance(a.codomain, int) and isinstance(b.codomain, int))
-                or len(a.codomain) == len(b.codomain)):
-            return func(a, b)
-        else:
-            msg = f'Codomains {a.codomain}, {b.codomain} are not compatible'\
-                  f'for arguments {a}, {b}'
-            raise TypeError(msg)
-
-    return validator
+from sysopt.backends import (
+    concatenate_symbols, SymbolicVector, is_symbolic
+)
 
 
-def projection_matrix(indices, dimension):
-    matrix = sparse_matrix((len(indices), dimension))
-    for i, j in indices:
-        matrix[i, j] = 1
+def coproduct(*functions: 'FunctionOp'):
+    r"""Returns the functional coproduct of arguments
 
-    return matrix
+    For :math:`f_i:\oplus_j X^i_j ->Y_i`, this method
+    returns a function :math:`F: \oplus_j (\oplus_iX^_j) -> \oplus_i Y_i`
 
+    That is, the domain of the $j$th $X_j$ argument of $F$ is the direct sum
+    (over $i$) of the $j$th arguments of $f_i$, $X_j = \oplus_i X^i_j$.
 
-def coproduct(*functions):
+    When calling the returned function, the stacked input vectors are
+    split into their target domains, then passed to the respective functions.
+
+    Args:
+        *functions: FunctionOps with the same number of arguments.
+
+    Returns: Operation that computes the function coproduct.
+
+    """
     klasses = {f.__class__ for f in functions}
-    if all(issubclass(k, TensorOp) for k in klasses):
+    if all(issubclass(k, FunctionOp) for k in klasses):
         return BlockFunctionWrapper.coproduct(functions)
-    if all(issubclass(k, SimpleFunctionWrapper) for k in klasses):
-        return SimpleFunctionWrapper.coproduct(functions)
+    if all(issubclass(k, VectorFunctionWrapper) for k in klasses):
+        return VectorFunctionWrapper.coproduct(functions)
 
     raise NotImplementedError
 
 
-class DecisionVariable(SymbolicVector):
-    """Symbolic variable for specifying optimisation targets.
-
-    Decision variables are either free, or bound to a block and parameter.
-    Free decision variables can be created using::
-
-        variable = DecisionVariable()
-
-    Decision variables that are bound to a model parameter can be created via::
-
-        bound_var = DecisionVariable(block, param_index_or_name)
-
-    Where `param_index_or_name` is the `int` index, or `str` name of the
-    parameter to be used in optimisation.
-
+class VectorFunctionWrapper:
+    """Wrapper for a function from $R^n$ to $R^m$.
 
     Args:
-        args: Optional Block or tuple of Block and parameter
+        domain: Dimension of the input vector
+        codomain: Dimension of the output vector
+        function: Function to compute the result.
 
     """
-    _counter = 0
-    is_symbolic = True
 
-    def __new__(cls, *args):
-        name = f'w{DecisionVariable._counter}'
-        DecisionVariable._counter += 1
-        is_free_variable = len(args) == 0
-        is_block_params = not is_free_variable and isinstance(args[0], Block)
-        is_block_vector = is_block_params and len(args) == 1
-        is_block_single = is_block_params and isinstance(args[1], (int, str))
-        is_valid = (is_block_vector or is_block_single or is_free_variable)
-
-        assert is_valid, 'Invalid parameter definition'
-
-        if is_block_vector:
-            obj = SymbolicVector.__new__(
-                cls, name, args[0].signature.parameters)
-            setattr(
-                obj, 'parameter', (args[0],
-                                   slice(0, args[0].signature.parameters))
-            )
-
-        elif is_block_single:
-            obj = SymbolicVector.__new__(cls, name, 1)
-            block, param = args
-            if isinstance(param, str):
-                idx = block.metadata.parameters.index(param)
-                if idx < 0:
-                    raise ValueError(
-                        f'Invalid parameter for {block}: {param} not found'
-                    )
-            elif isinstance(param, int):
-                idx = param
-            else:
-                raise ValueError(
-                    f'Invalid parameter for {block}: {param} not found'
-                )
-            setattr(obj, 'parameter', (block, slice(idx, idx + 1)))
-        else:
-            obj = SymbolicVector.__new__(cls, name, 1)
-
-        return obj
-
-
-def as_vector(arg):
-    try:
-        len(arg)
-        return arg
-    except TypeError:
-        if isinstance(arg, (int, float)):
-            return arg,
-    if is_symbolic(arg):
-        return cast(arg)
-
-    raise NotImplementedError(
-        f'Don\'t know to to vectorise {arg.__class__}'
-    )
-
-
-class SimpleFunctionWrapper:
     def __init__(self,
                  domain: int,
-                 codomain: Union[int, Tuple[int, int], Tuple[int, ...]],
+                 codomain:  int,
                  function: Callable
                  ):
         self.domain = domain
@@ -145,24 +67,26 @@ class SimpleFunctionWrapper:
         return self.function(args)
 
     @staticmethod
-    def coproduct(args: Iterable['SimpleFunctionWrapper']):
+    def coproduct(args: Iterable['VectorFunctionWrapper']):
         domain = 0
         codomain = 0
         func_list = []
+
         for func in args:
-            p = lambda x: func(x[domain: domain + func.domain]), \
-                slice(codomain, codomain + func.codomain)
+            func_list.append(
+                (func, slice(domain, domain + func.domain),
+                 slice(codomain, codomain + func.codomain))
+            )
             domain += func.domain
             codomain += func.codomain
-            func_list.append(p)
 
         def call(x):
             result = [0] * codomain
-            for f, slc in func_list:
-                result[slc] = f(x)
+            for f, dom_slice, codom_slice in func_list:
+                result[codom_slice] = f(x[dom_slice])
             return result
 
-        return SimpleFunctionWrapper(
+        return VectorFunctionWrapper(
             domain,
             codomain,
             call
@@ -171,7 +95,7 @@ class SimpleFunctionWrapper:
 
 def concatenate(*args):
     flat_args = strip_nones(flatten(args, 2))
-    if any(isinstance(arg, TensorOp) for arg in flat_args):
+    if any(isinstance(arg, FunctionOp) for arg in flat_args):
         return Concatenate(*flat_args)
     if any(is_symbolic(arg) for arg in flat_args):
         return concatenate_symbols(*flat_args)
@@ -181,33 +105,7 @@ def concatenate(*args):
     raise NotImplementedError
 
 
-class TensorOp(metaclass=ABCMeta):
-    @require_equal_domains
-    def __sub__(self, other):
-        return Subtract(self, other)
-
-
-class Concatenate(TensorOp):
-    def __init__(self, *args: TensorOp):
-        op, *remainder = args
-        self.__vectors = [op]
-        self.domain = op.domain.copy()
-        self.codomain = op.codomain
-        for arg in args[1:]:
-            self.append(arg)
-
-    @require_equal_domains
-    @require_equal_order_codomain
-    def append(self, other):
-        self.__vectors.append(other)
-        self.codomain += other.codomain
-
-    def __call__(self, *args):
-        result = [f(*args) for f in self.__vectors]
-        return concatenate(result)
-
-
-class BlockFunctionWrapper(TensorOp):
+class BlockFunctionWrapper(FunctionOp):
     """Wrapper for differentiable functions.
 
     Args:
@@ -277,10 +175,16 @@ class BlockFunctionWrapper(TensorOp):
         )
 
 
-class ArgPermute(TensorOp):
-    def __init__(self, domain):
-        self.codomain = Domain(*domain)
-        self.domain = Domain(*domain)
+class ArgPermute(FunctionOp):
+    """Operator that remaps inputs to state variables or constraints.
+
+    Args:
+        codomain: The domain of the wrapped function.
+
+    """
+    def __init__(self, codomain: Domain):
+        self.codomain = Domain(*codomain)
+        self.domain = Domain(*codomain)
         self.constraint_to_input = {}
         self.input_to_input = {}
 
@@ -325,7 +229,7 @@ def _create_functions_from_leaf_block(block: Block):
     g = None
     h = None
     if block.signature.state > 0:
-        x0 = SimpleFunctionWrapper(
+        x0 = VectorFunctionWrapper(
             domain=1,
             codomain=block.signature.state,
             function=block.initial_state
@@ -350,96 +254,6 @@ def _create_functions_from_leaf_block(block: Block):
         )
 
     return x0, f, g, h
-
-
-class TensorProjection(TensorOp):
-    def __init__(self,
-                 domain: Domain,
-                 variable: int,
-                 index: int):
-        self.codomain = 1
-        self.domain = domain
-        self.index = index
-        self.variable = variable
-
-    def __call__(self, *args):
-        return args[self.variable][self.index]
-
-
-class VectorProjection(TensorOp):
-    def __init__(self, domain, index):
-        self.codomain = 1
-        self.domain = domain
-        self.index = index
-
-    def __call__(self, *vector):
-        return vector[self.index]
-
-
-def project(domain, *args):
-    if isinstance(domain, int):
-        index, = args
-        return VectorProjection(domain, index)
-    else:
-        variable, index = args
-        space = Domain.index_of_field(variable)
-        assert space >= 0
-        return TensorProjection(domain, space, index)
-
-
-class Subtract(TensorOp):
-    def __init__(self, lhs, rhs):
-        assert lhs.domain == rhs.domain
-        assert lhs.codomain == rhs.codomain
-        self.lhs = lhs
-        self.rhs = rhs
-        self.domain = copy.copy(lhs.domain)
-        self.codomain = copy.copy(lhs.codomain)
-
-    def __call__(self, *args):
-        return self.lhs(*args) - self.rhs(*args)
-
-
-def subtract(lhs, rhs):
-    return Subtract(lhs, rhs)
-
-
-class Compose(TensorOp):
-    def __init__(self, outer, inner):
-
-        if inner.codomain != outer.domain:
-            msg = f'Cannot compose {outer} with {inner}. '\
-                  f'Inner has codomain {inner.codomain}, '\
-                  f'while outer has domain {outer.domain}'
-            raise TypeError(msg)
-
-        self.inner = inner
-        self.outer = outer
-
-    @property
-    def domain(self):
-        return self.inner.domain
-
-    @property
-    def codomain(self):
-        return self.outer.codomain
-
-    def __call__(self, *args):
-        r = self.inner(*args)
-        try:
-            return self.outer(*r)
-        except TypeError as ex:
-            print(f'Error calling {self.outer} with {r}')
-
-            raise ex
-
-
-def compose(*args):
-    outer, inner, *remainder = args
-    if not remainder:
-        return Compose(outer, inner)
-    else:
-        return compose(Compose(outer, inner), *remainder)
 
 
 def create_functions_from_block(block: Union[Block, Composite]):

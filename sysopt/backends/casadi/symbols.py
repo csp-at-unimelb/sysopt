@@ -1,3 +1,5 @@
+"""Casadi implementation of symbolic vector and helper functions."""
+
 import casadi as _casadi
 import numpy as np
 
@@ -11,6 +13,9 @@ class SymbolicVector(_casadi.SX):
 
     def __repr__(self):
         return self._name
+
+    def __hash__(self):
+        return id(self)
 
     @staticmethod
     def _validate_name(name):
@@ -45,7 +50,7 @@ class SymbolicVector(_casadi.SX):
         return obj
 
     @staticmethod
-    def from_DM(arg):
+    def from_DM(arg):  # pylint: disable=invalid-name
         m = None
         try:
             n, m = arg.shape
@@ -63,9 +68,9 @@ class SymbolicVector(_casadi.SX):
     def from_sx(arg):
         m = None
         try:
-            n, m = arg.shape
+            _, m = arg.shape
         except TypeError:
-            n, = arg.shape
+            pass
 
         assert not m or m == 1, \
             f'Cannot convert object with shape {arg.shape}'
@@ -92,7 +97,7 @@ class SymbolicVector(_casadi.SX):
         for i, v in enumerate(self):
             if v is value:
                 return i
-        return 1
+        return -1
 
     def __setitem__(self, key, value):
         if isinstance(key, slice) and isinstance(value, list):
@@ -101,6 +106,19 @@ class SymbolicVector(_casadi.SX):
                 super().__setitem__(j, value[i])
         else:
             super().__setitem__(key, value)
+
+    def __eq__(self, other):
+        if other is self:
+            return True
+        try:
+            if len(other) == len(self):
+                return all(i == j for i, j in zip(self, other))
+
+        # Casadi likes to throw bare exceptions.
+        except:  # pylint: disable=bare-except
+            pass
+
+        return super().__eq__(other)
 
 
 def concatenate(*vectors):

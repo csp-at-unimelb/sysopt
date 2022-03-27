@@ -1,9 +1,7 @@
 """Casadi Backend Implementation."""
 import casadi as _casadi
-import numpy as np
 from sysopt.backends.casadi.math import fmin, fmax, heaviside
 from sysopt.backends.casadi.symbols import *
-from sysopt.backends.casadi.function_wrappers import *
 
 
 epsilon = 1e-9
