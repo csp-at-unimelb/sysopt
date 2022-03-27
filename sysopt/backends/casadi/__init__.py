@@ -1,8 +1,7 @@
 """Casadi Backend Implementation."""
 import casadi as _casadi
-import numpy as np
 from sysopt.backends.casadi.math import fmin, fmax, heaviside
-
+from sysopt.backends.casadi.symbols import *
 
 
 epsilon = 1e-9
@@ -157,94 +156,8 @@ def sparse_matrix(shape):
     return _casadi.SX(*shape)
 
 
-class SymbolicVector(_casadi.SX):
-    """Wrapper around SX for vectors."""
-    _names = {}
-
-    def __init__(self, *args, **kwarg):
-        super().__init__()
-
-    def __repr__(self):
-        return self._name
-
-    def __new__(cls, name, length=1):
-        assert isinstance(length, int)
-        obj = SymbolicVector.sym(name, length)
-        try:
-            idx = SymbolicVector._names[name]
-        except KeyError:
-            SymbolicVector._names[name] = 0
-            idx = 0
-
-        SymbolicVector._names[name] += 1
-        obj._name = f'{name}_{idx}'
-        obj.__class__ = cls
-        if cls is not SymbolicVector:
-            obj.__bases__ = [SymbolicVector, _casadi.SX]
-        return obj
-
-    def __iter__(self):
-        return iter(
-            [self[i] for i in range(self.shape[0])]
-        )
-
-    def __len__(self):
-        return self.shape[0]
-
-    def index(self, value):
-        for i, v in enumerate(self):
-            if v is value:
-                return i
-        return 1
 
 
 def list_symbols(expr) -> set:
     return set(_casadi.symvar(expr))
-
-
-def concatenate(*vectors):
-    """Concatenate arguments into a casadi symbolic vector."""
-    try:
-        v0, *v_n = vectors
-    except ValueError:
-        return None
-    while v0 is None:
-        try:
-            v0, *v_n = v_n
-        except ValueError:
-            return None
-    if not isinstance(v0, _casadi.SX):
-        result = cast(v0)
-    else:
-        result = v0
-    for v_i in v_n:
-        if v_i is not None:
-            result = _casadi.vertcat(result, v_i)
-
-    return result
-
-
-def cast(arg):
-    if arg is None:
-        return None
-    if isinstance(arg, (float, int)):
-        return _casadi.SX(arg)
-    if isinstance(arg, (_casadi.SX, _casadi.MX, _casadi.DM)):
-        return arg
-    elif isinstance(arg, (list, tuple, np.ndarray)):
-        return _casadi.SX(arg)
-
-    raise NotImplementedError(f'Don\'t know how to cast {arg.__class__}')
-
-
-def is_symbolic(arg):
-    if hasattr(arg, 'is_symbolic'):
-        return arg.is_symbolic
-    return isinstance(arg, _casadi.SX)
-
-
-def constant(value):
-    assert isinstance(value, (int, float))
-    c = _casadi.SX(value)
-    return c
 

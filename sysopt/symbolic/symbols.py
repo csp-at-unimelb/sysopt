@@ -1,7 +1,6 @@
-"""Interface for Symbolic Functions and AutoDiff."""
+"""Functions and factories to create symbolic variables."""
 
-# pylint: disable=wildcard-import,unused-wildcard-import
-from sysopt.backends import *
+from sysopt.backends import sparse_matrix, SymbolicVector, is_symbolic, cast
 from sysopt.block import Block
 
 
@@ -75,3 +74,21 @@ class DecisionVariable(SymbolicVector):
             obj = SymbolicVector.__new__(cls, name, 1)
 
         return obj
+
+    def __hash__(self):
+        return id(self)
+
+
+def as_vector(arg):
+    try:
+        len(arg)
+        return arg
+    except TypeError:
+        if isinstance(arg, (int, float)):
+            return arg,
+    if is_symbolic(arg):
+        return cast(arg)
+
+    raise NotImplementedError(
+        f'Don\'t know to to vectorise {arg.__class__}'
+    )

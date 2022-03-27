@@ -92,3 +92,48 @@ class Metadata:
             constraints=[f'constraint {i}' for i in range(sig.constraints)],
             parameters=[f'parameter {i}' for i in range(sig.parameters)]
         )
+
+
+@dataclass
+class Domain:
+    """Domain description of sysopt common function"""
+    time: int = 1
+    states: int = 0
+    constraints: int = 0
+    inputs: int = 0
+    parameters: int = 0
+
+    def __iter__(self):
+        return iter((self.time, self.states, self.constraints,
+                    self.inputs, self.parameters))
+
+    def __getitem__(self, item):
+
+        return list(self)[item]
+
+    def copy(self):
+        return Domain(*self)
+
+    def __iadd__(self, other):
+        self.states += other.states
+        self.constraints += other.constraints
+        self.inputs += other.inputs
+        self.parameters += other.parameters
+        return self
+
+    def __add__(self, other):
+        obj = Domain(*self)
+        obj += other
+        return obj
+
+    def __eq__(self, other):
+        try:
+            return all(i == j for i, j in zip(self, other))
+        except TypeError:
+            return False
+
+    @staticmethod
+    def index_of_field(field_name):
+        return ['time', 'states', 'constraints', 'inputs', 'parameters'].index(
+            field_name
+        )
