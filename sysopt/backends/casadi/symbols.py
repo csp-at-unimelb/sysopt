@@ -2,6 +2,7 @@
 
 import casadi as _casadi
 import numpy as np
+from sysopt.symbolic import casts
 
 
 class SymbolicVector(_casadi.SX):
@@ -157,6 +158,8 @@ def cast(arg):
     elif isinstance(arg, _casadi.DM):
         return SymbolicVector.from_DM(arg)
 
+    casts.cast_type(arg, SymbolicVector)
+
     raise NotImplementedError(f'Don\'t know how to cast {arg.__class__}')
 
 
@@ -172,4 +175,12 @@ def constant(value):
     assert isinstance(value, (int, float))
     c = _casadi.SX(value)
     return c
+
+
+@casts.register(_casadi.DM, list)
+def dm_to_list(var: _casadi.DM):
+    n, m = var.shape
+    the_array = var.toarray()
+    the_list = [[the_array[i, j] for j in range(m)] for i in range(n)]
+    return the_list
 

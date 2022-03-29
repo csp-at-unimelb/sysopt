@@ -114,7 +114,7 @@ class SolverContext:
         integrator = self.get_integrator(self.resolution)
 
         params = [float(parameters[p]) for p in self.model.parameters]
-        func = integrator(t_final, params)
+        func = integrator.integrate(t_final, params)
 
         return func, t_final
 
@@ -207,10 +207,12 @@ class SolverContext:
         if not parameters:
             parameters = self._get_parameter_vector()
 
-        func = self.get_integrator(resolution)
+        integrator = self.get_integrator(resolution)
         if not t_final:
             t_final = self.symbol_db.t_final
-        return func(t_final, parameters)
+        soln = integrator.integrate(t_final, parameters)
+
+        return soln
 
     @property
     def flattened_system(self):

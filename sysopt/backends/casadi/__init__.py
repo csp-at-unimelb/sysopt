@@ -2,7 +2,7 @@
 import casadi as _casadi
 from sysopt.backends.casadi.math import fmin, fmax, heaviside
 from sysopt.backends.casadi.symbols import *
-
+from sysopt.symbolic.casts import cast_like
 
 epsilon = 1e-9
 
@@ -99,7 +99,7 @@ class Integrator:
         # pylint: disable=invalid-name
         self._T = _casadi.SX.sym('T', 1, 1)
 
-        dae_spec = {
+        self.dae_spec = {
             'x': _casadi.vertcat(t, system.X),
             'p': _casadi.vertcat(self._T, system.P),
             'ode': self._T * _casadi.vertcat(_casadi.SX.ones(1, 1), system.f),
@@ -109,25 +109,50 @@ class Integrator:
             [system.P],
             [_casadi.vertcat(_casadi.SX.zeros(1, 1), system.X0)]
         )
-        self.g = _casadi.Function(
-            'g',
-            [t, system.X, system.Z, system.P],
-            [system.g]
-        )
+
         self.n_alg = 0
         if system.Z is not None:
-            dae_spec.update({'z': system.Z, 'alg': system.h})
+            self.dae_spec.update({'z': system.Z, 'alg': system.h})
             self.n_alg, _ = system.Z.shape
+            self.g = _casadi.Function(
+                'g',
+                [t, system.X, system.Z, system.P],
+                [system.g]
+            )
+        else:
+            z_temp = _casadi.SX.sym('z')
+            self.g = _casadi.Function(
+                'g',
+                [t, system.X, z_temp, system.P],
+                [system.g]
+            )
 
         solver_options = {
             'grid': [i / resolution for i in range(resolution + 1)],
             'output_t0': True
         }
-        self.f = _casadi.integrator('F', 'idas', dae_spec, solver_options)
+        self.f = _casadi.integrator('F', 'idas', self.dae_spec, solver_options)
 
-    def __call__(self, t, p):
-        """Integrate from 0 to t"""
+    def forwards(self, t, p, dp):
+        p_sym = _casadi.MX.sym('p', len(p))
+        t_sym = _casadi.MX.sym('t')
+        p_prime = _casadi.vertcat(t_sym, p_sym)
+        x0 = self.x0(p_sym)
+        z0 = [0] * self.n_alg
+        f = _casadi.integrator('F', 'idas', self.dae_spec)
+        soln = f(x0=x0, p=p_prime, z0=z0)
+        tf = soln['xf'][0, :]
+        x = soln['xf'][1:, :]
+        z = soln['zf']
 
+        y = self.g(tf, x, z, p_sym)
+        dp_sym = _casadi.MX.sym('dp', len(dp))
+        dy_symbol = _casadi.jtimes(y, p_sym, dp_sym)
+        dy = _casadi.Function('dY', [t_sym, p_sym, dp_sym], [dy_symbol])
+
+        return dy(t, p, dp)
+
+    def integrate(self, t, p):
         x0 = self.x0(p)
         z0 = [0] * self.n_alg
         p_prime = _casadi.vertcat(t, p)
@@ -140,6 +165,12 @@ class Integrator:
         y = self.g(tf, x, z, p)
 
         return InterpolatedPath('y', tf, y)
+
+    def __call__(self, t, p):
+        """Integrate from 0 to t"""
+        soln = self.integrate(t, p)
+
+        return soln(t)
 
 
 def lambdify(expressions, arguments, name='f'):
@@ -154,8 +185,6 @@ def lambdify(expressions, arguments, name='f'):
 
 def sparse_matrix(shape):
     return _casadi.SX(*shape)
-
-
 
 
 def list_symbols(expr) -> set:
