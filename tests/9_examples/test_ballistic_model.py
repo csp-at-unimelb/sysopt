@@ -1,7 +1,7 @@
 # @nb.code_cell
 from sysopt import Block, Metadata, Composite
-from sysopt.symbolic import heaviside
-from sysopt.symbolic import DecisionVariable, exp
+from sysopt.backends import heaviside, exp
+from sysopt.symbolic import Variable, Parameter
 from sysopt.solver import SolverContext
 
 g = -9.81
@@ -116,7 +116,7 @@ We'll assuming something like a solid-rocket motor, and ignore mass effects
 for now. 
 We can treat this as an open-loop controller of the form
 $$
-T = \begin{cases} 1 & t < t_{cutoff}\\ 0 & \text{otherwise}\end{cases}
+T = \begin{cases} 1 &\quad t < t_{cutoff}\\ 0 &\quad \text{otherwise}\end{cases}
 $$
 where $T$ is the thrust percentage, and $t_{cutoff}$ is how long we can burn for.
 
@@ -179,8 +179,8 @@ def main():
     model = BallisticModel()
     x, y, dx, dy, u = model.outputs
 
-    t_f = DecisionVariable()
-    p = DecisionVariable(model.controller, 'cutoff time')
+    t_f = Variable()
+    p = Parameter(model.controller, 'cutoff time')
     x_goal = 1
     y_max = 12
 
@@ -243,4 +243,4 @@ plt.show()
 
 # @nb.skip
 def test_ballistic_model():
-    main()
+    soln = main()

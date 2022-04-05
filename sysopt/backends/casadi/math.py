@@ -6,13 +6,16 @@ from casadi import (
     cos, cosh, acos, acosh,
     tan, tanh, atan, atanh, atan2,
     exp, log, power,
-    fmax, fmin, sign,
-    heaviside
+    fmax, fmin, sign
 )
 import casadi as __casadi
 
 
-def dirac(x, eps=0):
+def heaviside(x, eps=1e-4):
+    return 1/(1 + exp(-2*x/eps))
+
+
+def dirac(x, eps=1e-4):
     """Dirac delta function"""
     return heaviside(x - eps) + heaviside(eps - x)
 

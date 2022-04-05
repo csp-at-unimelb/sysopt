@@ -1,6 +1,6 @@
 """Operations on multivariate vector functions."""
 
-from abc import ABCMeta
+from abc import ABC, abstractmethod
 from copy import copy
 
 from sysopt.types import Domain
@@ -10,7 +10,7 @@ from sysopt.symbolic.op_decorators import (
 )
 
 
-class FunctionOp(metaclass=ABCMeta):
+class FunctionOp(ABC):
     r"""Base class for Operations on functions.
 
     Functions $f$ are assumed to be mappings from
@@ -24,6 +24,12 @@ class FunctionOp(metaclass=ABCMeta):
     - R^n is n-dimensional vector
 
     """
+    domain: Domain
+    codomain: int
+
+    @abstractmethod
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError
 
     @require_equal_domains
     def __sub__(self, other):

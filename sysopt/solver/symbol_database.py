@@ -4,10 +4,11 @@ from typing import Iterable, Callable, Optional, NamedTuple, Union
 from dataclasses import dataclass
 
 
-from sysopt.symbolic import (
-    DecisionVariable, SymbolicVector, concatenate_symbols, list_symbols,
+from sysopt.backends import (
+    SymbolicVector, concatenate_symbols, list_symbols,
     lambdify
 )
+from sysopt.symbolic import Variable
 from sysopt.block import Block
 
 
@@ -62,7 +63,7 @@ class SymbolDatabase:
         self._model_variables = {}
         self._free_variables = {}
 
-        if isinstance(t_final, DecisionVariable):
+        if isinstance(t_final, Variable):
             self._free_variables['T'] = t_final
         self.path_variables = []
         self.expressions = []

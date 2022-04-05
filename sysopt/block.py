@@ -5,6 +5,9 @@ from dataclasses import asdict
 from sysopt.types import (Signature, Metadata, Time, States, Parameters,
                           Inputs, Algebraics, Numeric)
 
+from sysopt.symbolic.symbols import SignalReference, projection_matrix
+from sysopt.symbolic.scalar_ops import dirac
+
 Pin = NewType('Pin', Union['Port', 'Channel'])
 Connection = NewType('Connection', Tuple[Pin, Pin])
 
@@ -80,8 +83,12 @@ class Port:
         return iter(self._channels)
 
     def __call__(self, t):
-        ctx = t.context
-        return ctx.signal(self, list(range(self.size)), t)
+        y_t = SignalReference(self)
+
+        if t is y_t.t:
+            return y_t
+        else:
+            return y_t(t)
 
     @property
     def indices(self) -> List[int]:
@@ -99,8 +106,10 @@ class Channel:
         return self.port.port_type
 
     def __call__(self, t):
-        ctx = t.context
-        return ctx.signal(self.port, self.indices, t)
+        y = self.port(t)
+
+        pi = projection_matrix(self.indices, y.shape[0])
+        return pi @ y
 
     @property
     def size(self):
@@ -116,11 +125,10 @@ class Channel:
 
 class ComponentBase:
     """Interface definition and recursive search methods for components."""
-    __instance_count = 0  # pylint: disable=invalid-name
+    _instance_count = 0  # pylint: disable=invalid-name
 
-    def __init__(self, name=None):
-        self.__instance_count += 1
-        self.name = name or f'{type(self).__name__}_{self.__instance_count}'
+    def __init__(self, *args, **kwargs):
+        pass
 
     @property
     def parent(self):
@@ -180,6 +188,12 @@ class ComponentBase:
         obj.outputs = Port('outputs', obj)
         setattr(obj, '__hash__', lambda arg: id(obj))
         setattr(obj, '_parent', None)
+        ComponentBase._instance_count += 1
+        setattr(
+            obj, 'name',
+            name or f'{cls.__name__}_{ComponentBase._instance_count}'
+        )
+
         return obj
 
 
@@ -251,7 +265,6 @@ class Block(ComponentBase):
     @property
     def signature(self):
         return self.metadata.signature
-
 
 
 class ConnectionList(list):

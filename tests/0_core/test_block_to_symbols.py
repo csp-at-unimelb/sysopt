@@ -1,6 +1,8 @@
 from sysopt.types import *
 from sysopt.block import Block, Composite
-from sysopt.symbolic import create_functions_from_block, SymbolicVector, is_symbolic
+from sysopt.symbolic import is_symbolic
+from sysopt.backends import SymbolicVector
+from sysopt.blocks.block_operations import create_functions_from_block
 from sysopt.blocks import Gain
 
 
