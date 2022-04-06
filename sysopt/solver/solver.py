@@ -2,13 +2,17 @@
 
 import dataclasses
 import weakref
-from typing import Optional, Dict, List, Union, Iterable
+from typing import Optional, Dict, List, Union, Iterable, NewType
 
 from sysopt import symbolic
-from sysopt.symbolic import Variable, Parameter, SignalReference, get_time_variable
+from sysopt.symbolic import (
+    ExpressionGraph, Variable, Parameter, get_time_variable
+)
+
 from sysopt.solver.symbol_database import SymbolDatabase
 from sysopt.block import Block, Composite
 
+DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
 
 @dataclasses.dataclass
 class CandidateSolution:
@@ -46,11 +50,11 @@ class SolverContext:
         pass
 
     def get_symbolic_integrator(self,
-                                decision_variables: Iterable[Union[Variable, Parameter]]):
+                                decision_vars: Iterable[DecisionVariable]):
         integrator = self.get_integrator()
         parameter_arguments = {}
 
-        for dv in decision_variables:
+        for dv in decision_vars:
             if dv is not self.symbol_db.t_final:
                 block, slc = dv.parameter
 
@@ -72,11 +76,11 @@ class SolverContext:
 
         f = symbolic.lambdify(
             symbolic_evaluation, [self.t,
-                                  symbolic.concatenate(decision_variables)]
+                                  symbolic.concatenate(decision_vars)]
         )
         return f
 
-    def _prepare_path(self, decision_variables):
+    def _prepare_path(self, decision_variables:Dict[DecisionVariable, float]):
         t_final = self.symbol_db.t_final
         parameters = self.constants.copy()
 
@@ -105,64 +109,16 @@ class SolverContext:
         return func, t_final
 
     def evaluate(self, problem: 'Problem',
-                 decision_variables: Dict[Variable, float]):
+                 decision_variables: Dict[DecisionVariable, float]):
 
-        y_symbols = self.symbol_db.get_or_create_outputs(self.model)
-        y, t_final = self._prepare_path(decision_variables)
+        y, _ = self._prepare_path(decision_variables)
 
-        for constraint in problem.constraints:
-            # if is_parameter_constraint(constraint):
-            #   - nothing to do, just create a barrier function
-            #
-            # elif is_point_constraint(constraint):
-            #
-            # elif is_path_constraint(
-            #
+        t = get_time_variable()
+        y_vars = self.model.outputs(t)
+        arguments = {y_vars: y}.update(decision_variables)
 
-            print(constraint)
-            print(constraint.symbols())
-
-        assert False
-        # path_symbols = symbolic.concatenate(*path_symbols)
-        # path_values = symbolic.concatenate(*path_values)
-        #
-        dv_symbols = list(decision_variables.keys())
-        dv_symbols = symbolic.concatenate(*dv_symbols)
-        dv_values = list(decision_variables.values())
-        #
-        point_symbols = symbolic.concatenate(*point_symbols)
-        point_values = symbolic.concatenate(*point_values)
-        #
-        point_arguments = [y_symbols, dv_symbols, point_symbols]
-        # path_arguments = [
-        #     self.t, y_symbols, dv_symbols, point_symbols, path_symbols
-        # ]
-
-        cost_function_symbolic = symbolic.lambdify(
-            problem.cost, point_arguments, 'cost'
-        )(y_symbols, dv_symbols, point_values)
-
-        cost_function = symbolic.lambdify(
-            cost_function_symbolic,
-            [y_symbols, dv_symbols]
-        )
-        value = cost_function(y(t_final), dv_values)
+        value = problem.cost.call(arguments)
         constraints = []
-        # for c in problem.constraints:
-        #     if self.is_time_varying(c):
-        #         constraint = symbolic.lambdify(c, path_arguments)(
-        #             self.t,
-        #             y_symbols, dv_symbols, point_values, path_values
-        #         )
-        #         f_of_y = symbolic.lambdify(constraint, [y_symbols, dv_symbols])
-        #         constraints.append(
-        #             symbolic.sum_axis(f_of_y(y.x, dv_values) - 1, 1)
-        #         )
-        #     else:
-        #         constraint = symbolic.lambdify(c, point_arguments)(
-        #             y(t_final), dv_values, point_values)
-        #         constraints.append(constraint - 1)
-
         return CandidateSolution(value, y, constraints)
 
     def solve(self, problem):
@@ -225,9 +181,9 @@ class Problem:
 
     def __init__(self,
                  context: SolverContext,
-                 cost,
-                 arguments: List,
-                 constraints: Optional[List]):
+                 cost: ExpressionGraph,
+                 arguments: List[Variable],
+                 constraints: Optional[List[ExpressionGraph]]):
         self._cost = cost
         self._context = weakref.ref(context)
         self.arguments = arguments

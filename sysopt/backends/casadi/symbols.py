@@ -1,7 +1,7 @@
 """Casadi implementation of symbolic vector and helper functions."""
-
 import casadi as _casadi
 import numpy as np
+from scipy.sparse import dok_matrix
 from sysopt.symbolic import casts
 
 
@@ -158,9 +158,8 @@ def cast(arg):
     elif isinstance(arg, _casadi.DM):
         return SymbolicVector.from_DM(arg)
 
-    casts.cast_type(arg, SymbolicVector)
+    return casts.cast_type(arg)
 
-    raise NotImplementedError(f'Don\'t know how to cast {arg.__class__}')
 
 
 def is_symbolic(arg):
@@ -184,3 +183,7 @@ def dm_to_list(var: _casadi.DM):
     the_list = [[the_array[i, j] for j in range(m)] for i in range(n)]
     return the_list
 
+
+@casts.register(dok_matrix, _casadi.SX)
+def sparse_matrix_to_sx(matrix):
+    return _casadi.SX(matrix)

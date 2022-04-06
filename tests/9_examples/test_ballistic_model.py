@@ -1,4 +1,6 @@
 # @nb.code_cell
+import pytest
+
 from sysopt import Block, Metadata, Composite
 from sysopt.backends import heaviside, exp
 from sysopt.symbolic import Variable, Parameter

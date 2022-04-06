@@ -47,18 +47,30 @@ def test_parameter_api():
     assert param.shape == (1, )
 
 
-def test_signals_api():
-    source = Oscillator()
-    t = get_time_variable()
-    sig = source.outputs(t)
-    assert sig is not None
-    assert sig.reference is source.outputs
-    expr = sig(0)
+class TestSignalApi:
+    def test_create_and_evaluate(self):
+        source = Oscillator()
 
-    assert expr is not None
-    assert expr is not sig
+        t = get_time_variable()
+        sig = source.outputs(t)
+        assert sig is not None
+        assert sig.port is source.outputs
+        expr = sig(0)
 
-    assert isinstance(expr, ExpressionGraph)
+        assert expr is not None
+        assert expr is not sig
+
+        assert isinstance(expr, ExpressionGraph)
+
+    def test_identity(self):
+        gain = Gain(2)
+        t = get_time_variable()
+        sig_0 = gain.outputs[0](t)
+        sig_1 = gain.outputs[1](t)
+
+        assert sig_0.symbols() == sig_1.symbols()
+
+
 
 
 def test_is_temporal():
@@ -91,13 +103,18 @@ def test_evaluate_graph():
     sig = source.outputs(t)
     param = Parameter(source, 0)
 
-    expression = 1 + var * sig(0) + param
+    expression = 1 + var * sig(1) + param
 
     assert expression.symbols() == {
         var, sig, param
     }
-
+    values = {
+        var: 2,
+        sig: y,
+        param: 3
+    }
     # build a graph
     # evaluate it with symbols {}
-
-    assert False
+    result = expression.call(values)
+    expected_result = 1 + 2 * np.exp(1) + 3
+    assert result == expected_result

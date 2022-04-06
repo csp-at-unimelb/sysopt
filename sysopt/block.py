@@ -6,7 +6,6 @@ from sysopt.types import (Signature, Metadata, Time, States, Parameters,
                           Inputs, Algebraics, Numeric)
 
 from sysopt.symbolic.symbols import SignalReference, projection_matrix
-from sysopt.symbolic.scalar_ops import dirac
 
 Pin = NewType('Pin', Union['Port', 'Channel'])
 Connection = NewType('Connection', Tuple[Pin, Pin])

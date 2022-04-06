@@ -1,14 +1,22 @@
 """Functions and factories to create symbolic variables."""
 import weakref
-from abc import ABCMeta, abstractmethod, ABC
+from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from inspect import signature
-from scipy.sparse import dok_matrix
-from typing import Union
 
-from sysopt.backends import cast
-from sysopt.backends import is_symbolic as _is_symbolic
-from sysopt.backends import list_symbols as _list_symbols
+import numpy as np
+from scipy.sparse import dok_matrix, spmatrix
+from typing import Union, List, Callable, NewType, Tuple, Optional
+
+import sysopt.backends as backend
+from sysopt.backends import SymbolicVector
+
+epsilon = 1e-12
+
+ShapeFunction = NewType(
+    'ShapeFunction', Callable[[Tuple[int, ...], ...], Tuple[int, ...]]
+)
+"""Computes the shape of and output for a given set of inputs."""
 
 
 def find_param_index_by_name(block, name: str):
@@ -23,7 +31,7 @@ def find_param_index_by_name(block, name: str):
     raise ValueError(f'Could not find parameter {name} in block {block}.')
 
 
-def sparse_matrix(shape):
+def sparse_matrix(shape: Tuple[int, int]):
     return dok_matrix(shape, dtype=float)
 
 
@@ -31,17 +39,17 @@ def is_symbolic(obj):
     try:
         return obj.is_symbolic
     except AttributeError:
-        return _is_symbolic(obj)
+        return backend.is_symbolic(obj)
 
 
 def list_symbols(obj):
     try:
         return obj.symbols()
     except AttributeError:
-        return _list_symbols(obj)
+        return backend.list_symbols(obj)
 
 
-def projection_matrix(indices, dimension):
+def projection_matrix(indices: List[int], dimension: int):
     matrix = sparse_matrix((len(indices), dimension))
     for i, j in enumerate(indices):
         matrix[i, j] = 1
@@ -51,15 +59,14 @@ def projection_matrix(indices, dimension):
 
 __ops = defaultdict(list)
 __shape_ops = {}
-__VAR = "variable"
 
 scalar_shape = (1, )
 
 
-def infer_scalar_shape(*shapes):
+def infer_scalar_shape(*shapes: Tuple[int, ...]) -> Tuple[int, ...]:
     this_shape = shapes[0]
     for shape in shapes[1:]:
-        if this_shape == shape or shape == scalar_shape:
+        if shape in (this_shape, scalar_shape):
             continue
         if this_shape == (1, ):
             this_shape = shape
@@ -68,33 +75,35 @@ def infer_scalar_shape(*shapes):
     return this_shape
 
 
-def matmul_shape(*shapes):
+def matmul_shape(*shapes: Tuple[int, ...]) -> Tuple[int, ...]:
     n, m = shapes[0]
     for n_next, m_next in shapes[1:]:
         if m != n_next:
-            raise AttributeError("Invalid shape")
+            raise AttributeError('Invalid shape')
         else:
-            m = n_next
+            m = m_next
     return n, m
 
 
-def transpose_shape(shape):
+def transpose_shape(shape: Tuple[int, int]) -> Tuple[int, ...]:
     n, m = shape
     return m, n
 
 
-def infer_shape(op, *shapes):
+def infer_shape(op: Callable, *shapes: Tuple[int, ...]) -> Tuple[int, ...]:
+    """Infers the output shape from the operation on the given inputs."""
     return __shape_ops[op](*shapes)
 
 
-def operation(shape_func=infer_scalar_shape):
+def register_op(shape_func: ShapeFunction = infer_scalar_shape):
+    """Decorator which register the operator as an expression graph op."""
     def wrapper(func):
         sig = signature(func)
         is_variable = any(
             param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD)
             for param in sig.parameters.values())
 
-        idx = __VAR if is_variable else len(sig.parameters)
+        idx = None if is_variable else len(sig.parameters)
         __ops[idx].append(func)
         __shape_ops[func] = shape_func
         return func
@@ -102,10 +111,22 @@ def operation(shape_func=infer_scalar_shape):
     return wrapper
 
 
-def wrap_function(func,
-                  n_arguments=__VAR,
-                  shape_func=infer_scalar_shape):
-    __ops[n_arguments].append(func)
+def wrap_as_op(func: Callable,
+               arguments: Optional[int] = None,
+               shape_func: ShapeFunction = infer_scalar_shape) -> Callable:
+    """Wraps the function for use in expression graphs.
+
+    Args:
+        func:       A function to wrap
+        arguments:  The number of arguments
+        shape_func: A function which generates the output shape from the
+            arguments.
+
+    Returns:
+        An callable operator for use in an expression graph.
+
+    """
+    __ops[arguments].append(func)
 
     def wrapper(*args):
         return ExpressionGraph(func, *args)
@@ -115,70 +136,68 @@ def wrap_function(func,
     return wrapper
 
 
-@operation()
+@register_op()
 def power(base, exponent):
     return base ** exponent
 
 
-@operation()
+@register_op()
 def add(lhs, rhs):
     return lhs + rhs
 
 
-@operation()
+@register_op()
 def sub(lhs, rhs):
     return lhs - rhs
 
 
-@operation(matmul_shape)
+@register_op(matmul_shape)
 def matmul(lhs, rhs):
     return lhs @ rhs
 
 
-@operation()
+@register_op()
 def neg(obj):
     return -obj
 
 
-@operation()
+@register_op()
 def mul(lhs, rhs):
     return lhs * rhs
 
 
-@operation()
+@register_op()
 def div(lhs, rhs):
     return lhs / rhs
 
 
-@operation(transpose_shape)
+@register_op(transpose_shape)
 def transpose(matrix):
     return matrix.T
 
 
-class Inequality:
-    def __init__(self, op, lhs, rhs):
-        self.op = op
-        self.lhs = lhs
-        self.rhs = rhs
+class LessThanOrEqualTo:
+    """Inequality expression."""
+    def __init__(self, smaller, bigger):
+        self.smaller = smaller
+        self.bigger = bigger
 
     def __str__(self):
-        return f'{self.lhs} {self.op} {self.rhs}'
+        return f'{self.smaller} <= {self.bigger}'
 
     def symbols(self):
-        try:
-            result = self.lhs.symbols()
-        except AttributeError:
-            result = set()
+        result = set()
+        for term in (self.smaller, self.bigger):
+            try:
+                result |= term.symbols()
+            except AttributeError:
+                pass
 
-        try:
-            result |= self.rhs.symbols()
-        except AttributeError:
-            pass
         return result
 
 
 class Algebraic(metaclass=ABCMeta):
-
+    """Base class for symbolic terms in expression graphs."""
     @property
     @abstractmethod
     def shape(self):
@@ -226,16 +245,16 @@ class Algebraic(metaclass=ABCMeta):
         return ExpressionGraph(div, other, self)
 
     def __le__(self, other):
-        return Inequality('le', self, other)
+        return LessThanOrEqualTo(self, other)
 
     def __ge__(self, other):
-        return Inequality('ge', self, other)
+        return LessThanOrEqualTo(other, self)
 
     def __gt__(self, other):
-        return Inequality('gt', self, other)
+        return LessThanOrEqualTo(other, self + epsilon)
 
     def __lt__(self, other):
-        return Inequality('lt', self, other)
+        return LessThanOrEqualTo(self, other + epsilon)
 
     def __cmp__(self, other):
         return id(self) == id(other)
@@ -246,6 +265,8 @@ def is_op(value):
 
 
 class ExpressionGraph(Algebraic):
+    """Graph representation of a symbolic expression."""
+
     def __init__(self, op, *args):
         self.nodes = []
         op_node = self.add_or_get_node(op)
@@ -257,15 +278,15 @@ class ExpressionGraph(Algebraic):
 
     @property
     def shape(self):
-        return self._get_shape_of(self.head)     
-        
+        return self._get_shape_of(self.head)
+
     def _get_shape_of(self, node):
         if node in self.edges:
             op = self.nodes[node]
             shapes = [
                 self._get_shape_of(child)
                 for child in self.edges[node]
-            ] 
+            ]
             return infer_shape(op, *shapes)
         obj = self.nodes[node]
         try:
@@ -276,6 +297,20 @@ class ExpressionGraph(Algebraic):
         raise NotImplementedError(
             f'Don\'t know how to get the shape of {obj}'
         )
+
+    def call(self, values):
+        def recurse(node):
+            obj = self.nodes[node]
+            if is_op(obj):
+                args = [recurse(child) for child in self.edges[node]]
+                return obj(*args)
+            try:
+                return values[obj]
+            except (KeyError, TypeError):
+                pass
+            return obj
+
+        return recurse(self.head)
 
     @property
     def is_symbolic(self):
@@ -382,6 +417,7 @@ class ExpressionGraph(Algebraic):
 
 
 class Variable(Algebraic):
+    """Symbolic type for a free variable."""
     is_symbolic = True
 
     def __init__(self, name=None, shape=scalar_shape):
@@ -406,9 +442,16 @@ _t = Variable('t')
 
 
 class Parameter(Algebraic):
-    __table = {}
+    """Symbolic type for variables bound to a block parameter.
 
-    def __new__(cls, block, parameter: Union[str, int]):
+    Args:
+        block: The model block from which to derive the symbolic parameter.
+        parameter: Index or name of the desired symbolic parameter.
+
+    """
+    _table = {}
+
+    def __new__(cls, block: 'Block', parameter: Union[str, int]):
         if isinstance(parameter, str):
             index = find_param_index_by_name(block, parameter)
         else:
@@ -419,7 +462,7 @@ class Parameter(Algebraic):
 
         uid = (id(block), index)
         try:
-            return Parameter.__table[uid]
+            return Parameter._table[uid]
         except KeyError:
             pass
         obj = Algebraic.__new__(cls)
@@ -427,7 +470,7 @@ class Parameter(Algebraic):
         setattr(obj, 'uid', uid)
         setattr(obj, 'index', index)
         setattr(obj, '_parent', weakref.ref(block))
-        Parameter.__table[uid] = obj
+        Parameter._table[uid] = obj
         return obj
 
     def __hash__(self):
@@ -454,28 +497,50 @@ class Parameter(Algebraic):
         return {self}
 
 
-@operation()
+@register_op()
 def evaluate_signal(signal, t):
     return signal(t)
 
 
 class SignalReference(Algebraic):
-    t = _t
+    """Symbolic variable representing a time varying signal.
 
-    def __init__(self, reference):
-        self.reference = reference
-        self._shape = (len(reference), )
+    Args:
+        port: The model port from which this signal is derived.
+
+    """
+
+    _signals = {}
+
+    def __init__(self, port):
+        self.port = port
+
+    def __new__(cls, port):
+        source_id = id(port)
+        try:
+            new_signal = SignalReference._signals[source_id]()
+            assert new_signal is not None
+            return new_signal
+        except (KeyError, AssertionError):
+            pass
+        new_signal = super().__new__(cls)
+        SignalReference._signals[source_id] = weakref.ref(new_signal)
+        return new_signal
+
+    @property
+    def t(self):
+        return get_time_variable()
 
     @property
     def shape(self):
-        return self._shape
+        return len(self.port),
 
     def __hash__(self):
-        return hash(self.reference)
+        return hash(self.port)
 
     def __cmp__(self, other):
         try:
-            return self.reference == other.reference
+            return self.port is other.port
         except AttributeError:
             return False
 
@@ -494,7 +559,7 @@ def as_vector(arg):
         if isinstance(arg, (int, float)):
             return arg,
     if is_symbolic(arg):
-        return cast(arg)
+        return backend.cast(arg)
 
     raise NotImplementedError(
         f'Don\'t know to to vectorise {arg.__class__}'
@@ -506,15 +571,13 @@ def get_time_variable():
 
 
 def _is_subtree_constant(graph, node):
-    result = True
     obj = graph.nodes[node]
     if not is_op(obj):
         return not is_temporal(obj)
     if obj is evaluate_signal:
         return True
     return all(
-        _is_subtree_constant(graph, child)
-        for child in graph.edges[node]
+        _is_subtree_constant(graph, child) for child in graph.edges[node]
     )
 
 
@@ -527,6 +590,43 @@ def is_temporal(symbol):
         return True
     if is_op(symbol):
         return False
-
-
     return False
+
+
+def is_matrix(obj):
+    return isinstance(obj, (np.ndarray, spmatrix))
+
+
+def lambdify(graph: ExpressionGraph,
+             arguments: List[Union[Algebraic, List[Algebraic]]],
+             name: str = 'f'
+             ):
+    substitutions = {}
+    for i, arg in enumerate(arguments):
+        if isinstance(arg, list):
+            assert all(sub_arg.shape == scalar_shape for sub_arg in arg), \
+                'Invalid arguments, lists must be a list of scalars'
+            symbol = SymbolicVector(f'x_{i}', len(arg))
+            substitutions.update(
+                {sub_arg: symbol[j] for j, sub_arg in enumerate(arg)})
+        else:
+            n, = arg.shape
+            symbol = SymbolicVector(f'x_{i}', n)
+            substitutions[arg] = symbol
+
+    def recurse(node):
+        obj = graph.nodes[node]
+        if is_op(obj):
+            args = [recurse(child) for child in graph.edges[node]]
+            return obj(*args)
+        if is_matrix(obj):
+            return backend.cast(obj)
+        try:
+            return substitutions[obj]
+        except (KeyError, TypeError):
+            return obj
+
+    symbolic_expressions = recurse(graph.head)
+    return backend.lambdify(
+        symbolic_expressions, list(substitutions.values()), name
+    )
