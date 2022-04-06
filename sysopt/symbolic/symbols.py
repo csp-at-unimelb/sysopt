@@ -6,17 +6,12 @@ from inspect import signature
 
 import numpy as np
 from scipy.sparse import dok_matrix, spmatrix
-from typing import Union, List, Callable, NewType, Tuple, Optional
+from typing import Union, List, Callable, Tuple, Optional
 
 import sysopt.backends as backend
 from sysopt.backends import SymbolicVector
 
 epsilon = 1e-12
-
-ShapeFunction = NewType(
-    'ShapeFunction', Callable[[Tuple[int, ...], ...], Tuple[int, ...]]
-)
-"""Computes the shape of and output for a given set of inputs."""
 
 
 def find_param_index_by_name(block, name: str):
@@ -95,7 +90,7 @@ def infer_shape(op: Callable, *shapes: Tuple[int, ...]) -> Tuple[int, ...]:
     return __shape_ops[op](*shapes)
 
 
-def register_op(shape_func: ShapeFunction = infer_scalar_shape):
+def register_op(shape_func=infer_scalar_shape):
     """Decorator which register the operator as an expression graph op."""
     def wrapper(func):
         sig = signature(func)
@@ -113,7 +108,7 @@ def register_op(shape_func: ShapeFunction = infer_scalar_shape):
 
 def wrap_as_op(func: Callable,
                arguments: Optional[int] = None,
-               shape_func: ShapeFunction = infer_scalar_shape) -> Callable:
+               shape_func=infer_scalar_shape) -> Callable:
     """Wraps the function for use in expression graphs.
 
     Args:
