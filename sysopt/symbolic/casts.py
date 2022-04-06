@@ -17,14 +17,26 @@ def register(from_type, to_type):
     return decorator
 
 
-def cast_type(var, to_type):
+def cast_type(var, to_type=None):
     from_type = type(var)
+    if to_type is None:
+        try:
+            casters = _registry[from_type]
+        except KeyError as ex:
+            msg = f'Don\'t know how to cast {from_type}.'
+            raise NotImplementedError(msg) from ex
 
-    try:
-        caster = _registry[from_type][to_type]
-    except KeyError as ex:
-        raise NotImplementedError(f'Don\'t know how to cast from {from_type}'
-                                  f'to {to_type}') from ex
+        if len(casters) != 1:
+            msg = f'Don\'t know how to uniquely cast from {from_type}'
+            raise TypeError(msg)
+
+        caster, = casters.values()
+    else:
+        try:
+            caster = _registry[from_type][to_type]
+        except KeyError as ex:
+            msg = f'Don\'t know how to cast from {from_type} to {to_type}'
+            raise NotImplementedError(msg) from ex
 
     return caster(var)
 

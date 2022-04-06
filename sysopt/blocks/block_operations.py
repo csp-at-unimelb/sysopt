@@ -9,7 +9,7 @@ from sysopt.block import Block, Composite
 from sysopt.helpers import flatten, strip_nones
 
 from sysopt.symbolic.symbols import as_vector
-from sysopt.symbolic.tensor_ops import (
+from sysopt.symbolic.function_ops import (
     FunctionOp, Concatenate, project, compose)
 
 from sysopt.backends import (
