@@ -451,7 +451,7 @@ class Parameter(Algebraic):
     """
     _table = {}
 
-    def __new__(cls, block: 'Block', parameter: Union[str, int]):
+    def __new__(cls, block, parameter: Union[str, int]):
         if isinstance(parameter, str):
             index = find_param_index_by_name(block, parameter)
         else:
