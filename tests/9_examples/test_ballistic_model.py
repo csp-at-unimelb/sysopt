@@ -54,7 +54,7 @@ class Rocket(Block):
     def __init__(self):
         metadata = Metadata(
             inputs=["Thrust pct", "Drag"],
-            state=["x", "y", "v_x", "v_y"],
+            states=["x", "y", "v_x", "v_y"],
             outputs=["x", "y", "v_x", "v_y"],
             parameters=["mass in kg", "max_thrust", "dx0", "dy0", "y0"]
         )
@@ -64,8 +64,8 @@ class Rocket(Block):
         _1, _2, dx0, dy0, y0 = parameters
         return [0, y0, dx0, dy0]
 
-    def compute_dynamics(self, t, state, algebraics, inputs, parameters):
-        x, y, dx, dy = state
+    def compute_dynamics(self, t, states, algebraics, inputs, parameters):
+        x, y, dx, dy = states
         mass, thrust_max, *_ = parameters
         thrust_pct, drag_coeff = inputs
         speed = (dx ** 2 + dy ** 2) ** 0.5
@@ -77,8 +77,8 @@ class Rocket(Block):
             mass * g + dy * force / speed
         ]
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
-        return state,
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
+        return states,
 
 
 # @nb.text_cell
@@ -104,7 +104,7 @@ class DragModel(Block):
             )
         )
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
         d_max, rho = parameters
         y, = inputs
         return d_max * exp(- rho * y),
@@ -135,7 +135,7 @@ class OpenLoopController(Block):
             )
         )
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
         cutoff_time, = parameters
         return heaviside(cutoff_time - t),
 

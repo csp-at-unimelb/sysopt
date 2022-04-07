@@ -28,7 +28,7 @@ class Gain(Block):
 
         super().__init__(sig)
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
         return [gain * signal for signal, gain in zip(inputs, parameters)]
 
 
@@ -43,12 +43,12 @@ class Mixer(Block):
         sig = Signature(
             inputs=inputs,
             outputs=1,
-            state=0,
+            states=0,
             parameters=0
         )
         super().__init__(sig)
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
         return sum(inputs),
 
 
@@ -69,7 +69,7 @@ class ConstantSignal(Block):
         sig = Signature(outputs=outputs, parameters=outputs)
         super().__init__(sig)
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
         return parameters
 
 
@@ -83,7 +83,7 @@ class Oscillator(Block):
         )
         super().__init__(metadata)
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
         freq, phase = parameters
         return cos(t * freq + phase),
 
@@ -95,19 +95,19 @@ class LowPassFilter(Block):
             parameters=['cutoff frequency'],
             inputs=['input'],
             outputs=['output'],
-            state=['state']
+            states=['states']
         )
         super().__init__(metadata)
 
     def initial_state(self, parameters):
         return 0,
 
-    def compute_dynamics(self, t, state, algebraics, inputs, parameters):
-        x, = state
+    def compute_dynamics(self, t, states, algebraics, inputs, parameters):
+        x, = states
         w, = parameters
         u, = inputs
         return (u - x) / w,
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
-        x, = state
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
+        x, = states
         return x,

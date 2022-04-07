@@ -90,7 +90,7 @@ def test_create_flattened_system_composite():
     flattened_system = ctx.get_flattened_system(composite)
 
     assert flattened_system.X.shape == (1, 1), \
-        "Filter state is missing from composed system"
+        "Filter states is missing from composed system"
     assert flattened_system.Z.shape == (1, 1), \
         "Wire constraint variable is mission from composed system "
     assert flattened_system.P.shape == (3, 1), \

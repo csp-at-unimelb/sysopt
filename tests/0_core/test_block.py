@@ -48,7 +48,7 @@ def test_block_oop_api():
     block = BlockMock()
 
     assert block.signature == Signature(
-        inputs=2, outputs=2, parameters=0, state=0, constraints=0
+        inputs=2, outputs=2, parameters=0, states=0, constraints=0
     )
 
     assert len(block.inputs) == 2

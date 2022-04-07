@@ -76,7 +76,7 @@ class SymbolDatabase:
             return self._signals[block]
         except KeyError:
             pass
-        n = block.signature.state
+        n = block.signature.states
         m = block.signature.constraints
         k = block.signature.inputs
         ell = block.signature.parameters

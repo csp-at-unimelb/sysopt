@@ -61,7 +61,7 @@ class DuffingComponent(Block):
                  initial_velocity=0):
         metadata = Metadata(
             inputs=['force'],
-            state=['position', 'velocity'],
+            states=['position', 'velocity'],
             parameters=['damping', 'stiffness', 'nonlinearity'],
             outputs=['position', 'velocity']
         )
@@ -72,17 +72,17 @@ class DuffingComponent(Block):
     def initial_state(self, parameters):
         return self.x0
 
-    def compute_dynamics(self, t, state, algebraic, inputs, parameters):
+    def compute_dynamics(self, t, states, algebraic, inputs, parameters):
         delta, alpha, beta = parameters
-        x, dx = state
+        x, dx = states
         u, = inputs
         return [
             dx,
             -delta * dx - alpha * x - beta * x ** 3 + u
         ]
 
-    def compute_outputs(self, t, state, algebraic, inputs, parameters):
-        x, dx = state
+    def compute_outputs(self, t, states, algebraic, inputs, parameters):
+        x, dx = states
         return [x, dx]
 
 
@@ -91,18 +91,18 @@ r"""
 # A breakdown of the class definition.
 
 ### Inside the `__init__` function.
-The `Metadata` object defines the input, output and state space for the system in question, along with parameters.
+The `Metadata` object defines the input, output and states space for the system in question, along with parameters.
 This is passed into the `Block` constructor (via the `super().__init__(metadata)` call, and allows 
 the base class to construct the appropriate input-output ports for the object.
 
 
 ### `initial_state(self, parameters)`
-Any object that has state defined in the metadata, needs to have a way of getting initial values.
+Any object that has states defined in the metadata, needs to have a way of getting initial values.
 Here, we assume that the initial position and velocity are specified upon object creation, so we
 can pull those from the object attributes.
-More generally, we allow for the initial state to be generate parametrically - hence why, `parameters`
+More generally, we allow for the initial states to be generate parametrically - hence why, `parameters`
 is an argument. 
-Initial state is always at $t=0$.
+Initial states is always at $t=0$.
 
 ### `compute_*`
 If we take each block to have the form 
@@ -110,7 +110,7 @@ $$
 \begin{aligned}
 \dot{x} &=& f(t x,z,u; p)\\ y &=& g(t,x,z,u;p)\\ 0 &=& h(t, x,z,u;p)\end{aligned} $$
 then 
-- `x,z,u,p` are the state variables, algebraic variables, inputs and parameters for this block as defined by the metadata.
+- `x,z,u,p` are the states variables, algebraic variables, inputs and parameters for this block as defined by the metadata.
 - `compute_dynamics` is $f$
 - `compute_outputs` is $g$
 - `evaluate_residuals` is $h$, but since we have no algebraic terms, we can leave it out. 

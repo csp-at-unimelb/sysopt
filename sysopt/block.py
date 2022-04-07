@@ -156,7 +156,7 @@ class ComponentBase:
 
     def compute_dynamics(self,
                          t: Time,
-                         state: States,
+                         states: States,
                          algebraics: Algebraics,
                          inputs: Inputs,
                          parameters: Parameters):
@@ -164,7 +164,7 @@ class ComponentBase:
 
     def compute_outputs(self,
                         t: Time,
-                        state: States,
+                        states: States,
                         algebraics: Algebraics,
                         inputs: Inputs,
                         parameters: Parameters) -> Numeric:
@@ -172,7 +172,7 @@ class ComponentBase:
 
     def compute_residuals(self,
                           t: Time,
-                          state: States,
+                          states: States,
                           algebraics: Algebraics,
                           inputs: Inputs,
                           parameters: Parameters) -> Numeric:
@@ -202,7 +202,7 @@ class Block(ComponentBase):
     Blocks represent the fundamental components in a model, and
     describe parameter dynamics and/or input-output maps.
 
-    A block is made up of input, output, parameter, state and
+    A block is made up of input, output, parameter, states and
     algebraically constrained spaces.
     The dimension of these spaces are defined either implicitly by
     metadata, or explicitly via an instance `sysopt.Signature`.
@@ -223,10 +223,10 @@ class Block(ComponentBase):
 
     Attributes:
         signature: An instance of `sysopt.Signature` describing the dimensions
-            of input, state, algebraic, output and parameter spaces.
+            of input, states, algebraic, output and parameter spaces.
         metadata: An optional instance of `sysopt.Metadata`
             describing the metadata (eg. names) of each term in the input,
-            output, state, algebraic and parameter spaces.
+            output, states, algebraic and parameter spaces.
         inputs: An instance of `Port` used to define connections.
         outputs: An instance of `Port` used to define connections.
 

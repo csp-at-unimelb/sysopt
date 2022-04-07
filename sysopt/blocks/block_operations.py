@@ -176,7 +176,7 @@ class BlockFunctionWrapper(FunctionOp):
 
 
 class ArgPermute(FunctionOp):
-    """Operator that remaps inputs to state variables or constraints.
+    """Operator that remaps inputs to states variables or constraints.
 
     Args:
         codomain: The domain of the wrapped function.
@@ -219,7 +219,7 @@ class ArgPermute(FunctionOp):
 def _create_functions_from_leaf_block(block: Block):
     domain = Domain(
         1,
-        block.signature.state,
+        block.signature.states,
         block.signature.constraints,
         block.signature.inputs,
         block.signature.parameters
@@ -228,15 +228,15 @@ def _create_functions_from_leaf_block(block: Block):
     f = None
     g = None
     h = None
-    if block.signature.state > 0:
+    if block.signature.states > 0:
         x0 = VectorFunctionWrapper(
             domain=1,
-            codomain=block.signature.state,
+            codomain=block.signature.states,
             function=block.initial_state
         )
         f = BlockFunctionWrapper(
             domain=domain,
-            codomain=block.signature.state,
+            codomain=block.signature.states,
             function=block.compute_dynamics
         )
 

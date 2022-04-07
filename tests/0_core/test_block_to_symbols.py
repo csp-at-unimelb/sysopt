@@ -16,7 +16,7 @@ class BlockMock(Block):
 
     def __init__(self, name):
         test_block_metadata = Metadata(
-            state=['position'],
+            states=['position'],
             constraints=['constraint'],
             parameters=['rate'],
             inputs=['force'],
@@ -29,22 +29,22 @@ class BlockMock(Block):
 
     def compute_dynamics(self,
                          t: Time,
-                         state: States,
+                         states: States,
                          algebraics: Algebraics,
                          inputs: Inputs,
                          parameters: Parameters):
-        x, = state
+        x, = states
         z, = algebraics
         u, = inputs
         return [x * z * u]
 
     def compute_outputs(self,
                         t: Time,
-                        state: States,
+                        states: States,
                         algebraics: Algebraics,
                         inputs: Inputs,
                         parameters: Parameters) -> Numeric:
-        x, = state
+        x, = states
         z, = algebraics
         return [
             x, z
@@ -52,11 +52,11 @@ class BlockMock(Block):
 
     def compute_residuals(self,
                           t: Time,
-                          state: States,
+                          states: States,
                           algebraics: Algebraics,
                           inputs: Inputs,
                           parameters: Parameters) -> Numeric:
-        x, = state
+        x, = states
         z, = algebraics
         return [x - z**2]
 
@@ -246,7 +246,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
         expected_domain = (1, 2, 3, 1, 2)
         assert f.domain == g.domain == h.domain == expected_domain
 
-        # state hasn't changed
+        # states hasn't changed
         assert f.codomain == 2
 
         # each block has two, but we've only set two as outputs

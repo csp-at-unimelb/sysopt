@@ -172,7 +172,11 @@ def transpose(matrix):
 
 
 class LessThanOrEqualTo:
-    """Inequality expression."""
+    """Inequality expression.
+
+    Non-negative evaluation means that the inequality is satisfied.
+
+    """
     def __init__(self, smaller, bigger):
         self.smaller = smaller
         self.bigger = bigger
@@ -189,6 +193,12 @@ class LessThanOrEqualTo:
                 pass
 
         return result
+
+    def to_graph(self):
+        return self.bigger - self.smaller
+
+    def call(self, args):
+        return self.to_graph().call(args)
 
 
 class Algebraic(metaclass=ABCMeta):
@@ -294,11 +304,16 @@ class ExpressionGraph(Algebraic):
         )
 
     def call(self, values):
+
         def recurse(node):
             obj = self.nodes[node]
             if is_op(obj):
                 args = [recurse(child) for child in self.edges[node]]
                 return obj(*args)
+            try:
+                return obj.call(values)
+            except (AttributeError, TypeError):
+                pass
             try:
                 return values[obj]
             except (KeyError, TypeError):
@@ -494,7 +509,33 @@ class Parameter(Algebraic):
 
 @register_op()
 def evaluate_signal(signal, t):
+    print(signal)
+    print(t)
     return signal(t)
+
+
+class Function(Algebraic):
+    def __init__(self, shape, function, arguments):
+        self._shape = shape
+        self.function = function
+        self.arguments = arguments
+
+    @property
+    def shape(self):
+        return self._shape
+
+    def __hash__(self):
+        return hash((id(self.function), self.arguments))
+
+    def symbols(self):
+        return set(self.arguments)
+
+    def __call__(self, *args):
+        return self.function(*args)
+
+    def call(self, args_dict):
+        args = [args_dict[arg] for arg in self.arguments]
+        return self.function(*args)
 
 
 class SignalReference(Algebraic):
@@ -540,10 +581,17 @@ class SignalReference(Algebraic):
             return False
 
     def __call__(self, t):
-        return ExpressionGraph(evaluate_signal, self, t)
+        if t is get_time_variable():
+            return self
+        else:
+            return ExpressionGraph(evaluate_signal, self, t)
 
     def symbols(self):
         return {self, self.t}
+
+    def call(self, args):
+        function = args[self]
+        return Function(self.shape, function, [self.t])
 
 
 def as_vector(arg):
@@ -596,6 +644,7 @@ def lambdify(graph: ExpressionGraph,
              arguments: List[Union[Algebraic, List[Algebraic]]],
              name: str = 'f'
              ):
+
     substitutions = {}
     for i, arg in enumerate(arguments):
         if isinstance(arg, list):
