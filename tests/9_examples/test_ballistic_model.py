@@ -211,7 +211,7 @@ def main():
             t_f > 0
         ]
 
-        problem = context.problem(cost, [t_f, p], subject_to=constraints)
+        problem = context.problem([t_f, p], cost, subject_to=constraints)
 
         candidate_solution = problem(1, 1)
 

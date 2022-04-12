@@ -14,6 +14,7 @@ from sysopt.block import Block, Composite
 
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
 
+
 @dataclasses.dataclass
 class CandidateSolution:
     """A candidate solution to a constrained optimisation problem. """
@@ -163,8 +164,8 @@ class SolverContext:
 
         return False
 
-    def problem(self, cost, arguments, subject_to=None):
-        return Problem(self, cost, arguments, subject_to)
+    def problem(self, arguments, cost, subject_to=None):
+        return Problem(self, arguments, cost, subject_to)
 
 
 class Problem:
@@ -181,8 +182,8 @@ class Problem:
 
     def __init__(self,
                  context: SolverContext,
-                 cost: ExpressionGraph,
                  arguments: List[Variable],
+                 cost: ExpressionGraph,
                  constraints: Optional[List[ExpressionGraph]]):
         self._cost = cost
         self._context = weakref.ref(context)

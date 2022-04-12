@@ -72,16 +72,29 @@ def infer_scalar_shape(*shapes: Tuple[int, ...]) -> Tuple[int, ...]:
 
 def matmul_shape(*shapes: Tuple[int, ...]) -> Tuple[int, ...]:
     n, m = shapes[0]
-    for n_next, m_next in shapes[1:]:
+    for shape in shapes[1:]:
+        try:
+            n_next, m_next = shape
+        except ValueError:
+            n_next, = shape
+            m_next = None
         if m != n_next:
             raise AttributeError('Invalid shape')
         else:
             m = m_next
-    return n, m
+
+    if m is not None:
+        return n, m
+    else:
+        return n,
 
 
 def transpose_shape(shape: Tuple[int, int]) -> Tuple[int, ...]:
-    n, m = shape
+    try:
+        n, m = shape
+    except ValueError:
+        n, = shape
+        m = 1
     return m, n
 
 
@@ -171,7 +184,11 @@ def transpose(matrix):
     return matrix.T
 
 
-class LessThanOrEqualTo:
+def slice_to_list(slce: slice):
+    return list(range(slce.stop))[slce]
+
+
+class Inequality:
     """Inequality expression.
 
     Non-negative evaluation means that the inequality is satisfied.
@@ -201,12 +218,23 @@ class LessThanOrEqualTo:
         return self.to_graph().call(args)
 
 
+class PathInequality(Inequality):
+    pass
+
+
 class Algebraic(metaclass=ABCMeta):
     """Base class for symbolic terms in expression graphs."""
+    def __init_subclass__(cls, **kwargs):
+        setattr(cls, '__array_ufunc__', None)
+
     @property
     @abstractmethod
     def shape(self):
         raise NotImplementedError
+
+    @property
+    def T(self):
+        return ExpressionGraph(transpose, self)
 
     @abstractmethod
     def symbols(self):
@@ -215,6 +243,15 @@ class Algebraic(metaclass=ABCMeta):
     @abstractmethod
     def __hash__(self):
         raise NotImplementedError
+
+    def __getitem__(self, item):
+        n = self.shape[0]
+        if isinstance(item, slice):
+            indices = slice_to_list(item)
+        else:
+            indices = [item]
+        pi = projection_matrix(indices, n)
+        return ExpressionGraph(matmul, pi, self)
 
     def __add__(self, other):
         return ExpressionGraph(add, self, other)
@@ -250,23 +287,36 @@ class Algebraic(metaclass=ABCMeta):
         return ExpressionGraph(div, other, self)
 
     def __le__(self, other):
-        return LessThanOrEqualTo(self, other)
+        return _less_or_equal(self, other)
 
     def __ge__(self, other):
-        return LessThanOrEqualTo(other, self)
+        return _less_or_equal(other, self)
 
     def __gt__(self, other):
-        return LessThanOrEqualTo(other, self + epsilon)
+        return _less_or_equal(other, self + epsilon)
 
     def __lt__(self, other):
-        return LessThanOrEqualTo(self, other + epsilon)
+        return _less_or_equal(self, other + epsilon)
 
     def __cmp__(self, other):
         return id(self) == id(other)
 
+    def __pow__(self, exponent, modulo=None):
+        return ExpressionGraph(power, self, exponent)
+
+
+def _less_or_equal(smaller, bigger):
+    if is_temporal(smaller) or is_temporal(bigger):
+        return PathInequality(smaller, bigger)
+    else:
+        return Inequality(smaller, bigger)
+
 
 def is_op(value):
-    return any(value in ops for ops in __ops.values())
+    try:
+        return any(value in ops for ops in __ops.values())
+    except ValueError:
+        return False
 
 
 class ExpressionGraph(Algebraic):
@@ -366,41 +416,20 @@ class ExpressionGraph(Algebraic):
         self.head = op_node
         return self
 
-    def __add__(self, other):
+    def __iadd__(self, other):
         return self.push_op(add, self, other)
 
-    def __radd__(self, other):
-        return self.push_op(add,  other, self)
-
-    def __neg__(self):
-        return self.push_op(neg, self)
-
-    def __sub__(self, other):
+    def __isub__(self, other):
         return self.push_op(sub, self, other)
 
-    def __rsub__(self, other):
-        return self.push_op(sub, other, self)
-
-    def __mul__(self, other):
+    def __imul__(self, other):
         return self.push_op(mul, self, other)
 
-    def __rmul__(self, other):
-        return self.push_op(mul, other, self)
-
-    def __truediv__(self, other):
+    def __idiv__(self, other):
         return self.push_op(div, self, other)
 
-    def __rtruediv__(self, other):
-        return self.push_op(div, other,  self)
-
-    def __matmul__(self, other):
+    def __imatmul__(self, other):
         return self.push_op(matmul, self, other)
-
-    def __rmatmul__(self, other):
-        return self.push_op(matmul, other, self)
-
-    def __pow__(self, exponent, modulo=None):
-        return self.push_op(power, self, exponent)
 
     def __hash__(self):
         return hash((self.edges, *[hash(n) for n in self.nodes]))
@@ -429,6 +458,7 @@ class ExpressionGraph(Algebraic):
 class Variable(Algebraic):
     """Symbolic type for a free variable."""
     is_symbolic = True
+    __array_ufunc__ = None
 
     def __init__(self, name=None, shape=scalar_shape):
         self._shape = shape
@@ -506,11 +536,13 @@ class Parameter(Algebraic):
     def symbols(self):
         return {self}
 
+    @staticmethod
+    def from_block(block):
+        return [Parameter(block, i) for i in range(len(block.parameters))]
+
 
 @register_op()
 def evaluate_signal(signal, t):
-    print(signal)
-    print(t)
     return signal(t)
 
 
@@ -674,3 +706,23 @@ def lambdify(graph: ExpressionGraph,
     return backend.lambdify(
         symbolic_expressions, list(substitutions.values()), name
     )
+
+
+class Quadrature(Algebraic):
+    def __init__(self, integrand):
+        self.integrand = integrand
+
+    @property
+    def shape(self):
+        return self.integrand.shape
+
+    def __hash__(self):
+        return id(self)
+
+    def symbols(self):
+        return self.integrand.symbols()
+
+
+@register_op()
+def time_integral(integrand):
+    return Quadrature(integrand)

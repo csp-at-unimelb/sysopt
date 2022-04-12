@@ -37,12 +37,7 @@ class FullStateOutput(Block):
         assert not metadata.constraints, \
             f"{type(self)} must have no constraints"
 
-        metadata = Metadata(
-            inputs=metadata.inputs,
-            outputs=metadata.states,
-            states=metadata.states,
-            parameters=metadata.parameters,
-        )
+        metadata.outputs = metadata.states
 
         super().__init__(metadata)
         self._dxdt = dxdt
