@@ -12,11 +12,6 @@ from sysopt.symbolic import Variable
 from sysopt.block import Block
 
 
-# BoundParameter = NamedTuple(
-#     'BoundParameter',
-#     [('block', Block), ('parameter', Union[int, str])]
-# )
-
 
 @dataclass
 class FlattenedSystem:

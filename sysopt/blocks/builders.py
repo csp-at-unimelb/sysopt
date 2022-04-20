@@ -34,6 +34,7 @@ class FullStateOutput(Block):
                  metadata: Union[Metadata, Signature],
                  dxdt: VectorField,
                  x0: Optional[ParameterisedConstant] = None):
+
         assert not metadata.constraints, \
             f"{type(self)} must have no constraints"
 
@@ -41,7 +42,8 @@ class FullStateOutput(Block):
 
         super().__init__(metadata)
         self._dxdt = dxdt
-        self._x0 = x0 if x0 is not None else lambda p: [0] * len(metadata.states)
+        self._x0 = x0 if x0 is not None \
+            else lambda p: [0] * len(metadata.states)
 
     def initial_state(self, parameters):
         return self._x0(parameters)

@@ -17,6 +17,7 @@ from sysopt import Signature, Composite
 from sysopt.solver import SolverContext, Parameter
 from sysopt.symbolic import time_integral
 from sysopt.blocks.builders import FullStateOutput, InputOutput
+from sysopt.blocks.block_operations import flatten_block
 import numpy as np
 
 
@@ -80,6 +81,7 @@ def test_model_assembly():
         ]
 
         problem = solver.problem(parameters, loss, constraints)
+        flattened_system = flatten(problem)
 
         # loss function should become a quadrature and terminal cost
         # constraints should become quadratures and barrier functions

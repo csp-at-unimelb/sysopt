@@ -314,5 +314,8 @@ class TestSymbolicFunctionsFromCompositeBlock:
             for name in block.metadata.constraints
         }
         actual_names = {entry.name for entry in tables['constraints']}
-        assert expected_names == actual_names
+        for name in expected_names:
+            assert name in actual_names
+
+
 

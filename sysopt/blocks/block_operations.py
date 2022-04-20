@@ -241,7 +241,7 @@ def _create_functions_from_leaf_block(block: Block):
     h = None
     if block.signature.states > 0:
         x0 = VectorFunctionWrapper(
-            domain=1,
+            domain=block.signature.parameters,
             codomain=block.signature.states,
             function=block.initial_state
         )
@@ -340,7 +340,9 @@ def create_functions_from_block(block: Union[Block, Composite]):
             output_codomain += g.codomain
 
     lists = zip(*list(functions.values()))
-    x0_list, f_list, g_list, h_list, tables = [strip_nones(l) for l in lists]
+    x0_list, f_list, g_list, h_list, _ = [
+        strip_nones(item) for item in lists
+    ]
     h = coproduct(*h_list) if h_list else None
     x0 = coproduct(*x0_list) if x0_list else None
     f = coproduct(*f_list) if f_list else None
@@ -360,7 +362,7 @@ def create_functions_from_block(block: Union[Block, Composite]):
     ]
 
     internal_wires = [
-        (src, dest) for src, dest in block.wires
+        (i, src, dest) for i, (src, dest) in enumerate(block.wires)
         if src.port_type != dest.port_type
     ]
 
@@ -380,8 +382,11 @@ def create_functions_from_block(block: Union[Block, Composite]):
             g_actual[external_index] = compose(proj, g, arg_permute)
 
     new_constraints = {}
-
-    for src, dest in internal_wires:
+    wire_names = []
+    for i, src, dest in internal_wires:
+        wire_names.append(
+            TableEntry(f'wire: {src} -> {dest}', local_index=i, global_index=i)
+        )
         src_offset = output_offsets[src.parent]
         dest_offset = domain_offsets[dest.parent].inputs
         for src_idx, dest_idx in zip(src.indices, dest.indices):
@@ -399,6 +404,7 @@ def create_functions_from_block(block: Union[Block, Composite]):
         project(arg_permute.domain, 'constraints', z_i) - g_i
         for z_i, g_i in new_constraints.items()
     ]
+    out_table['constraints'] += wire_names
 
     f = compose(f, arg_permute)
     if h:
@@ -411,3 +417,7 @@ def create_functions_from_block(block: Union[Block, Composite]):
         g = None
 
     return x0, f, g, h, out_table
+
+
+def flatten_block(args):
+    return None
