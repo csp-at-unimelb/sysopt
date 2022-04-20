@@ -20,9 +20,14 @@ from sysopt.backends import (
 
 @dataclass
 class TableEntry:
-    name: str
+    local_name: str
+    block: str
     local_index: int
     global_index: int
+
+    @property
+    def name(self):
+        return f'{self.block}/{self.local_name}'
 
     def __repr__(self):
         return f'{self.global_index}, {self.name}, {self.local_index}\n'
@@ -272,23 +277,28 @@ def _create_functions_from_leaf_block(block: Block):
 def create_tables_from_block(block):
     tables = {
         'states': [
-            TableEntry(name=f'{block}/{name}', local_index=i, global_index=i)
+            TableEntry(block=str(block), local_name=name,
+                       local_index=i, global_index=i)
             for i, name in enumerate(block.metadata.states)
         ],
         'constraints': [
-            TableEntry(name=f'{block}/{name}', local_index=i, global_index=i)
+            TableEntry(block=str(block), local_name=name,
+                       local_index=i, global_index=i)
             for i, name in enumerate(block.metadata.constraints)
         ],
         'parameters': [
-            TableEntry(name=f'{block}/{name}', local_index=i, global_index=i)
+            TableEntry(block=str(block), local_name=name,
+                       local_index=i, global_index=i)
             for i, name in enumerate(block.metadata.parameters)
         ],
         'outputs': [
-            TableEntry(name=f'{block}/{name}', local_index=i, global_index=i)
+            TableEntry(block=str(block), local_name=name,
+                       local_index=i, global_index=i)
             for i, name in enumerate(block.metadata.outputs)
         ],
         'inputs': [
-            TableEntry(name=f'{block}/{name}', local_index=i, global_index=i)
+            TableEntry(block=str(block), local_name=name,
+                       local_index=i, global_index=i)
             for i, name in enumerate(block.metadata.inputs)
         ]
     }
@@ -304,8 +314,10 @@ def merge_table(table_1, table_2):
         out_table[key] = [copy.copy(entry) for entry in l1]
         offset = len(l1)
         out_table[key] += [
-            TableEntry(entry.name, entry.local_index,
-                       entry.global_index + offset)
+            TableEntry(local_name=entry.local_name,
+                       block=entry.block,
+                       local_index=entry.local_index,
+                       global_index=entry.global_index + offset)
             for entry in l2
         ]
     return out_table
@@ -383,9 +395,14 @@ def create_functions_from_block(block: Union[Block, Composite]):
 
     new_constraints = {}
     wire_names = []
+    offset = len(out_table['constraints'])
     for i, src, dest in internal_wires:
         wire_names.append(
-            TableEntry(f'wire: {src} -> {dest}', local_index=i, global_index=i)
+            TableEntry(
+                block=str(block),
+                local_name=f'wire from {src} -> {dest}',
+                local_index=i, global_index=offset + i
+            )
         )
         src_offset = output_offsets[src.parent]
         dest_offset = domain_offsets[dest.parent].inputs
