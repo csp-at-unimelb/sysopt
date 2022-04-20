@@ -1,7 +1,8 @@
 """Interface for Symbolic Functions and AutoDiff."""
 
 import copy
-from typing import Callable, Union, Iterable
+from dataclasses import dataclass
+from typing import Callable, Union, Iterable, Optional\
 
 from sysopt.types import Domain
 
@@ -15,6 +16,16 @@ from sysopt.symbolic.function_ops import (
 from sysopt.backends import (
     concatenate_symbols, SymbolicVector, is_symbolic
 )
+
+
+@dataclass
+class TableEntry:
+    name: str
+    local_index: int
+    global_index: int
+
+    def __repr__(self):
+        return f'{self.global_index}, {self.name}, {self.local_index}\n'
 
 
 def coproduct(*functions: 'FunctionOp'):
@@ -253,7 +264,51 @@ def _create_functions_from_leaf_block(block: Block):
             function=block.compute_residuals
         )
 
-    return x0, f, g, h
+    tables = create_tables_from_block(block)
+
+    return x0, f, g, h, tables
+
+
+def create_tables_from_block(block):
+    tables = {
+        'states': [
+            TableEntry(name=f'{block}/{name}', local_index=i, global_index=i)
+            for i, name in enumerate(block.metadata.states)
+        ],
+        'constraints': [
+            TableEntry(name=f'{block}/{name}', local_index=i, global_index=i)
+            for i, name in enumerate(block.metadata.constraints)
+        ],
+        'parameters': [
+            TableEntry(name=f'{block}/{name}', local_index=i, global_index=i)
+            for i, name in enumerate(block.metadata.parameters)
+        ],
+        'outputs': [
+            TableEntry(name=f'{block}/{name}', local_index=i, global_index=i)
+            for i, name in enumerate(block.metadata.outputs)
+        ],
+        'inputs': [
+            TableEntry(name=f'{block}/{name}', local_index=i, global_index=i)
+            for i, name in enumerate(block.metadata.inputs)
+        ]
+    }
+
+    return tables
+
+
+def merge_table(table_1, table_2):
+    out_table = {}
+    for key in set(table_1.keys()) | set(table_2.keys()):
+        l1 = table_1[key] if key in table_1 else []
+        l2 = table_2[key] if key in table_2 else []
+        out_table[key] = [copy.copy(entry) for entry in l1]
+        offset = len(l1)
+        out_table[key] += [
+            TableEntry(entry.name, entry.local_index,
+                       entry.global_index + offset)
+            for entry in l2
+        ]
+    return out_table
 
 
 def create_functions_from_block(block: Union[Block, Composite]):
@@ -267,7 +322,9 @@ def create_functions_from_block(block: Union[Block, Composite]):
     output_offsets = {}
     output_codomain = 0
     domain = Domain()
-    for component, (_, f, g, h) in functions.items():
+    out_table = {}
+
+    for component, (_, f, g, h, table) in functions.items():
         comp_domain = None
         for func in (f, g, h):
             if not func:
@@ -277,19 +334,20 @@ def create_functions_from_block(block: Union[Block, Composite]):
             raise TypeError(f'Block {component} nas no functions')
         domain_offsets[component] = copy.copy(domain)
         domain += comp_domain
+        out_table = merge_table(out_table, table)
         if g:
             output_offsets[component] = output_codomain
             output_codomain += g.codomain
 
     lists = zip(*list(functions.values()))
-    x0_list, f_list, g_list, h_list = [strip_nones(l) for l in lists]
+    x0_list, f_list, g_list, h_list, tables = [strip_nones(l) for l in lists]
     h = coproduct(*h_list) if h_list else None
     x0 = coproduct(*x0_list) if x0_list else None
     f = coproduct(*f_list) if f_list else None
     g = coproduct(*g_list) if g_list else None
 
     if not block.wires:
-        return x0, f, g, h
+        return x0, f, g, h, out_table
 
     arg_permute = ArgPermute(domain)
     in_wires = [
@@ -352,4 +410,4 @@ def create_functions_from_block(block: Union[Block, Composite]):
     else:
         g = None
 
-    return x0, f, g, h
+    return x0, f, g, h, out_table

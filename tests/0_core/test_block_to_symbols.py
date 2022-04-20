@@ -61,23 +61,34 @@ class BlockMock(Block):
         return [x - z**2]
 
 
-
 class TestSymbolicFunctionsFromLeafBlock:
 
     def test_build_functions_from_block(self):
         block_1 = BlockMock("block_1")
 
-        x0, f, g, h = create_functions_from_block(block_1)
+        x0, f, g, h, tables = create_functions_from_block(block_1)
         assert g.domain == f.domain == h.domain == (1, 1, 1, 1, 1)
         assert f.codomain == h.codomain == 1, 'Expected 1 output'
         assert g.codomain == 2, 'Expected 2 as per block definition'
         assert x0.domain == 1, 'Expected 1 (p)'
         assert x0.codomain == f.domain.states
+        table_states = {entry.name for entry in tables['states']}
+        assert table_states == {
+            f'{block_1}/{name}' for name in block_1.metadata.states
+        }
+        table_constraints = {entry.name for entry in tables['constraints']}
+        assert table_constraints == {
+            f'{block_1}/{name}' for name in block_1.metadata.constraints
+        }
+        table_parameters = {entry.name for entry in tables['parameters']}
+        assert table_parameters == {
+            f'{block_1}/{name}' for name in block_1.metadata.parameters
+        }
 
     def test_call_functions_numerically(self):
 
         block_1 = BlockMock("block_1")
-        x0, f, g, h = create_functions_from_block(block_1)
+        x0, f, g, h, _ = create_functions_from_block(block_1)
         args = (0, 2, 3, 5, 0)
         assert f(*args)[0] == 30, 'Expected block to compute 2 * 3 * 5 == 30'
 
@@ -86,7 +97,7 @@ class TestSymbolicFunctionsFromLeafBlock:
 
     def test_call_functions_symbolically(self):
         block_1 = BlockMock("block_1")
-        x0, f, g, h = create_functions_from_block(block_1)
+        x0, f, g, h,_ = create_functions_from_block(block_1)
         assert f.domain == g.domain == h.domain
         domain = f.domain
         args = [
@@ -107,11 +118,13 @@ class TestSymbolicFunctionsFromLeafBlock:
     def test_skip_not_implemented_functions(self):
         # Makes sure we are skipping stuff that isn't defined.
         block = Gain(channels=2)
-        x0, f, g, h = create_functions_from_block(block)
+        x0, f, g, h, tables = create_functions_from_block(block)
         assert not x0
         assert not f
         assert not h
 
+        assert not tables['states']
+        assert not tables['constraints']
         assert g.domain == (1, 0, 0, 2, 2)
         assert g.codomain == 2
 
@@ -135,7 +148,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
     def test_composite_functions_are_built(self):
         composite = MockComposite()
-        x0, f, g, h = create_functions_from_block(composite)
+        x0, f, g, h, _ = create_functions_from_block(composite)
 
         assert x0.domain == 2
         assert x0.codomain == 2
@@ -144,7 +157,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
     def test_compose_initial_condition_functions(self):
         composite = MockComposite()
-        x0, f, g, h = create_functions_from_block(composite)
+        x0, f, g, h, _ = create_functions_from_block(composite)
         assert x0.domain == 2
         result = x0([1, 1])
         assert len(result) == x0.codomain
@@ -152,7 +165,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
         # test composite of composite
         composite2 = Composite()
         composite2.components = [composite, BlockMock('block')]
-        x0, f, g, h = create_functions_from_block(composite2)
+        x0, f, g, h, _ = create_functions_from_block(composite2)
         assert x0.domain == 3
         assert x0.codomain == 3
         result = x0([1, 1, 1])
@@ -160,7 +173,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
     def test_evaluate_composite_initial_conditions_symbolically(self):
         composite = MockComposite()
-        x0, f, g, h = create_functions_from_block(composite)
+        x0, f, g, h, _ = create_functions_from_block(composite)
         p = SymbolicVector('p', 2)
         result = x0(p)
         assert len(result) == x0.codomain
@@ -168,7 +181,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
         # test composite of composite
         composite2 = Composite()
         composite2.components = [composite, BlockMock('block')]
-        x0, f, _, h = create_functions_from_block(composite2)
+        x0, f, _, h, _ = create_functions_from_block(composite2)
         q = SymbolicVector('q', 3)
         result = x0(q)
         assert len(result) == x0.codomain
@@ -176,7 +189,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
     def test_composite_block_functions_numerical_eval(self):
         composite = MockComposite()
-        _, f, _, h = create_functions_from_block(composite)
+        _, f, _, h, _ = create_functions_from_block(composite)
 
         # computed from block arguments
         args = [1, (2, 1), (3, 7), (5, 5), (0, 1)]
@@ -194,7 +207,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
         composite2 = Composite()
         composite2.components = [composite, BlockMock('block')]
 
-        _, f, _, h = create_functions_from_block(composite2)
+        _, f, _, h, _ = create_functions_from_block(composite2)
 
         # computed from block arguments
         args = [1, (2, 1, 3), (3, 7, 3), (5, 5, 3), (0, 1, 0)]
@@ -205,7 +218,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
     def test_composite_block_functions_symbolic(self):
         composite = MockComposite()
-        _, f, g, h = create_functions_from_block(composite)
+        _, f, g, h, _ = create_functions_from_block(composite)
 
         # computed from block arguments
         args = [1,
@@ -222,7 +235,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
         # test composite of composite
         composite2 = Composite()
         composite2.components = [composite, BlockMock('block')]
-        _, f, _, _ = create_functions_from_block(composite2)
+        _, f, _, _, _ = create_functions_from_block(composite2)
 
         args = [1,
                 SymbolicVector('x', 3),
@@ -242,7 +255,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
             (composite.inputs, composite.block_1.inputs),
             (composite.block_2.outputs, composite.outputs)
         ]
-        _, f, g, h = create_functions_from_block(composite)
+        _, f, g, h, _ = create_functions_from_block(composite)
         expected_domain = (1, 2, 3, 1, 2)
         assert f.domain == g.domain == h.domain == expected_domain
 
@@ -262,7 +275,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
             (composite.inputs, composite.block_1.inputs),
             (composite.block_2.outputs, composite.outputs)
         ]
-        x0, f, g, h = create_functions_from_block(composite)
+        x0, f, g, h, _ = create_functions_from_block(composite)
 
         result = x0([1, 1])
         assert len(result) == 2
@@ -277,3 +290,29 @@ class TestSymbolicFunctionsFromCompositeBlock:
         g_expected = [1, 7]
         g_result = g(*args)
         assert g_result == g_expected
+
+    def test_tables_from_composite(self):
+        composite = MockComposite()
+        composite.wires = [
+            (composite.block_1.outputs[0], composite.block_2.inputs),
+            (composite.inputs, composite.block_1.inputs),
+            (composite.block_2.outputs, composite.outputs)
+        ]
+        x0, f, g, h, tables = create_functions_from_block(composite)
+
+        expected_names = {
+            f'{block}/{name}'
+            for block in composite.components
+            for name in block.metadata.states}
+        actual_names = {entry.name for entry in tables['states']}
+
+        assert actual_names == expected_names
+
+        expected_names = {
+            f'{block}/{name}'
+            for block in composite.components
+            for name in block.metadata.constraints
+        }
+        actual_names = {entry.name for entry in tables['constraints']}
+        assert expected_names == actual_names
+

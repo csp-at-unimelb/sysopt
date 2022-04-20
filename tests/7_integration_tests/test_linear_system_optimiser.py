@@ -66,20 +66,29 @@ def test_model_assembly():
     initial_values = [0.01] * len(parameters)
     t_f = 10
     Q_x = np.eye(4)
-    Q_u = 0.01 * np.eye(2)
+    Q_u = np.eye(2)
 
     with SolverContext(model, t_f) as solver:
         t = solver.t
         u = model.outputs[4:6](t)
         x = model.outputs[0:4](t)
 
-        loss = time_integral(1 + u.T @ Q_u @ u) + x.T @ Q_x @ x
+        loss = time_integral(x.T @ Q_x @ x + u.T @ Q_u @ u)
         constraints = [
             x[0: 2].T @ x[0: 2] < 2,
             u.T @ u < 1
         ]
 
         problem = solver.problem(parameters, loss, constraints)
+
         # loss function should become a quadrature and terminal cost
         # constraints should become quadratures and barrier functions
-        
+
+        # Address:
+        # - How to index the added variables
+        # - How to index / identify the added functions
+        # - How to evaluate the added variables / functions
+        # - How to make sure constraints are mapped into barrier functions
+        # - How to certify that an initial solutions is not feasible.
+        # - How to get the adjoint sensitivity of the loss function
+        #   with respect to the parameters.

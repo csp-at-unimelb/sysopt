@@ -146,9 +146,10 @@ def test_supremum_to_function():
     result = expr.call({t: 0})
     assert result > 0
 
-# Optimisation problem setup
-# 1. Build model
-# 2. Add quadrature for loss function
-# 3. Add constraint dynamics
+# Optimisation problem setup for a model m
+# 1. Assemble flattened system s from m
+# 2. Add
+# 3. Add quadrature for loss function
+# 4. Add constraint dynamics
 
 
