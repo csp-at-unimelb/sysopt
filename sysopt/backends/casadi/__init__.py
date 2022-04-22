@@ -133,7 +133,7 @@ class Integrator:
         }
         self.f = _casadi.integrator('F', 'idas', self.dae_spec, solver_options)
 
-    def forwards(self, t, p, dp):
+    def pushforward(self, t, p, dp):
         p_sym = _casadi.MX.sym('p', len(p))
         t_sym = _casadi.MX.sym('t')
         p_prime = _casadi.vertcat(t_sym, p_sym)

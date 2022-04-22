@@ -134,6 +134,7 @@ between components.
 
 """
 
+
 # @nb.code_cell
 class DuffingSystem(Composite):
     def __init__(self):
@@ -200,6 +201,8 @@ def simulate(t=10):
         x_t = solver.integrate(resolution=100)
 
     return x_t
+
+
 # @nb.text_cell
 r"""
 # Results
@@ -227,6 +230,7 @@ ax.set_ylim(-2, 2)
 ax.set_title(f'Duffing Trajectory')
 plt.show()
 """
+
 
 # @nb.skip
 def test_simulate():

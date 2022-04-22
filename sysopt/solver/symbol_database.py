@@ -12,7 +12,6 @@ from sysopt.symbolic import Variable
 from sysopt.block import Block
 
 
-
 @dataclass
 class FlattenedSystem:
     """Intermediate representation of a systems model."""
@@ -25,6 +24,7 @@ class FlattenedSystem:
     h: Optional[Callable] = None            # Algebraic Constraints.
     j: Optional[Callable] = None            # Quadratures
     X0: Optional[Iterable] = None           # Initial values
+    t = SymbolicVector('t', 1)
 
     def __iadd__(self, other):
         assert isinstance(other, FlattenedSystem)
@@ -40,11 +40,38 @@ class FlattenedSystem:
 
         return self
 
+    def lambdify(self):
+        args = self.arguments
+        f = lambdify(self.f, args, 'f') if self.f is not None else None
+        g = lambdify(self.g, args, 'g') if self.g is not None else None
+        h = lambdify(self.h, args, 'h') if self.h is not None else None
+        j = lambdify(self.j, args, 'j') if self.j is not None else None
+        x0 = lambdify(self.X0, self.P, 'x0') if self.X0 is not None else None
+        return f, g, h, j, x0
+
+    @property
+    def arguments(self):
+        args = [
+            v for v in (self.t, self.X, self.Z, self.U, self.P)
+            if v is not None
+        ]
+
+        return args
+
     def __add__(self, other):
         result = FlattenedSystem()
         result += self
         result += other
         return result
+
+    def add_quadrature(self, function):
+        try:
+            idx = len(self.j)
+            self.j = concatenate_symbols(self.j, function)
+        except TypeError:
+            idx = 0
+            self.j = function
+        return idx
 
 
 class SymbolDatabase:

@@ -429,12 +429,10 @@ def create_functions_from_block(block: Union[Block, Composite]):
     else:
         h = concatenate(*h_new)
     if g_actual:
-        g = concatenate(*(g_actual[i] for i in range(len(block.outputs))))
+        items = list(g_actual[i] for i in range(len(block.outputs)))
+        g = concatenate(*items)
     else:
         g = None
 
     return x0, f, g, h, out_table
 
-
-def flatten_block(args):
-    return None

@@ -1,3 +1,5 @@
+import pytest
+
 from sysopt.types import *
 from sysopt.block import Block, Composite
 from sysopt.symbolic import is_symbolic

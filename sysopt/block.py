@@ -265,6 +265,17 @@ class Block(ComponentBase):
     def signature(self):
         return self.metadata.signature
 
+    def find_by_type_and_name(self, var_type, var_name: str):
+        block_name = str(self)
+        if var_name.startswith(f'{block_name}/'):
+            name = var_name[len(block_name) + 1:]
+
+            index = self.find_by_name(var_type, name)
+            if index >= 0:
+                return self, index
+
+        return None
+
 
 class ConnectionList(list):
     """Container for connections between ports.
@@ -304,6 +315,10 @@ class ConnectionList(list):
         self.append((src, dest))
 
 
+class InvalidWire(ValueError):
+    pass
+
+
 class Composite(ComponentBase):  # noqa
     """Block that consists of a sub-blocks and connections.
 
@@ -341,10 +356,19 @@ class Composite(ComponentBase):  # noqa
 
     @wires.setter
     def wires(self, value):
-
+        valid_components = {self} | set(self._components)
         if isinstance(value, list):
             self._wires.clear()
             for pair in value:
+                src, dest = pair
+                if src.parent not in valid_components:
+                    raise InvalidWire('Failed to add wires:'
+                                      f'source component {src.parent} '
+                                      f'not found for wire {value}')
+                if dest.parent not in valid_components:
+                    raise InvalidWire('Failed to add wires:'
+                                      f'Sink component {dest.parent} '
+                                      f'not found for wire {value}')
                 self._wires.add(pair)
         elif value is self._wires:
             return
@@ -364,3 +388,11 @@ class Composite(ComponentBase):  # noqa
 
         return [p for sub_block in self.components
                 for p in sub_block.parameters]
+
+    def find_by_type_and_name(self, var_type, var_name):
+        for component in self.components:
+            result = component.find_by_type_and_name(var_type, var_name)
+            if result:
+                return result
+
+        return None

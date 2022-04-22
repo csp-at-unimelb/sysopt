@@ -582,6 +582,7 @@ class SignalReference(Algebraic):
 
     def __init__(self, port):
         self.port = port
+        self._context = None
 
     def __new__(cls, port):
         source_id = id(port)
@@ -597,7 +598,10 @@ class SignalReference(Algebraic):
 
     @property
     def t(self):
-        return get_time_variable()
+        if not self._context:
+            return get_time_variable()
+        else:
+            return self._context.t
 
     @property
     def shape(self):
@@ -615,15 +619,22 @@ class SignalReference(Algebraic):
     def __call__(self, t):
         if t is get_time_variable():
             return self
-        else:
-            return ExpressionGraph(evaluate_signal, self, t)
+        try:
+            self._context = t.context
+        except AttributeError:
+            pass
+        return ExpressionGraph(evaluate_signal, self, t)
 
     def symbols(self):
         return {self, self.t}
 
     def call(self, args):
         function = args[self]
-        return Function(self.shape, function, [self.t])
+        result = Function(self.shape, function, [self.t])
+        if self.t in args:
+            return result.call(args)
+        else:
+            return result
 
 
 def as_vector(arg):
@@ -686,7 +697,12 @@ def lambdify(graph: ExpressionGraph,
             substitutions.update(
                 {sub_arg: symbol[j] for j, sub_arg in enumerate(arg)})
         else:
-            n, = arg.shape
+            try:
+                n,  = arg.shape
+            except ValueError as ex:
+                n, m = arg.shape
+                if m > 1:
+                    raise ex
             symbol = SymbolicVector(f'x_{i}', n)
             substitutions[arg] = symbol
 
@@ -709,12 +725,18 @@ def lambdify(graph: ExpressionGraph,
 
 
 class Quadrature(Algebraic):
-    def __init__(self, integrand):
+    def __init__(self, integrand, context):
         self.integrand = integrand
+        self._context = weakref.ref(context)
+        self.index = context.add_quadrature(integrand)
 
     @property
     def shape(self):
         return self.integrand.shape
+
+    @property
+    def context(self):
+        return self._context()
 
     def __hash__(self):
         return id(self)
@@ -722,7 +744,50 @@ class Quadrature(Algebraic):
     def symbols(self):
         return self.integrand.symbols()
 
+    def __call__(self, t, *args):
+        f = self.context.get_symbolic_integrator(self.context.parameters)
+        return f(t, *args)
+
 
 @register_op()
-def time_integral(integrand):
-    return Quadrature(integrand)
+def time_integral(integrand, context):
+    return Quadrature(integrand, context)
+
+
+def concatenate(*arguments):
+    length = 0
+    constants = {}
+    variables = {}
+
+    for arg in arguments:
+        if isinstance(arg, (int, float, complex)):
+            constants[length] = arg
+            length += 1
+            continue
+
+        assert arg.shape == scalar_shape, 'Cannot concatenate matrices'
+        n, = arg.shape
+        variables[arg] = list(range(length, length + n))
+        length = length + n
+
+    inclusions = []
+    if constants:
+        constant_indices, constant_vector = zip(*constants.items())
+        inclusion = projection_matrix(constant_indices, length).T
+        vector = np.array(constant_vector)
+        inclusions.append((inclusion, vector))
+
+    for variable, indicies in variables.items():
+        inclusion_v = projection_matrix(indicies, length).T
+        inclusions.append((inclusion_v, variable))
+
+    pair = inclusions.pop()
+    assert pair is not None
+
+    result = pair[0] @ pair[1]
+    while inclusions:
+        pair = inclusions.pop()
+        result += pair[0] @ pair[1]
+
+    return result
+

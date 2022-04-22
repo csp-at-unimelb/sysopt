@@ -5,15 +5,18 @@ _registry = {}
 
 def register(from_type, to_type):
     def decorator(the_caster):
-        if from_type not in _registry:
-            _registry[from_type] = {}
-        else:
-            assert to_type not in _registry[from_type], \
-                f'Cast from {from_type} to {to_type} is already defined'
+        keys = from_type if isinstance(from_type, (list, tuple)) \
+            else [from_type]
+        for t in keys:
 
-        _registry[from_type][to_type] = the_caster
+            if t not in _registry:
+                _registry[t] = {}
+            else:
+                assert to_type not in _registry[from_type], \
+                    f'Cast from {t} to {to_type} is already defined'
+            _registry[t][to_type] = the_caster
+
         return the_caster
-
     return decorator
 
 
