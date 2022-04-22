@@ -19,7 +19,7 @@ class SymbolicVector(_casadi.SX):
         return id(self)
 
     @staticmethod
-    def _validate_name(name):
+    def validate_name(name):
 
         try:
             idx = SymbolicVector._names[name]
@@ -33,7 +33,7 @@ class SymbolicVector(_casadi.SX):
     def __new__(cls, name, length=1):
         assert isinstance(length, int)
         obj = SymbolicVector.sym(name, length)
-        obj._name = SymbolicVector._validate_name(name)
+        obj._name = SymbolicVector.validate_name(name)
         obj.__class__ = cls
         if cls is not SymbolicVector:
             obj.__bases__ = [SymbolicVector, _casadi.SX]
@@ -80,7 +80,7 @@ class SymbolicVector(_casadi.SX):
         except AttributeError:
             bases = [arg.__class__]
         if not hasattr(arg, '_name'):
-            setattr(arg, '_name', SymbolicVector._validate_name('x'))
+            setattr(arg, '_name', SymbolicVector.validate_name('x'))
         setattr(arg, '__class__', SymbolicVector)
         setattr(arg, '__bases__', bases)
 
@@ -179,7 +179,7 @@ def cast_mx(arg):
     except AttributeError:
         bases = [arg.__class__]
     if not hasattr(arg, '_name'):
-        setattr(arg, '_name', SymbolicVector._validate_name('x'))
+        setattr(arg, '_name', SymbolicVector.validate_name('x'))
     setattr(arg, '__class__', SymbolicVector)
     setattr(arg, '__bases__', bases)
     return arg

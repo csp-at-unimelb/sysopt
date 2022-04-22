@@ -233,7 +233,7 @@ class Algebraic(metaclass=ABCMeta):
         raise NotImplementedError
 
     @property
-    def T(self):
+    def T(self):  # pylint: disable=invalid-name
         return ExpressionGraph(transpose, self)
 
     @abstractmethod
@@ -547,6 +547,8 @@ def evaluate_signal(signal, t):
 
 
 class Function(Algebraic):
+    """Wrapper for function calls."""
+
     def __init__(self, shape, function, arguments):
         self._shape = shape
         self.function = function
@@ -725,6 +727,8 @@ def lambdify(graph: ExpressionGraph,
 
 
 class Quadrature(Algebraic):
+    """Variable representing a quadrature."""
+
     def __init__(self, integrand, context):
         self.integrand = integrand
         self._context = weakref.ref(context)

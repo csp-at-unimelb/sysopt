@@ -2,7 +2,7 @@
 
 import dataclasses
 import weakref
-from typing import Optional, Dict, List, Union, Iterable, NewType
+from typing import Optional, Dict, List, Union, NewType
 
 from sysopt import symbolic
 from sysopt.symbolic import (
@@ -67,7 +67,8 @@ class SolverContext:
 
     def get_parameter_map(self):
 
-        if self.constants and set(self.constants.keys()) == set(self.model.parameters):
+        if self.constants and \
+                set(self.constants.keys()) == set(self.model.parameters):
             return lambda _: list(self.constants.values())
 
         result = []

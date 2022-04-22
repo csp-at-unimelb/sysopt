@@ -1,6 +1,6 @@
 """Symbol Database for simulation and optimisation."""
 # pylint: disable=invalid-name
-from typing import Iterable, Callable, Optional, NamedTuple, Union
+from typing import Iterable, Callable, Optional
 from dataclasses import dataclass
 
 

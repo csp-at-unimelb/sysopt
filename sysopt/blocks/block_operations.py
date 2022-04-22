@@ -2,7 +2,7 @@
 
 import copy
 from dataclasses import dataclass
-from typing import Callable, Union, Iterable, Optional\
+from typing import Callable, Union, Iterable
 
 from sysopt.types import Domain
 
@@ -20,6 +20,7 @@ from sysopt.backends import (
 
 @dataclass
 class TableEntry:
+    """Name and index of a block variable."""
     local_name: str
     block: str
     local_index: int
