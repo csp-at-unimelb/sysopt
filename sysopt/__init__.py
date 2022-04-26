@@ -1,4 +1,4 @@
 """sysopt - System Modelling and Optimisation Library."""
 
-from sysopt.types import *
+from sysopt.var_types import *
 from sysopt.block import *

@@ -2,6 +2,11 @@ import platform
 import warnings
 import setuptools
 
+# Fix Linux permissions clash 
+import sys
+import site
+site.ENABLE_USER_SITE = "--user" in sys.argv[1:]
+
 with open("requirements.txt", 'r') as fh:
     requirements = [line.strip() for line in fh.readlines()]
 

@@ -1,8 +1,10 @@
-# SysOpt -  Modelling and Optimisation
+# SysOpt KO Fork-  Modelling and Optimisation
 
-Install: `pip install sysopt`
+A fork of [csp-at-unimelb/sysopt](https://github.com/csp-at-unimelb/sysopt) for integration with Koopman operator code for linearisation of dynamic systems. 
 
-Update: `pip install sysopt --upgrade`
+Intended to mirror latest changes in the UniMelb sysopt master branch.
+
+
 
 
 

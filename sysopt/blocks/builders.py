@@ -10,7 +10,7 @@ See Also:
 
 from typing import Union, Optional
 
-from sysopt.types import (
+from sysopt.var_types import (
     Metadata, Signature, ParameterisedConstant, StatelessFunction, VectorField
 )
 from sysopt.block import Block
