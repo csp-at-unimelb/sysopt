@@ -15,7 +15,7 @@ if platform.machine().startswith("arm"):
 
 setuptools.setup(
     name="sysopt",
-    version="0.0.2",
+    version="0.0.3",
     author="Peter Cudmore",
     author_email="peter.cudmore@unimelb.edu.au",
     url="https://github.com/csp-at-unimelb/sysopt",
