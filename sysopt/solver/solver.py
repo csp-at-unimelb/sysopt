@@ -10,7 +10,7 @@ from sysopt.symbolic import (
     lambdify
 )
 
-from sysopt.solver.symbol_database import SymbolDatabase
+from sysopt.solver.symbol_database import SymbolDatabase, FlattenedSystem
 from sysopt.block import Block, Composite
 import sysopt.backends as backend
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
@@ -50,7 +50,7 @@ class SolverContext:
         self._parameter_map = None
 
     def __enter__(self):
-        self._flat_system = self.symbol_db.get_flattened_system(self.model)
+        self._flat_system = FlattenedSystem.from_block(self.model)
         try:
             free_params = list(
                 set(self.model.parameters) - set(self.constants.keys())
@@ -175,7 +175,6 @@ class SolverContext:
         return self._flat_system
 
     def get_integrator(self, resolution=50):
-        assert self._flat_system is not None
         return symbolic.Integrator(
             self.symbol_db.t,
             self._flat_system,

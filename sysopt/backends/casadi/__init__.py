@@ -100,31 +100,31 @@ class Integrator:
         self._T = _casadi.SX.sym('T', 1, 1)
 
         self.dae_spec = {
-            'x': _casadi.vertcat(t, system.X),
+            'x': _casadi.vertcat(system.t, system.X),
             'p': _casadi.vertcat(self._T, system.P),
-            'ode': self._T * _casadi.vertcat(_casadi.SX.ones(1, 1), system.f),
+            'ode': self._T * _casadi.vertcat(_casadi.SX.ones(1, 1), *system.f),
         }
         self.x0 = _casadi.Function(
             'x0',
             [system.P],
-            [_casadi.vertcat(_casadi.SX.zeros(1, 1), system.X0)]
+            [_casadi.vertcat(_casadi.SX.zeros(1, 1), *system.X0)]
         )
 
         self.n_alg = 0
-        if system.Z is not None:
+        if system.h is not None:
             self.dae_spec.update({'z': system.Z, 'alg': system.h})
             self.n_alg, _ = system.Z.shape
             self.g = _casadi.Function(
                 'g',
-                [t, system.X, system.Z, system.P],
-                [system.g]
+                [system.t, system.X, system.Z, system.P],
+                [_casadi.vertcat(*system.g)]
             )
         else:
             z_temp = _casadi.SX.sym('z')
             self.g = _casadi.Function(
                 'g',
-                [t, system.X, z_temp, system.P],
-                [system.g]
+                [system.t, system.X, z_temp, system.P],
+                [_casadi.vertcat(*system.g)]
             )
 
         solver_options = {

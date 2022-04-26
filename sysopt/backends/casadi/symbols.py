@@ -41,12 +41,18 @@ class SymbolicVector(_casadi.SX):
 
     @staticmethod
     def from_iterable(arg):
+        if all(isinstance(a, _casadi.SX) for a in arg):
+            return SymbolicVector.from_sx(
+                _casadi.vertcat(*arg)
+            )
+
         n = len(arg)
         obj = SymbolicVector('x', n)
         for i in range(n):
             if isinstance(arg[i], _casadi.SX):
                 obj[i] = arg[i]
             else:
+                assert not isinstance(arg[i], list), arg
                 obj[i] = arg[i]
         return obj
 
@@ -120,6 +126,12 @@ class SymbolicVector(_casadi.SX):
             pass
 
         return super().__eq__(other)
+
+    def tolist(self):
+        if len(self) > 0:
+            return [self[i, 0] for i in range(len(self))]
+        else:
+            return []
 
 
 def concatenate(*vectors):

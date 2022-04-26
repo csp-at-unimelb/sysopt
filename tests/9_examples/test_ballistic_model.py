@@ -136,6 +136,7 @@ class OpenLoopController(Block):
         )
 
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
+
         cutoff_time, = parameters
         return heaviside(cutoff_time - t),
 

@@ -11,6 +11,7 @@ from typing import Union, List, Callable, Tuple, Optional
 import sysopt.backends as backend
 from sysopt.backends import SymbolicVector
 
+from sysopt.helpers import flatten
 epsilon = 1e-12
 
 
@@ -641,11 +642,11 @@ class SignalReference(Algebraic):
 
 def as_vector(arg):
     try:
-        len(arg)
-        return arg
+        return flatten(arg)
     except TypeError:
         if isinstance(arg, (int, float)):
             return arg,
+
     if is_symbolic(arg):
         return backend.cast(arg)
 

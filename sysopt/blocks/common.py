@@ -70,7 +70,7 @@ class ConstantSignal(Block):
         super().__init__(sig)
 
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
-        return parameters
+        return parameters,
 
 
 class Oscillator(Block):
