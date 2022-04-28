@@ -37,3 +37,9 @@ class TestNumpyAlgebra:
         assert vt.shape != vtt.shape
         product = vt @ vtt
         assert product.shape == (1, 1)
+
+
+# TODO:
+#   - Test that is_temporal works
+
+

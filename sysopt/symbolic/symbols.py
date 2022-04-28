@@ -6,12 +6,13 @@ from inspect import signature
 
 import numpy as np
 from scipy.sparse import dok_matrix, spmatrix
-from typing import Union, List, Callable, Tuple, Optional
+from typing import Union, List, Callable, Tuple, Optional, Dict
 
 import sysopt.backends as backend
 from sysopt.backends import SymbolicVector
-
+from sysopt.symbolic.casts import cast_type
 from sysopt.helpers import flatten
+
 epsilon = 1e-12
 
 
@@ -220,7 +221,32 @@ class Inequality:
 
 
 class PathInequality(Inequality):
-    pass
+    """
+        Non-negative evaluation means that the inequality is satisfied.
+
+    """
+    def to_ode(self, regulariser, alpha=1):
+        """
+        Implements the K-S functional
+        math::
+            c(g,rho) = ln(int_0^t exp[- rho*g ]dt/alpha)/rho
+
+        Args:
+            regulariser:
+            alpha:      Weighting constant
+
+        Returns:
+            c, dc/dt - where c is the variable and dc/dt is an expression graph
+            for the dynamics. Where c < zero as rho-> infity implies
+            the constraint is violated.
+
+        """
+        c = Variable('c')
+        rho = regulariser
+        g = self.to_graph()
+        from sysopt.symbolic.scalar_ops import exp
+
+        return c, exp(rho * (c - g)) / (alpha * rho)
 
 
 class Algebraic(metaclass=ABCMeta):
@@ -369,6 +395,9 @@ class ExpressionGraph(Algebraic):
                 return values[obj]
             except (KeyError, TypeError):
                 pass
+
+            if is_matrix(obj):
+                return cast_type(obj)
             return obj
 
         return recurse(self.head)
@@ -433,7 +462,13 @@ class ExpressionGraph(Algebraic):
         return self.push_op(matmul, self, other)
 
     def __hash__(self):
-        return hash((self.edges, *[hash(n) for n in self.nodes]))
+        edge_list = sorted(list(
+            (parent, child) for parent, children in self.edges.items()
+            for child in children
+        ))
+        edge_hash = hash(tuple(edge_list))
+        node_hash = hash(tuple(n for n in self.nodes))
+        return hash((edge_hash,  node_hash))
 
     def symbols(self):
 
@@ -454,6 +489,33 @@ class ExpressionGraph(Algebraic):
                 return child_symbols
 
         return recurse(self.head)
+
+    def get_subtree_at(self, index):
+
+        def recurse(node_idx):
+            if node_idx not in self.edges:
+                return self.nodes[node_idx]
+            else:
+                return ExpressionGraph(
+                    self.nodes[node_idx],
+                    *[recurse(idx) for idx in self.edges[node_idx]]
+                )
+
+        return recurse(index)
+
+    def list_subtree(self, index):
+        visited = set()
+        unvisited = set(index)
+        while unvisited:
+            item = unvisited.pop()
+            if item in visited:
+                continue
+            visited.add(item)
+            if item in self.edges:
+                unvisited |= set(self.edges[item])
+
+        return visited
+
 
 
 class Variable(Algebraic):
@@ -671,6 +733,8 @@ def _is_subtree_constant(graph, node):
 
 
 def is_temporal(symbol):
+    if isinstance(symbol, PathInequality):
+        return True
     if isinstance(symbol, ExpressionGraph):
         return not _is_subtree_constant(symbol, symbol.head)
     if isinstance(symbol, SignalReference):
@@ -796,3 +860,24 @@ def concatenate(*arguments):
 
     return result
 
+
+def extract_quadratures(graph: ExpressionGraph) -> Tuple[ExpressionGraph, Dict[Variable, ExpressionGraph]]:
+    quadratures = {}
+
+    def recurse(node_idx):
+        node = graph.nodes[node_idx]
+        if isinstance(node, Quadrature):
+            q = Variable('q')
+            quadratures[q] = node.integrand
+            return q
+        elif node_idx not in graph.edges:
+            return node
+        else:
+            return ExpressionGraph(
+                graph.nodes[node_idx],
+                *[recurse(idx) for idx in graph.edges[node_idx]]
+            )
+
+    out_graph = recurse(graph.head)
+
+    return out_graph, quadratures

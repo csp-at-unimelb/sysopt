@@ -1,4 +1,12 @@
 # @nb.code_cell
+import os
+import pathlib
+import sys
+path = pathlib.Path(os.curdir)
+sys.path.append(str(path.absolute().parent))
+
+
+# @nb.code_cell
 import numpy as np
 
 # Used to build custom block

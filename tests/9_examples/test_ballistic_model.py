@@ -1,6 +1,14 @@
-# @nb.code_cell
+# @nb.skip
 import pytest
 
+# @nb.code_cell
+import os
+import pathlib
+import sys
+path = pathlib.Path(os.curdir)
+sys.path.append(str(path.absolute().parent))
+
+# @nb.code_cell
 from sysopt import Block, Metadata, Composite
 from sysopt.backends import heaviside, exp
 from sysopt.symbolic import Variable, Parameter
@@ -39,7 +47,7 @@ where
 - $\dot{\hat{\mathbf{x}}}$ is the normalised velocity vector,
 - $T, D$ are the thrust and drag respectively,
 - $m$ is the vehicle mass,  
-- $\mathbf{g}$ = [0, -9.81]^T$ is the gravity vector.
+- $\mathbf{g} = [0, -9.81]^T$ is the gravity vector.
 
 """
 
@@ -50,15 +58,17 @@ In `sysopt`, this can be modelled as below
 
 
 # @nb.code_cell
+rocket_metadata = Metadata(
+    inputs=["Thrust pct", "Drag"],
+    states=["x", "y", "v_x", "v_y"],
+    outputs=["x", "y", "v_x", "v_y"],
+    parameters=["mass in kg", "max_thrust", "dx0", "dy0", "y0"]
+)
+
+
 class Rocket(Block):
     def __init__(self):
-        metadata = Metadata(
-            inputs=["Thrust pct", "Drag"],
-            states=["x", "y", "v_x", "v_y"],
-            outputs=["x", "y", "v_x", "v_y"],
-            parameters=["mass in kg", "max_thrust", "dx0", "dy0", "y0"]
-        )
-        super().__init__(metadata)
+        super().__init__(rocket_metadata)
 
     def initial_state(self, parameters):
         _1, _2, dx0, dy0, y0 = parameters
@@ -78,7 +88,7 @@ class Rocket(Block):
         ]
 
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
-        return states,
+        return states
 
 
 # @nb.text_cell
@@ -129,10 +139,8 @@ where $T$ is the thrust percentage, and $t_{cutoff}$ is how long we can burn for
 class OpenLoopController(Block):
     def __init__(self):
         super().__init__(
-            Metadata(
-                outputs=['thrust_pct'],
-                parameters=['cutoff time']
-            )
+            Metadata(outputs=['thrust_pct'],
+                     parameters=['cutoff time'])
         )
 
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
@@ -214,7 +222,7 @@ def main():
 
         problem = context.problem([t_f, p], cost, subject_to=constraints)
 
-        candidate_solution = problem(1, 1)
+        candidate_solution = problem([1, 0.5])
 
     return candidate_solution
 
@@ -227,8 +235,10 @@ r"""
 
 # @nb.code_cell_from_text
 r"""
+
 import matplotlib.pyplot as plt
 import numpy as np
+
 solution = main()
 T = np.linspace(0, 1, 25)
 x = np.empty(shape=(5,25))
@@ -246,4 +256,12 @@ plt.show()
 
 # @nb.skip
 def test_ballistic_model():
+    import  numpy as np
     soln = main()
+    T = np.linspace(0, 1, 25)
+    x = np.empty(shape=(5, 25))
+    for i, t_i in enumerate(T):
+        x[:, i:i + 1] = soln.trajectory(t_i)[:, 0]
+
+#    assert soln.constraints
+

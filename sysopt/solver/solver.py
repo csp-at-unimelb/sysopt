@@ -7,7 +7,7 @@ from typing import Optional, Dict, List, Union, NewType
 from sysopt import symbolic
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
-    lambdify
+    lambdify, is_temporal
 )
 
 from sysopt.solver.symbol_database import SymbolDatabase, FlattenedSystem
@@ -142,19 +142,27 @@ class SolverContext:
 
     def evaluate(self, problem: 'Problem',
                  decision_variables: Dict[DecisionVariable, float]):
-
         y, _ = self._prepare_path(decision_variables)
 
         t = get_time_variable()
         y_vars = self.model.outputs(t)
-        arguments = {y_vars: y}.update(decision_variables)
+        arguments = {y_vars: y}
+        arguments.update(decision_variables)
 
         value = problem.cost.call(arguments)
         constraints = []
+        for constraint in problem.constraints:
+            if is_temporal(constraint):
+                print('adding a quadrature')
+            else:
+                f = lambdify_terminal_constraint(problem,
+                                                 constraint)
+                print(f)
+
         return CandidateSolution(value, y, constraints)
 
     def solve(self, problem):
-        pass
+        raise NotImplementedError
 
     def _get_parameter_vector(self):
         return [self.constants[p] for p in self.model.parameters]
@@ -198,6 +206,15 @@ class SolverContext:
         return Problem(self, arguments, cost, subject_to)
 
 
+def lambdify_terminal_constraint(problem: 'Problem',
+                                 constraint: symbolic.Inequality):
+    t_f = problem.context.end
+    terminal_values = problem.context.model.outputs(t_f)
+    args = [terminal_values, problem.arguments]
+
+    return symbolic.lambdify(constraint.to_graph(), args)
+
+
 class Problem:
     """Optimisation Problem.
 
@@ -219,6 +236,7 @@ class Problem:
         self._context = weakref.ref(context)
         self.arguments = arguments
         self.constraints = constraints if constraints else []
+        self._regularisers = []
 
     @property
     def context(self):
@@ -228,11 +246,26 @@ class Problem:
     def cost(self):
         return self._cost
 
-    def __call__(self, *args):
+    def lambdify(self):
+        system = self.context.flattened_system
+        parameter_map = self.context.get_parameter_map()
+
+        cost_term, cost_quad = symbolic.extract_quadratures(self.cost)
+
+        for constraint in self.constraints:
+            if isinstance(constraint, symbolic.PathInequality):
+                rho = Variable('rho')
+                c, dcdt = constraint.to_ode(rho)
+            else:
+                g = constraint.to_graph()
+
+    def __call__(self, args):
         """Evaluate the problem with the given arguments."""
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
         arg_dict = dict(zip(self.arguments, args))
+
+        f = self.lambdify()
 
         return self.context.evaluate(self, arg_dict)
 

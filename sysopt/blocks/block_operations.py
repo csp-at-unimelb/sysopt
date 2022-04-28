@@ -1,7 +1,7 @@
 """Interface for Symbolic Functions and AutoDiff."""
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Callable, Union, Iterable
 
 from sysopt.types import Domain
@@ -11,7 +11,8 @@ from sysopt.helpers import flatten, strip_nones
 
 from sysopt.symbolic.symbols import as_vector, sparse_matrix
 from sysopt.symbolic.function_ops import (
-    FunctionOp, Concatenate, project, compose)
+    FunctionOp, Concatenate, project, compose
+)
 
 from sysopt.backends import (
     concatenate_symbols,  is_symbolic
@@ -293,10 +294,8 @@ def _create_functions_from_leaf_block(block: Block):
 def create_tables_from_block(block):
 
     tables = {}
-    attributes = ('states', 'constraints', 'parameters', 'inputs', 'outputs')
 
-    for attribute in attributes:
-        attr_object = getattr(block.metadata, attribute)
+    for attribute, attr_object in asdict(block.metadata).items():
         if attr_object:
             tables[attribute] = [
                 TableEntry(block=str(block), local_name=name,
@@ -326,7 +325,7 @@ def merge_table(table_1, table_2):
     return out_table
 
 
-def create_functions_from_block(block: Union[Block, Composite]):
+def _create_functions_from_block(block: Union[Block, Composite]):
     try:
         functions = {component: create_functions_from_block(component)
                      for component in block.components}
@@ -433,3 +432,59 @@ def create_functions_from_block(block: Union[Block, Composite]):
         g = None
 
     return arg_permute.domain, x0, f, g, h, out_table
+
+
+def partition_tree(block, leaves, trunks):
+    try:
+        for c in block.components:
+            partition_tree(c, leaves, trunks)
+        trunks.append(block)
+    except AttributeError:
+        leaves.append(block)
+
+
+def create_tables_from_blocks(*blocks):
+
+    tables = [create_tables_from_block(block) for block in blocks]
+
+    base, *rest = tables
+
+    for table in rest:
+        base = merge_table(base, table)
+
+    return base
+
+
+def get_projections_for_block(tables, block):
+    projectors = {}
+    for attr, local_dim in asdict(block.signature).items():
+        if local_dim == 0:
+            projectors[attr] = None
+            continue
+        entries = sorted([
+            entry for entry in tables[attr] if entry.block is block
+        ], key=lambda entry: entry.local_index)
+        projectors[attr] = projection_from_entries(
+            entries, local_dim=local_dim, global_dim=len(tables[attr])
+        )
+
+    return projectors
+
+
+def _create_functions_from_block_2(block: Union[Block, Composite]):
+    leaves, trunks = [], []
+    partition_tree(block, leaves, trunks)
+    tables = create_tables_from_blocks(*leaves)
+
+    # x = DummyVector('x', len(tables['states']))
+    # z = DummyVector('z', len(tables['constraints']))
+    # u = DummyVector('u', len(tables['inputs']))
+    # p = DummyVector('p', len(tables['parameters']))
+    #
+    # for leaf in leaves:
+    #     proj = get_projections_for_block(tables, leaf)
+
+
+def create_functions_from_block(block: Union[Block, Composite]):
+    _create_functions_from_block_2(block)
+    return _create_functions_from_block(block)
