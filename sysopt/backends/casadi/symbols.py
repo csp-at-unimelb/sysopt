@@ -19,7 +19,7 @@ class SymbolicVector(_casadi.SX):
         return id(self)
 
     @staticmethod
-    def _validate_name(name):
+    def validate_name(name):
 
         try:
             idx = SymbolicVector._names[name]
@@ -33,7 +33,7 @@ class SymbolicVector(_casadi.SX):
     def __new__(cls, name, length=1):
         assert isinstance(length, int)
         obj = SymbolicVector.sym(name, length)
-        obj._name = SymbolicVector._validate_name(name)
+        obj._name = SymbolicVector.validate_name(name)
         obj.__class__ = cls
         if cls is not SymbolicVector:
             obj.__bases__ = [SymbolicVector, _casadi.SX]
@@ -41,12 +41,18 @@ class SymbolicVector(_casadi.SX):
 
     @staticmethod
     def from_iterable(arg):
+        if all(isinstance(a, _casadi.SX) for a in arg):
+            return SymbolicVector.from_sx(
+                _casadi.vertcat(*arg)
+            )
+
         n = len(arg)
         obj = SymbolicVector('x', n)
         for i in range(n):
             if isinstance(arg[i], _casadi.SX):
                 obj[i] = arg[i]
             else:
+                assert not isinstance(arg[i], list), arg
                 obj[i] = arg[i]
         return obj
 
@@ -80,7 +86,7 @@ class SymbolicVector(_casadi.SX):
         except AttributeError:
             bases = [arg.__class__]
         if not hasattr(arg, '_name'):
-            setattr(arg, '_name', SymbolicVector._validate_name('x'))
+            setattr(arg, '_name', SymbolicVector.validate_name('x'))
         setattr(arg, '__class__', SymbolicVector)
         setattr(arg, '__bases__', bases)
 
@@ -121,6 +127,12 @@ class SymbolicVector(_casadi.SX):
 
         return super().__eq__(other)
 
+    def tolist(self):
+        if len(self) > 0:
+            return [self[i, 0] for i in range(len(self))]
+        else:
+            return []
+
 
 def concatenate(*vectors):
     """Concatenate arguments into a casadi symbolic vector."""
@@ -149,17 +161,40 @@ def concatenate(*vectors):
 def cast(arg):
     if arg is None:
         return None
-    if isinstance(arg, (float, int)):
-        return SymbolicVector.from_iterable([arg])
-    if isinstance(arg, _casadi.SX):
-        return SymbolicVector.from_sx(arg)
-    elif isinstance(arg, (list, tuple, np.ndarray)):
-        return SymbolicVector.from_iterable(arg)
-    elif isinstance(arg, _casadi.DM):
-        return SymbolicVector.from_DM(arg)
+    if isinstance(arg, SymbolicVector):
+        return arg
+    try:
+        return casts.cast_type(arg, SymbolicVector)
+    except NotImplementedError:
+        return casts.cast_type(arg)
 
-    return casts.cast_type(arg)
 
+@casts.register((float, int), SymbolicVector)
+def cast_scalar(arg):
+    return SymbolicVector.from_iterable([arg])
+
+
+@casts.register((list, tuple, np.ndarray), SymbolicVector)
+def cast_iterable(arg):
+    return SymbolicVector.from_iterable(arg)
+
+
+@casts.register(_casadi.DM, SymbolicVector)
+def cast_dm(arg):
+    return SymbolicVector.from_DM(arg)
+
+
+@casts.register(_casadi.SX, SymbolicVector)
+def cast_mx(arg):
+    try:
+        bases = list(set(arg.__bases__) | {arg.__class__})
+    except AttributeError:
+        bases = [arg.__class__]
+    if not hasattr(arg, '_name'):
+        setattr(arg, '_name', SymbolicVector.validate_name('x'))
+    setattr(arg, '__class__', SymbolicVector)
+    setattr(arg, '__bases__', bases)
+    return arg
 
 
 def is_symbolic(arg):

@@ -39,7 +39,7 @@ StatelessFunction = NewType(
 class Signature:
     """The dimension of the corresponding spaces."""
     inputs: int = 0
-    state: int = 0
+    states: int = 0
     constraints: int = 0
     outputs: int = 0
     parameters: int = 0
@@ -53,21 +53,21 @@ class Signature:
     def __iadd__(self, other):
         self.inputs += other.inputs
         self.outputs += other.outputs
-        self.state += other.state
+        self.states += other.states
         self.parameters += other.parameters
         self.constraints += other.constraints
         return self
 
     def __iter__(self):
         return iter((self.inputs, self.outputs,
-                     self.state, self.constraints, self.parameters))
+                     self.states, self.constraints, self.parameters))
 
 
 @dataclass
 class Metadata:
     """Descriptions, and additional information for each subspace."""
 
-    state: Optional[List[str]] = None
+    states: Optional[List[str]] = None
     constraints: Optional[List[str]] = None
     inputs: Optional[List[str]] = None
     outputs: Optional[List[str]] = None
@@ -79,7 +79,7 @@ class Metadata:
             inputs=len(self.inputs) if self.inputs else 0,
             outputs=len(self.outputs) if self.outputs else 0,
             constraints=len(self.constraints) if self.constraints else 0,
-            state=len(self.state) if self.state else 0,
+            states=len(self.states) if self.states else 0,
             parameters=len(self.parameters) if self.parameters else 0
         )
 
@@ -88,7 +88,7 @@ class Metadata:
         return Metadata(
             inputs=[f'input {i}' for i in range(sig.inputs)],
             outputs=[f'output {i}' for i in range(sig.outputs)],
-            state=[f'state {i}' for i in range(sig.state)],
+            states=[f'states {i}' for i in range(sig.states)],
             constraints=[f'constraint {i}' for i in range(sig.constraints)],
             parameters=[f'parameter {i}' for i in range(sig.parameters)]
         )

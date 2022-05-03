@@ -32,7 +32,7 @@ class LinearScalarEquation(Block):
         metadata = Metadata(
             inputs=[],
             outputs=['y'],
-            state=['x'],
+            states=['x'],
             constraints=[],
             parameters=['a', 'x0']
         )
@@ -40,25 +40,25 @@ class LinearScalarEquation(Block):
 
     def initial_state(self, parameters: Parameters) -> Numeric:
         _, x0 = parameters
-        return [x0]
+        return x0,
 
     def compute_dynamics(self,
                          t: Time,
-                         state: States,
+                         states: States,
                          algebraics: Algebraics,
                          inputs: Inputs,
                          parameters: Parameters):
-        x, = state
+        x, = states
         a, _ = parameters
         return [-x*a]
 
     def compute_outputs(self,
                         t: Time,
-                        state: States,
+                        states: States,
                         algebraics: Algebraics,
                         inputs: Inputs,
                         parameters: Parameters) -> Numeric:
-        return state
+        return states
 
     def explicit_solution(self, t, parameters):
         a, x0 = parameters
@@ -71,7 +71,7 @@ class LinearScalarEquation(Block):
             np.exp(-a * t)
         ]
 
-    def forwards(self, t,  p, dp):
+    def pushforward(self, t,  p, dp):
         x = self.explicit_solution(t, p)
         a, x0 = p
         return [
@@ -105,7 +105,7 @@ class TestSymbolicIntegrator:
             dparams = [0.1, 0]
             result = (f(t, param_p) - f(t, params))
 
-            expected = block.forwards(t, params, dparams)
+            expected = block.pushforward(t, params, dparams)
             assert abs(result[0][0] - expected) < 1e-2
 
     def test_autodiff(self):
@@ -117,8 +117,8 @@ class TestSymbolicIntegrator:
             params = [1, 1]
             dparams = [0.1, 0]
 
-            result = f.forwards(t, params, dparams)
+            result = f.pushforward(t, params, dparams)
 
-            expected = block.forwards(t, params, dparams)
+            expected = block.pushforward(t, params, dparams)
             assert abs(result[0][0] - expected) < 1e-2
 

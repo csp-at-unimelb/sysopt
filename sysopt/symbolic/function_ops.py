@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from copy import copy
+from typing import Union
 
 from sysopt.types import Domain
 from sysopt.backends import concatenate_symbols
@@ -25,7 +26,7 @@ class FunctionOp(ABC):
 
     """
     domain: Domain
-    codomain: int
+    codomain: Union[int, Domain]
 
     @abstractmethod
     def __call__(self, *args, **kwargs):
@@ -135,12 +136,8 @@ class Compose(FunctionOp):
 
     def __call__(self, *args):
         r = self.inner(*args)
-        try:
-            return self.outer(*r)
-        except TypeError as ex:
-            print(f'Error calling {self.outer} with {r}')
-
-            raise ex
+        res = self.outer(*r)
+        return res
 
 
 def compose(*args):

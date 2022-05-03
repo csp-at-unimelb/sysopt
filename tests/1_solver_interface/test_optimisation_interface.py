@@ -1,6 +1,6 @@
 from sysopt.symbolic import (
     Variable, is_symbolic, list_symbols, Parameter,
-    is_temporal, ExpressionGraph
+    is_temporal, ExpressionGraph, lambdify
 )
 
 from sysopt.symbolic.symbols import get_time_variable
@@ -71,8 +71,6 @@ class TestSignalApi:
         assert sig_0.symbols() == sig_1.symbols()
 
 
-
-
 def test_is_temporal():
     var = Variable()
     source = Oscillator()
@@ -104,17 +102,56 @@ def test_evaluate_graph():
     param = Parameter(source, 0)
 
     expression = 1 + var * sig(1) + param
-
-    assert expression.symbols() == {
-        var, sig, param
-    }
     values = {
         var: 2,
         sig: y,
         param: 3
     }
-    # build a graph
-    # evaluate it with symbols {}
-    result = expression.call(values)
     expected_result = 1 + 2 * np.exp(1) + 3
+
+    assert expression.symbols() == {var, sig, param}
+
+    result = expression.call(values)
     assert result == expected_result
+
+
+def test_inequality_to_function():
+    var = Variable()
+    var_inequality = var <= 1
+
+    assert var_inequality.call({var: 2}) < 0
+    assert var_inequality.call({var: 1}) == 0
+    assert var_inequality.call({var: 0}) > 0
+
+    f = lambdify(var_inequality.to_graph(), [var])
+    assert f(2) < 0
+    assert f(1) == 0
+    assert f(0) > 0
+
+
+def test_supremum_to_function():
+    t = get_time_variable()
+    source = Oscillator()
+    sig = source.outputs(t)
+    param = Parameter(source, 0)
+
+    supremum = sig(t) < param
+
+    def y(t_):
+        return np.exp(-t_)
+
+    expr = supremum.call({param: 2, sig: y})
+
+    assert expr.symbols() == {t}
+    result = expr.call({t: 0})
+    assert result > 0
+
+
+# Optimisation problem setup for a model m
+# 1. Assemble flattened system s from m
+# 2. Add
+# 3. Add quadrature for loss function
+# 4. Add constraint dynamics
+
+
+

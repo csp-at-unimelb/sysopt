@@ -1,10 +1,27 @@
-# @nb.code_cell
+# @nb.skip
+
 import pytest
 
+# @nb.code_cell_from_text
+r"""
+%matplotlib notebook
+
+import os
+import pathlib
+import sys
+path = pathlib.Path(os.curdir)
+sys.path.append(str(path.absolute().parent))
+
+
+import matplotlib.pyplot as plt
+plt.ion()
+"""
+# @nb.code_cell
 from sysopt import Block, Metadata, Composite
 from sysopt.backends import heaviside, exp
 from sysopt.symbolic import Variable, Parameter
 from sysopt.solver import SolverContext
+import numpy as np
 
 g = -9.81
 # @nb.text_cell
@@ -39,7 +56,7 @@ where
 - $\dot{\hat{\mathbf{x}}}$ is the normalised velocity vector,
 - $T, D$ are the thrust and drag respectively,
 - $m$ is the vehicle mass,  
-- $\mathbf{g}$ = [0, -9.81]^T$ is the gravity vector.
+- $\mathbf{g} = [0, -9.81]^T$ is the gravity vector.
 
 """
 
@@ -50,22 +67,24 @@ In `sysopt`, this can be modelled as below
 
 
 # @nb.code_cell
+rocket_metadata = Metadata(
+    inputs=["Thrust pct", "Drag"],
+    states=["x", "y", "v_x", "v_y"],
+    outputs=["x", "y", "v_x", "v_y"],
+    parameters=["mass in kg", "max_thrust", "dx0", "dy0", "y0"]
+)
+
+
 class Rocket(Block):
     def __init__(self):
-        metadata = Metadata(
-            inputs=["Thrust pct", "Drag"],
-            state=["x", "y", "v_x", "v_y"],
-            outputs=["x", "y", "v_x", "v_y"],
-            parameters=["mass in kg", "max_thrust", "dx0", "dy0", "y0"]
-        )
-        super().__init__(metadata)
+        super().__init__(rocket_metadata)
 
     def initial_state(self, parameters):
         _1, _2, dx0, dy0, y0 = parameters
         return [0, y0, dx0, dy0]
 
-    def compute_dynamics(self, t, state, algebraics, inputs, parameters):
-        x, y, dx, dy = state
+    def compute_dynamics(self, t, states, algebraics, inputs, parameters):
+        x, y, dx, dy = states
         mass, thrust_max, *_ = parameters
         thrust_pct, drag_coeff = inputs
         speed = (dx ** 2 + dy ** 2) ** 0.5
@@ -77,8 +96,8 @@ class Rocket(Block):
             mass * g + dy * force / speed
         ]
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
-        return state,
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
+        return states
 
 
 # @nb.text_cell
@@ -104,7 +123,7 @@ class DragModel(Block):
             )
         )
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
         d_max, rho = parameters
         y, = inputs
         return d_max * exp(- rho * y),
@@ -129,15 +148,14 @@ where $T$ is the thrust percentage, and $t_{cutoff}$ is how long we can burn for
 class OpenLoopController(Block):
     def __init__(self):
         super().__init__(
-            Metadata(
-                outputs=['thrust_pct'],
-                parameters=['cutoff time']
-            )
+            Metadata(outputs=['thrust_pct'],
+                     parameters=['cutoff time'])
         )
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
+
         cutoff_time, = parameters
-        return heaviside(cutoff_time - t),
+        return heaviside(cutoff_time - t, eps=1e-2),
 
 
 # @nb.text_cell
@@ -177,14 +195,13 @@ We'll take the final time, and the thrust cutoff time as decision variables.
 
 
 # @nb.code_cell
-def main():
+def evaluate():
     model = BallisticModel()
     x, y, dx, dy, u = model.outputs
 
     t_f = Variable()
     p = Parameter(model.controller, 'cutoff time')
     x_goal = 1
-    y_max = 12
 
     parameters = {
         f'{model.rocket}/mass in kg': 1,
@@ -203,17 +220,15 @@ def main():
         cost = context.end + y_T ** 2 + (x_T - x_goal) ** 2
 
         constraints = [
-            0 <= y(context.t),
-            y(context.t) <= y_max,
-            context.end <= 360,
+            context.end <= 10,
             0 < p,
             p <= context.end,
             t_f > 0
         ]
 
-        problem = context.problem(cost, [t_f, p], subject_to=constraints)
+        problem = context.problem([t_f, p], cost, subject_to=constraints)
 
-        candidate_solution = problem(1, 1)
+        candidate_solution = problem([1, 0.5])
 
     return candidate_solution
 
@@ -226,9 +241,11 @@ r"""
 
 # @nb.code_cell_from_text
 r"""
+
 import matplotlib.pyplot as plt
 import numpy as np
-solution = main()
+
+solution = evaluate()
 T = np.linspace(0, 1, 25)
 x = np.empty(shape=(5,25))
 for i,t_i in enumerate(T):
@@ -245,4 +262,80 @@ plt.show()
 
 # @nb.skip
 def test_ballistic_model():
-    soln = main()
+    soln = evaluate()
+    assert all(c > 0 for c in soln.constraints)
+    assert 0 < soln.cost < 1e7
+
+
+# @nb.text_cell
+r"""
+# Parameter Sweep
+
+"""
+
+
+# @nb.code_cell
+def parameter_sweep():
+    model = BallisticModel()
+    x, y, dx, dy, u = model.outputs
+
+    t_f = Variable()
+
+    p = Parameter(model.controller, 'cutoff time')
+    x_goal = 1
+
+    parameters = {
+        f'{model.rocket}/mass in kg': 1,
+        f'{model.rocket}/max_thrust': 15,
+        f'{model.rocket}/y0': 0,
+        f'{model.drag}/coeff': 0.1,
+        f'{model.drag}/exponent': 1,
+        f'{model.rocket}/dx0': 0.25,
+        f'{model.rocket}/dy0': 1
+    }
+
+    n = 25
+    X, Y = np.meshgrid(np.linspace(0, 1, n),
+                       np.linspace(0, 1, n))
+    Z = np.empty_like(X)
+
+    with SolverContext(model, t_f, parameters) as context:
+        x_T = x(context.end)
+        y_T = y(context.end)
+
+        cost = context.end + y_T ** 2 + (x_T - x_goal) ** 2
+
+        constraints = [
+            context.end <= 10,
+            0 < p,
+            p <= context.end,
+            t_f > 0
+        ]
+
+        problem = context.problem([t_f, p], cost, subject_to=constraints)
+
+        for i in range(n):
+            for j in range(n):
+                parameters = [float(X[i, j]), float(Y[i, j])]
+                Z[i, j] = problem(parameters).cost
+
+    return X, Y, Z
+
+
+# @nb.code_cell_from_text
+r"""
+
+fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+
+X, Y, Z = parameter_sweep()
+Z[Z > 4] = np.NaN
+surf = ax.plot_surface(X, Y, Z)
+ax.set_zlim(0, 2)
+ax.set_xlabel('$t_f$')
+ax.set_ylabel(r'$t_{cutoff}$')
+ax.set_zlabel('Loss')
+ 
+ax.set_title('Problem Surface')
+plt.show()
+
+"""

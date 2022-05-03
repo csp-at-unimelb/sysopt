@@ -156,7 +156,7 @@ class ComponentBase:
 
     def compute_dynamics(self,
                          t: Time,
-                         state: States,
+                         states: States,
                          algebraics: Algebraics,
                          inputs: Inputs,
                          parameters: Parameters):
@@ -164,7 +164,7 @@ class ComponentBase:
 
     def compute_outputs(self,
                         t: Time,
-                        state: States,
+                        states: States,
                         algebraics: Algebraics,
                         inputs: Inputs,
                         parameters: Parameters) -> Numeric:
@@ -172,7 +172,7 @@ class ComponentBase:
 
     def compute_residuals(self,
                           t: Time,
-                          state: States,
+                          states: States,
                           algebraics: Algebraics,
                           inputs: Inputs,
                           parameters: Parameters) -> Numeric:
@@ -202,7 +202,7 @@ class Block(ComponentBase):
     Blocks represent the fundamental components in a model, and
     describe parameter dynamics and/or input-output maps.
 
-    A block is made up of input, output, parameter, state and
+    A block is made up of input, output, parameter, states and
     algebraically constrained spaces.
     The dimension of these spaces are defined either implicitly by
     metadata, or explicitly via an instance `sysopt.Signature`.
@@ -223,10 +223,10 @@ class Block(ComponentBase):
 
     Attributes:
         signature: An instance of `sysopt.Signature` describing the dimensions
-            of input, state, algebraic, output and parameter spaces.
+            of input, states, algebraic, output and parameter spaces.
         metadata: An optional instance of `sysopt.Metadata`
             describing the metadata (eg. names) of each term in the input,
-            output, state, algebraic and parameter spaces.
+            output, states, algebraic and parameter spaces.
         inputs: An instance of `Port` used to define connections.
         outputs: An instance of `Port` used to define connections.
 
@@ -264,6 +264,17 @@ class Block(ComponentBase):
     @property
     def signature(self):
         return self.metadata.signature
+
+    def find_by_type_and_name(self, var_type, var_name: str):
+        block_name = str(self)
+        if var_name.startswith(f'{block_name}/'):
+            name = var_name[len(block_name) + 1:]
+
+            index = self.find_by_name(var_type, name)
+            if index >= 0:
+                return self, index
+
+        return None
 
 
 class ConnectionList(list):
@@ -304,6 +315,10 @@ class ConnectionList(list):
         self.append((src, dest))
 
 
+class InvalidWire(ValueError):
+    pass
+
+
 class Composite(ComponentBase):  # noqa
     """Block that consists of a sub-blocks and connections.
 
@@ -341,10 +356,19 @@ class Composite(ComponentBase):  # noqa
 
     @wires.setter
     def wires(self, value):
-
+        valid_components = {self} | set(self._components)
         if isinstance(value, list):
             self._wires.clear()
             for pair in value:
+                src, dest = pair
+                if src.parent not in valid_components:
+                    raise InvalidWire('Failed to add wires:'
+                                      f'source component {src.parent} '
+                                      f'not found for wire {value}')
+                if dest.parent not in valid_components:
+                    raise InvalidWire('Failed to add wires:'
+                                      f'Sink component {dest.parent} '
+                                      f'not found for wire {value}')
                 self._wires.add(pair)
         elif value is self._wires:
             return
@@ -364,3 +388,11 @@ class Composite(ComponentBase):  # noqa
 
         return [p for sub_block in self.components
                 for p in sub_block.parameters]
+
+    def find_by_type_and_name(self, var_type, var_name):
+        for component in self.components:
+            result = component.find_by_type_and_name(var_type, var_name)
+            if result:
+                return result
+
+        return None

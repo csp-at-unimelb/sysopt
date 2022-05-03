@@ -1,6 +1,7 @@
 """Interface for Symbolic Functions and AutoDiff."""
 
 import copy
+from dataclasses import dataclass, asdict
 from typing import Callable, Union, Iterable
 
 from sysopt.types import Domain
@@ -8,16 +9,48 @@ from sysopt.types import Domain
 from sysopt.block import Block, Composite
 from sysopt.helpers import flatten, strip_nones
 
-from sysopt.symbolic.symbols import as_vector
+from sysopt.symbolic.symbols import as_vector, sparse_matrix
 from sysopt.symbolic.function_ops import (
-    FunctionOp, Concatenate, project, compose)
+    FunctionOp, Concatenate, project, compose
+)
 
 from sysopt.backends import (
-    concatenate_symbols, SymbolicVector, is_symbolic
+    concatenate_symbols,  is_symbolic
 )
 
 
-def coproduct(*functions: 'FunctionOp'):
+@dataclass
+class TableEntry:
+    """Name and index of a block variable."""
+    local_name: str
+    block: str
+    local_index: int
+    global_index: int
+
+    @property
+    def name(self):
+        return f'{self.block}/{self.local_name}'
+
+    def __repr__(self):
+        return f'\"{self.name}\", ({self.global_index}, {self.local_index})\n'
+
+
+def projection_from_entries(entries, global_dim, local_dim):
+    shape = (local_dim, global_dim)
+    m = sparse_matrix(shape)
+    for entry in entries:
+        row = entry.local_index
+        col = entry.global_index
+        m[row, col] = 1
+    return m
+
+
+def inclusion_from_entries(entries, global_dim, local_dim):
+    proj = projection_from_entries(entries, global_dim, local_dim)
+    return proj.T
+
+
+def coproduct(domain, *functions: 'FunctionOp'):
     r"""Returns the functional coproduct of arguments
 
     For :math:`f_i:\oplus_j X^i_j ->Y_i`, this method
@@ -30,6 +63,7 @@ def coproduct(*functions: 'FunctionOp'):
     split into their target domains, then passed to the respective functions.
 
     Args:
+        domain:     The domain of the composed funciton
         *functions: FunctionOps with the same number of arguments.
 
     Returns: Operation that computes the function coproduct.
@@ -37,9 +71,9 @@ def coproduct(*functions: 'FunctionOp'):
     """
     klasses = {f.__class__ for f in functions}
     if all(issubclass(k, FunctionOp) for k in klasses):
-        return BlockFunctionWrapper.coproduct(functions)
+        return BlockFunctionWrapper.coproduct(domain, functions)
     if all(issubclass(k, VectorFunctionWrapper) for k in klasses):
-        return VectorFunctionWrapper.coproduct(functions)
+        return VectorFunctionWrapper.coproduct(domain, functions)
 
     raise NotImplementedError
 
@@ -64,20 +98,20 @@ class VectorFunctionWrapper:
         self.function = function
 
     def __call__(self, *args):
-        return self.function(args)
+        return self.function(*args)
 
     @staticmethod
-    def coproduct(args: Iterable['VectorFunctionWrapper']):
-        domain = 0
+    def coproduct(domain, args: Iterable['VectorFunctionWrapper']):
+        d = 0
         codomain = 0
         func_list = []
 
         for func in args:
             func_list.append(
-                (func, slice(domain, domain + func.domain),
+                (func, slice(d, d + func.domain),
                  slice(codomain, codomain + func.codomain))
             )
-            domain += func.domain
+            d += func.domain
             codomain += func.codomain
 
         def call(x):
@@ -123,11 +157,13 @@ class BlockFunctionWrapper(FunctionOp):
 
         self.function = function
 
-    def __call__(self, *args):
+    def __call__(self, t, *args):
         args = [
-            as_vector(a) for a in args
+            as_vector(a) if not isinstance(a, list) else a
+            for a in args
         ]
-        return self.function(*args)
+
+        return self.function(t, *args)
 
     @staticmethod
     def _partition_func(d: Domain,
@@ -144,7 +180,7 @@ class BlockFunctionWrapper(FunctionOp):
         return slice(codomain, codomain + func.codomain), f
 
     @staticmethod
-    def coproduct(args: Iterable['BlockFunctionWrapper']):
+    def coproduct(domain, args: Iterable['BlockFunctionWrapper']):
         d = Domain(1, 0, 0, 0, 0)
         codomain = 0
 
@@ -158,31 +194,29 @@ class BlockFunctionWrapper(FunctionOp):
 
         def call(*args):
 
-            if any(is_symbolic(v) for v in args):
-                result = SymbolicVector('r', codomain)
-            else:
-                result = [0] * codomain
+            result = [0] * codomain
 
             for sl, f in func_list:
-                result[sl] = f(*args)
-
+                r = as_vector(f(*args))
+                result[sl] = r
             return result
 
         return BlockFunctionWrapper(
-            domain=d,
+            domain=domain,
             codomain=codomain,
             function=call
         )
 
 
 class ArgPermute(FunctionOp):
-    """Operator that remaps inputs to state variables or constraints.
+    """Operator that remaps inputs to states variables or constraints.
 
     Args:
         codomain: The domain of the wrapped function.
 
     """
     def __init__(self, codomain: Domain):
+
         self.codomain = Domain(*codomain)
         self.domain = Domain(*codomain)
         self.constraint_to_input = {}
@@ -219,7 +253,7 @@ class ArgPermute(FunctionOp):
 def _create_functions_from_leaf_block(block: Block):
     domain = Domain(
         1,
-        block.signature.state,
+        block.signature.states,
         block.signature.constraints,
         block.signature.inputs,
         block.signature.parameters
@@ -228,15 +262,15 @@ def _create_functions_from_leaf_block(block: Block):
     f = None
     g = None
     h = None
-    if block.signature.state > 0:
+    if block.signature.states > 0:
         x0 = VectorFunctionWrapper(
-            domain=1,
-            codomain=block.signature.state,
+            domain=block.signature.parameters,
+            codomain=block.signature.states,
             function=block.initial_state
         )
         f = BlockFunctionWrapper(
             domain=domain,
-            codomain=block.signature.state,
+            codomain=block.signature.states,
             function=block.compute_dynamics
         )
 
@@ -253,7 +287,42 @@ def _create_functions_from_leaf_block(block: Block):
             function=block.compute_residuals
         )
 
-    return x0, f, g, h
+    tables = create_tables_from_block(block)
+    return domain, x0, f, g, h, tables
+
+
+def create_tables_from_block(block):
+
+    tables = {}
+
+    for attribute, attr_object in asdict(block.metadata).items():
+        if attr_object:
+            tables[attribute] = [
+                TableEntry(block=str(block), local_name=name,
+                           local_index=i, global_index=i)
+                for i, name in enumerate(attr_object)
+            ]
+        else:
+            tables[attribute] = []
+
+    return tables
+
+
+def merge_table(table_1, table_2):
+    out_table = {}
+    for key in set(table_1.keys()) | set(table_2.keys()):
+        l1 = table_1[key] if key in table_1 else []
+        l2 = table_2[key] if key in table_2 else []
+        out_table[key] = [copy.copy(entry) for entry in l1]
+        offset = len(l1)
+        out_table[key] += [
+            TableEntry(local_name=entry.local_name,
+                       block=entry.block,
+                       local_index=entry.local_index,
+                       global_index=entry.global_index + offset)
+            for entry in l2
+        ]
+    return out_table
 
 
 def create_functions_from_block(block: Union[Block, Composite]):
@@ -267,29 +336,29 @@ def create_functions_from_block(block: Union[Block, Composite]):
     output_offsets = {}
     output_codomain = 0
     domain = Domain()
-    for component, (_, f, g, h) in functions.items():
-        comp_domain = None
-        for func in (f, g, h):
-            if not func:
-                continue
-            comp_domain = func.domain
-        if not comp_domain:
-            raise TypeError(f'Block {component} nas no functions')
+    out_table = {}
+
+    for component, (comp_domain, _, f, g, h, table) in functions.items():
+
         domain_offsets[component] = copy.copy(domain)
         domain += comp_domain
+        out_table = merge_table(out_table, table)
         if g:
             output_offsets[component] = output_codomain
             output_codomain += g.codomain
 
     lists = zip(*list(functions.values()))
-    x0_list, f_list, g_list, h_list = [strip_nones(l) for l in lists]
-    h = coproduct(*h_list) if h_list else None
-    x0 = coproduct(*x0_list) if x0_list else None
-    f = coproduct(*f_list) if f_list else None
-    g = coproduct(*g_list) if g_list else None
+    _, x0_list, f_list, g_list, h_list, _ = [
+        strip_nones(item) for item in lists
+    ]
+
+    h = coproduct(domain, *h_list) if h_list else None
+    x0 = coproduct(domain.parameters, *x0_list) if x0_list else None
+    f = coproduct(domain, *f_list) if f_list else None
+    g = coproduct(domain, *g_list) if g_list else None
 
     if not block.wires:
-        return x0, f, g, h
+        return domain, x0, f, g, h, out_table
 
     arg_permute = ArgPermute(domain)
     in_wires = [
@@ -302,7 +371,7 @@ def create_functions_from_block(block: Union[Block, Composite]):
     ]
 
     internal_wires = [
-        (src, dest) for src, dest in block.wires
+        (i, src, dest) for i, (src, dest) in enumerate(block.wires)
         if src.port_type != dest.port_type
     ]
 
@@ -322,8 +391,16 @@ def create_functions_from_block(block: Union[Block, Composite]):
             g_actual[external_index] = compose(proj, g, arg_permute)
 
     new_constraints = {}
-
-    for src, dest in internal_wires:
+    wire_names = []
+    offset = len(out_table['constraints'])
+    for i, src, dest in internal_wires:
+        wire_names.append(
+            TableEntry(
+                block=str(block),
+                local_name=f'wire from {src} -> {dest}',
+                local_index=i, global_index=offset + i
+            )
+        )
         src_offset = output_offsets[src.parent]
         dest_offset = domain_offsets[dest.parent].inputs
         for src_idx, dest_idx in zip(src.indices, dest.indices):
@@ -341,6 +418,7 @@ def create_functions_from_block(block: Union[Block, Composite]):
         project(arg_permute.domain, 'constraints', z_i) - g_i
         for z_i, g_i in new_constraints.items()
     ]
+    out_table['constraints'] += wire_names
 
     f = compose(f, arg_permute)
     if h:
@@ -348,8 +426,46 @@ def create_functions_from_block(block: Union[Block, Composite]):
     else:
         h = concatenate(*h_new)
     if g_actual:
-        g = concatenate(*(g_actual[i] for i in range(len(block.outputs))))
+        items = list(g_actual[i] for i in range(len(block.outputs)))
+        g = concatenate(*items)
     else:
         g = None
 
-    return x0, f, g, h
+    return arg_permute.domain, x0, f, g, h, out_table
+
+
+def partition_tree(block, leaves, trunks):
+    try:
+        for c in block.components:
+            partition_tree(c, leaves, trunks)
+        trunks.append(block)
+    except AttributeError:
+        leaves.append(block)
+
+
+def create_tables_from_blocks(*blocks):
+
+    tables = [create_tables_from_block(block) for block in blocks]
+
+    base, *rest = tables
+
+    for table in rest:
+        base = merge_table(base, table)
+
+    return base
+
+
+def get_projections_for_block(tables, block):
+    projectors = {}
+    for attr, local_dim in asdict(block.signature).items():
+        if local_dim == 0:
+            projectors[attr] = None
+            continue
+        entries = sorted([
+            entry for entry in tables[attr] if entry.block is block
+        ], key=lambda entry: entry.local_index)
+        projectors[attr] = projection_from_entries(
+            entries, local_dim=local_dim, global_dim=len(tables[attr])
+        )
+
+    return projectors
