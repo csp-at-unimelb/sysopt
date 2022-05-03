@@ -244,6 +244,8 @@ class PathInequality(Inequality):
         c = Variable('c')
         rho = regulariser
         g = self.to_graph()
+        # TODO: fix me
+        # pylint: disable=import-outside-toplevel
         from sysopt.symbolic.scalar_ops import exp
 
         return c, exp(rho * (c - g)) / (alpha * rho)
@@ -517,7 +519,6 @@ class ExpressionGraph(Algebraic):
         return visited
 
 
-
 class Variable(Algebraic):
     """Symbolic type for a free variable."""
     is_symbolic = True
@@ -526,6 +527,12 @@ class Variable(Algebraic):
     def __init__(self, name=None, shape=scalar_shape):
         self._shape = shape
         self.name = name
+
+    def __repr__(self):
+        if self.name is not None:
+            return f'{self.__class__.__name__}({self.name})'
+        else:
+            return super().__repr__()
 
     @property
     def shape(self):
@@ -846,8 +853,8 @@ def concatenate(*arguments):
         vector = np.array(constant_vector)
         inclusions.append((inclusion, vector))
 
-    for variable, indicies in variables.items():
-        inclusion_v = projection_matrix(indicies, length).T
+    for variable, indices in variables.items():
+        inclusion_v = projection_matrix(indices, length).T
         inclusions.append((inclusion_v, variable))
 
     pair = inclusions.pop()
@@ -861,7 +868,9 @@ def concatenate(*arguments):
     return result
 
 
-def extract_quadratures(graph: ExpressionGraph) -> Tuple[ExpressionGraph, Dict[Variable, ExpressionGraph]]:
+def extract_quadratures(graph: ExpressionGraph) \
+        -> Tuple[ExpressionGraph, Dict[Variable, ExpressionGraph]]:
+
     quadratures = {}
 
     def recurse(node_idx):
@@ -881,3 +890,11 @@ def extract_quadratures(graph: ExpressionGraph) -> Tuple[ExpressionGraph, Dict[V
     out_graph = recurse(graph.head)
 
     return out_graph, quadratures
+
+
+def create_log_barrier_function(constraint, stiffness):
+    # TODO: fix me
+    # pylint: disable=import-outside-toplevel
+    from sysopt.symbolic.scalar_ops import log
+    return - stiffness * log(stiffness * constraint + 1)
+

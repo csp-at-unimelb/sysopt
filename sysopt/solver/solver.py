@@ -7,12 +7,12 @@ from typing import Optional, Dict, List, Union, NewType
 from sysopt import symbolic
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
-    lambdify, is_temporal
+    lambdify, is_temporal, create_log_barrier_function
 )
 
 from sysopt.solver.symbol_database import SymbolDatabase, FlattenedSystem
 from sysopt.block import Block, Composite
-import sysopt.backends as backend
+
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
 
 
@@ -99,20 +99,7 @@ class SolverContext:
         idx = self._flat_system.add_quadrature(dot_q)
         return idx
 
-    def get_symbolic_integrator(self):
-
-        integrator = self.get_integrator()
-        p = symbolic.SymbolicVector('p', len(self.parameters))
-
-        p_symbols = self._parameter_map(p)
-        symbolic_evaluation = integrator(self.symbol_db.t, p_symbols)
-
-        f = backend.lambdify(
-            symbolic_evaluation, [self.symbol_db.t, p]
-        )
-        return f
-
-    def _prepare_path(self, decision_variables: Dict[DecisionVariable, float]):
+    def prepare_path(self, decision_variables: Dict[DecisionVariable, float]):
         t_final = self.symbol_db.t_final
         parameters = self.constants.copy()
 
@@ -142,7 +129,7 @@ class SolverContext:
 
     def evaluate(self, problem: 'Problem',
                  decision_variables: Dict[DecisionVariable, float]):
-        y, _ = self._prepare_path(decision_variables)
+        y, _ = self.prepare_path(decision_variables)
 
         t = get_time_variable()
         y_vars = self.model.outputs(t)
@@ -153,11 +140,10 @@ class SolverContext:
         constraints = []
         for constraint in problem.constraints:
             if is_temporal(constraint):
-                print('adding a quadrature')
+                raise NotImplementedError
             else:
-                f = lambdify_terminal_constraint(problem,
-                                                 constraint)
-                print(f)
+                g = constraint.to_graph()
+                constraints.append(g.call(arguments))
 
         return CandidateSolution(value, y, constraints)
 
@@ -246,26 +232,37 @@ class Problem:
     def cost(self):
         return self._cost
 
-    def lambdify(self):
-        system = self.context.flattened_system
-        parameter_map = self.context.get_parameter_map()
-
-        cost_term, cost_quad = symbolic.extract_quadratures(self.cost)
-
-        for constraint in self.constraints:
-            if isinstance(constraint, symbolic.PathInequality):
-                rho = Variable('rho')
-                c, dcdt = constraint.to_ode(rho)
-            else:
-                g = constraint.to_graph()
-
     def __call__(self, args):
         """Evaluate the problem with the given arguments."""
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
         arg_dict = dict(zip(self.arguments, args))
+        return self.call(arg_dict)
 
-        f = self.lambdify()
+    def call(self, args):
 
-        return self.context.evaluate(self, arg_dict)
+        y, _ = self.context.prepare_path(args)
+
+        t = get_time_variable()
+        y_vars = self.context.model.outputs(t)
+        arguments = {y_vars: y}
+        arguments.update(args)
+        cost_term, cost_quad = symbolic.extract_quadratures(self.cost)
+        rho = Variable('rho')
+        assert not cost_quad, 'Not implemented'
+        constraints = []
+        for constraint in self.constraints:
+            if is_temporal(constraint):
+                raise NotImplementedError
+            else:
+                g = constraint.to_graph()
+                constraints.append(g.call(arguments))
+                barrier = create_log_barrier_function(g, rho)
+                cost_term += barrier
+
+        if constraints:
+            arguments.update({rho: 0.001})
+
+        value = cost_term.call(arguments)
+        return CandidateSolution(value, y, constraints)
 

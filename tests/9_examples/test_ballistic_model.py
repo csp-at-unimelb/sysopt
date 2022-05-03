@@ -1,18 +1,27 @@
 # @nb.skip
+
 import pytest
 
-# @nb.code_cell
+# @nb.code_cell_from_text
+r"""
+%matplotlib notebook
+
 import os
 import pathlib
 import sys
 path = pathlib.Path(os.curdir)
 sys.path.append(str(path.absolute().parent))
 
+
+import matplotlib.pyplot as plt
+plt.ion()
+"""
 # @nb.code_cell
 from sysopt import Block, Metadata, Composite
 from sysopt.backends import heaviside, exp
 from sysopt.symbolic import Variable, Parameter
 from sysopt.solver import SolverContext
+import numpy as np
 
 g = -9.81
 # @nb.text_cell
@@ -146,7 +155,7 @@ class OpenLoopController(Block):
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
 
         cutoff_time, = parameters
-        return heaviside(cutoff_time - t),
+        return heaviside(cutoff_time - t, eps=1e-2),
 
 
 # @nb.text_cell
@@ -186,14 +195,13 @@ We'll take the final time, and the thrust cutoff time as decision variables.
 
 
 # @nb.code_cell
-def main():
+def evaluate():
     model = BallisticModel()
     x, y, dx, dy, u = model.outputs
 
     t_f = Variable()
     p = Parameter(model.controller, 'cutoff time')
     x_goal = 1
-    y_max = 12
 
     parameters = {
         f'{model.rocket}/mass in kg': 1,
@@ -212,9 +220,7 @@ def main():
         cost = context.end + y_T ** 2 + (x_T - x_goal) ** 2
 
         constraints = [
-            0 <= y(context.t),
-            y(context.t) <= y_max,
-            context.end <= 360,
+            context.end <= 10,
             0 < p,
             p <= context.end,
             t_f > 0
@@ -239,7 +245,7 @@ r"""
 import matplotlib.pyplot as plt
 import numpy as np
 
-solution = main()
+solution = evaluate()
 T = np.linspace(0, 1, 25)
 x = np.empty(shape=(5,25))
 for i,t_i in enumerate(T):
@@ -256,12 +262,80 @@ plt.show()
 
 # @nb.skip
 def test_ballistic_model():
-    import  numpy as np
-    soln = main()
-    T = np.linspace(0, 1, 25)
-    x = np.empty(shape=(5, 25))
-    for i, t_i in enumerate(T):
-        x[:, i:i + 1] = soln.trajectory(t_i)[:, 0]
+    soln = evaluate()
+    assert all(c > 0 for c in soln.constraints)
+    assert 0 < soln.cost < 1e7
 
-#    assert soln.constraints
 
+# @nb.text_cell
+r"""
+# Parameter Sweep
+
+"""
+
+
+# @nb.code_cell
+def parameter_sweep():
+    model = BallisticModel()
+    x, y, dx, dy, u = model.outputs
+
+    t_f = Variable()
+
+    p = Parameter(model.controller, 'cutoff time')
+    x_goal = 1
+
+    parameters = {
+        f'{model.rocket}/mass in kg': 1,
+        f'{model.rocket}/max_thrust': 15,
+        f'{model.rocket}/y0': 0,
+        f'{model.drag}/coeff': 0.1,
+        f'{model.drag}/exponent': 1,
+        f'{model.rocket}/dx0': 0.25,
+        f'{model.rocket}/dy0': 1
+    }
+
+    n = 25
+    X, Y = np.meshgrid(np.linspace(0, 1, n),
+                       np.linspace(0, 1, n))
+    Z = np.empty_like(X)
+
+    with SolverContext(model, t_f, parameters) as context:
+        x_T = x(context.end)
+        y_T = y(context.end)
+
+        cost = context.end + y_T ** 2 + (x_T - x_goal) ** 2
+
+        constraints = [
+            context.end <= 10,
+            0 < p,
+            p <= context.end,
+            t_f > 0
+        ]
+
+        problem = context.problem([t_f, p], cost, subject_to=constraints)
+
+        for i in range(n):
+            for j in range(n):
+                parameters = [float(X[i, j]), float(Y[i, j])]
+                Z[i, j] = problem(parameters).cost
+
+    return X, Y, Z
+
+
+# @nb.code_cell_from_text
+r"""
+
+fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+
+X, Y, Z = parameter_sweep()
+Z[Z > 4] = np.NaN
+surf = ax.plot_surface(X, Y, Z)
+ax.set_zlim(0, 2)
+ax.set_xlabel('$t_f$')
+ax.set_ylabel(r'$t_{cutoff}$')
+ax.set_zlabel('Loss')
+ 
+ax.set_title('Problem Surface')
+plt.show()
+
+"""

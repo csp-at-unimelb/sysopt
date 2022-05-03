@@ -325,7 +325,7 @@ def merge_table(table_1, table_2):
     return out_table
 
 
-def _create_functions_from_block(block: Union[Block, Composite]):
+def create_functions_from_block(block: Union[Block, Composite]):
     try:
         functions = {component: create_functions_from_block(component)
                      for component in block.components}
@@ -469,22 +469,3 @@ def get_projections_for_block(tables, block):
         )
 
     return projectors
-
-
-def _create_functions_from_block_2(block: Union[Block, Composite]):
-    leaves, trunks = [], []
-    partition_tree(block, leaves, trunks)
-    tables = create_tables_from_blocks(*leaves)
-
-    # x = DummyVector('x', len(tables['states']))
-    # z = DummyVector('z', len(tables['constraints']))
-    # u = DummyVector('u', len(tables['inputs']))
-    # p = DummyVector('p', len(tables['parameters']))
-    #
-    # for leaf in leaves:
-    #     proj = get_projections_for_block(tables, leaf)
-
-
-def create_functions_from_block(block: Union[Block, Composite]):
-    _create_functions_from_block_2(block)
-    return _create_functions_from_block(block)
