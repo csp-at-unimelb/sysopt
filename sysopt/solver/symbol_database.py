@@ -18,6 +18,7 @@ BoundParameter = NamedTuple(
 )
 
 
+
 @dataclass
 class FlattenedSystem:
     """Intermediate representation of a systems model."""
@@ -50,7 +51,6 @@ class FlattenedSystem:
         result += self
         result += other
         return result
-
 
 class SymbolDatabase:
     """Autodiff context"""
@@ -98,6 +98,8 @@ class SymbolDatabase:
 
         return flat_system
 
+
+
     def _flatten_leaf(self, block: Block):
 
         # pylint: disable=invalid-name
@@ -129,6 +131,115 @@ class SymbolDatabase:
             ) from ex
 
         return FlattenedSystem(*variables, f, g, h, X0=x0)
+
+    def factor_eqs(self,flat_system):
+        import sympy as sp
+
+        for i in range(len(flat_system.f)):
+            flat_system.f[i] = sp.factor(flat_system.f[i])
+        return flat_system
+
+    def sub_explicit_eqs(self,flat_system):
+
+        import sympy as sp
+
+        Z = flat_system.Z
+        h = flat_system.h
+
+        h_ = sp.solve(h,Z)
+
+        repl = [(Z[i],h_[Z[i]]) for i in range(len(Z))]
+        for i in range(len(flat_system.f)):
+            flat_system.f[i] = flat_system.f[i].subs(repl)
+        return flat_system
+
+    def unique_sym_names(self,flat_system):
+        n_x = len(flat_system.X) if flat_system.X != None else 0
+        n_z = len(flat_system.Z) if flat_system.Z != None else 0
+        n_u = len(flat_system.U) if flat_system.U != None else 0
+        n_p = len(flat_system.P) if flat_system.P != None else 0
+
+        X_o = [flat_system.X[i] for i in range(n_x)]
+        P_o = [flat_system.P[i] for i in range(n_p)]
+        U_o = [flat_system.U[i] for i in range(n_u)]
+        Z_o = [flat_system.Z[i] for i in range(n_z)]
+
+        X_n = SymbolicVector('x',n_x,Dummy=False)
+        P_n = SymbolicVector('p',n_p,Dummy=False)
+        U_n = SymbolicVector('u',n_u,Dummy=False)
+        Z_n = SymbolicVector('z',n_z,Dummy=False)
+
+        X_n = [X_n[i] for i in range(n_x)]
+        P_n = [P_n[i] for i in range(n_p)]
+        U_n = [U_n[i] for i in range(n_u)]
+        Z_n = [Z_n[i] for i in range(n_z)]
+
+        var_o = X_o + P_o + U_o + Z_o
+        var_n = X_n + P_n + U_n + Z_n
+
+        repl = [(var_o[i],var_n[i]) for i in range(len(var_o))]
+        #  for i in range(n_x):
+        flat_system.X = flat_system.X.subs(repl) if flat_system.X != None else []
+        flat_system.P = flat_system.P.subs(repl) if flat_system.P != None else []
+        flat_system.U = flat_system.U.subs(repl) if flat_system.U != None else []
+        flat_system.Z = flat_system.Z.subs(repl) if flat_system.Z != None else []
+        flat_system.f = flat_system.f.subs(repl) if flat_system.f != None else []
+        flat_system.g = flat_system.g.subs(repl) if flat_system.g != None else []
+        flat_system.h = flat_system.h.subs(repl) if flat_system.h != None else []
+
+        for key,value in self._signals.items():
+            _signals = list(value)
+            for i in range(len(_signals)):
+                if _signals[i] != None:
+                    _signals[i] = _signals[i].subs(repl)
+
+            self._signals[key] = tuple(_signals)
+        return flat_system
+
+    def list_blocks(self, block:Block):
+
+        if not hasattr(block, 'components'):
+            return block
+
+        blocks = []
+        for component in block.components:
+            _blocks = self.list_blocks(component)
+            if isinstance(_blocks,list):
+                blocks += _blocks
+            else:
+                blocks.append(self.list_blocks(component))
+
+        self.blocks = blocks
+        return blocks
+
+    def create_signal_dicts(self):
+        state_dict = {}
+        input_dict = {}
+        parameter_dict = {}
+        for block, signals in self._signals.items():
+            if block.metadata.state:
+                for i,name in enumerate(block.metadata.state):
+                    state_dict[signals[0][i]] = name
+            if block.metadata.inputs:
+                for i,name in enumerate(block.metadata.inputs):
+                    input_dict[signals[2][i]] = name
+            if block.metadata.parameters:
+                for i,name in enumerate(block.metadata.parameters):
+                    parameter_dict[signals[3][i]] = name
+
+        self.sym_dict = {**state_dict, **input_dict, **parameter_dict}
+
+        self.state_dict = state_dict
+        self.input_dict = input_dict
+        self.param_dict = parameter_dict
+
+        self.sym_dict_inv = {v: k for k, v in self.sym_dict.items()}
+
+        self.state_dict_inv = {v: k for k, v in self.state_dict.items()}
+        self.input_dict_inv = {v: k for k, v in self.input_dict.items()}
+        self.param_dict_inv = {v: k for k, v in self.param_dict.items()}
+
+        return 
 
     def _recursively_flatten(self, block: Block):
 

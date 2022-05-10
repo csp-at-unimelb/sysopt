@@ -116,3 +116,4 @@ def test_create_flattened_system_composite():
     for i in range(10):
         error += abs(float(y_sol(i)) - y(i))
     assert error < 1e-3, "Integration produced incorrect result"
+

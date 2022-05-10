@@ -1,26 +1,24 @@
 import numpy as np
 
+from sysopt.backends.sympy import SymbolicVector
 from sysopt.blocks.common import Gain, LowPassFilter, Oscillator
 from sysopt.block import Composite
-from sysopt.backends.sympy import SympyBackend, SympyVector
-from sysopt.backends.sympy import SympyVector
-from sysopt.backend import get_default_backend
-import sysopt.backend
+from sysopt.solver import SymbolDatabase, SolverContext
+
 
 def test_vector_class():
-    v = SympyVector('v', 2)
+    v = SymbolicVector('v', 2)
 
     v0, v1 = v
     assert v0 == v[0]
     assert v1 == v[1]
 
-test_vector_class()
 
 def test_create_variables():
-    stx = SympyBackend()
+    ctx = SymbolDatabase()
     block = Gain(channels=2)
 
-    x, z, u, p = stx.get_or_create_variables(block)
+    x, z, u, p = ctx.get_or_create_signals(block)
     assert not x
     assert not z
     assert u.shape == (2, 1)
@@ -28,26 +26,24 @@ def test_create_variables():
 
     lpf = LowPassFilter()
 
-    x1, z1, u1, p1 = stx.get_or_create_variables(lpf)
+    x1, z1, u1, p1 = ctx.get_or_create_signals(lpf)
 
     assert x1.shape == (1, 1)
     assert u1.shape == (1, 1)
     assert p1.shape == (1, 1)
 
-test_create_variables()
 
 def test_create_flattened_system_leaf():
-    stx = SympyBackend()
-
+    ctx = SymbolDatabase()
     block = Gain(2)
     block2 = Gain(1)
-    flat_block_1 = stx.get_flattened_system(block)
-    assert len(stx._variables) == 1
-    _ = stx.get_flattened_system(block)
-    assert len(stx._variables) == 1
-    flat_block_2 = stx.get_flattened_system(block2)
-    assert len(stx._variables) == 2
-    assert block2 in stx._variables
+    flat_block_1 = ctx.get_flattened_system(block)
+    assert len(ctx._signals) == 1
+    _ = ctx.get_flattened_system(block)
+    assert len(ctx._signals) == 1
+    flat_block_2 = ctx.get_flattened_system(block2)
+    assert len(ctx._signals) == 2
+    assert block2 in ctx._signals
 
     assert not flat_block_1.X
     assert not flat_block_1.Z
@@ -65,11 +61,9 @@ def test_create_flattened_system_leaf():
     assert flattened_system.P.shape == (3, 1)
     assert flattened_system.g.shape == (3, 1)
 
-test_create_flattened_system_leaf()
-
 
 def test_create_flattened_system_composite():
-    stx = SympyBackend()
+    ctx = SymbolDatabase()
 
     osc = Oscillator()
     lpf = LowPassFilter()
@@ -83,37 +77,44 @@ def test_create_flattened_system_composite():
     def y(t):
         return 0.5 * (np.sin(t) + np.cos(t) - np.exp(-t))
 
-    assert len(lpf.inputs) == 1
-    assert len(lpf.outputs) == 1
+    assert len(lpf.inputs) == 1, "LPF has wrong number of inputs"
+    assert len(lpf.outputs) == 1, "LPF has wrong number of outputs"
 
     composite = Composite(
         components=[osc, lpf],
         wires=[(osc.outputs, lpf.inputs)]
     )
-    assert len(lpf.inputs) == 1
 
     composite.wires += [(lpf.outputs, composite.outputs)]
 
-    flattened_system = stx.get_flattened_system(composite)
+    flattened_system = ctx.get_flattened_system(composite)
 
-    assert flattened_system.X.shape == (1, 1)
-    assert flattened_system.Z.shape == (1, 1)
-    assert flattened_system.P.shape == (3, 1)
-    assert not flattened_system.U
-    assert flattened_system.f.shape == (1, 1)
-    assert flattened_system.g.shape == (1, 1)
-    assert flattened_system.h.shape == (1, 1)
-    assert flattened_system.X0.shape == (1, 1)
+    assert flattened_system.X.shape == (1, 1), \
+        "Filter state is missing from composed system"
+    assert flattened_system.Z.shape == (1, 1), \
+        "Wire constraint variable is mission from composed system "
+    assert flattened_system.P.shape == (3, 1), \
+        "Incorrect number of parameters after composition"
+    assert not flattened_system.U,\
+        "Composed system should have no inputs"
+    assert flattened_system.f.shape == (1, 1), \
+        "Composed system should have only one vector field equation"
+    assert flattened_system.g.shape == (1, 1), \
+        "Composed system should have only one output function "
+    assert flattened_system.h.shape == (1, 1), \
+        "Composed system has incorrect number of residual functions"
+    assert flattened_system.X0.shape == (1, 1), \
+        "Composed system has the wrong number of initial conditions"
 
-    breakpoint()
+    p = [1, 0, 1]
+    params = dict(zip(composite.parameters, p))
 
+    with SolverContext(composite, 10, params) as ctx:
+        y_sol = ctx.integrate()
 
-    # f = stx.integrator(flattened_system)
-
-    # p = [1, 0, 1]
-    # y_sol = f(10, p)
-
-    # for i in range(10):
-        # assert abs(float(y_sol(i)) - y(i)) < 1e-4
+    error = 0
+    for i in range(10):
+        error += abs(float(y_sol(i)) - y(i))
+    assert error < 1e-3, "Integration produced incorrect result"
 
 test_create_flattened_system_composite()

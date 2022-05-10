@@ -31,7 +31,7 @@ class SolverContext:
     """
     def __init__(self,
                  model: Union[Block, Composite],
-                 t_final: Union[float, Variable],
+                 t_final: Union[float, Variable]=0,
                  constants: Optional[Dict] = None,
                  path_resolution: int = 50
                  ):

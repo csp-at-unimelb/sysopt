@@ -2,7 +2,7 @@
 from typing import Iterable, Optional, Union, NewType, Tuple, List
 import weakref
 from dataclasses import asdict
-from sysopt.types import (Signature, Metadata, Time, States, Parameters,
+from sysopt.var_types import (Signature, Metadata, Time, States, Parameters,
                           Inputs, Algebraics, Numeric)
 
 from sysopt.symbolic.symbols import SignalReference, projection_matrix
