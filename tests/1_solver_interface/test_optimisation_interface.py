@@ -146,7 +146,6 @@ def test_supremum_to_function():
     result = expr.call({t: 0})
     assert result > 0
 
-
 # Optimisation problem setup for a model m
 # 1. Assemble flattened system s from m
 # 2. Add

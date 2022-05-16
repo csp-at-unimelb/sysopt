@@ -108,7 +108,6 @@ class Domain:
                     self.inputs, self.parameters))
 
     def __getitem__(self, item):
-
         return list(self)[item]
 
     def copy(self):

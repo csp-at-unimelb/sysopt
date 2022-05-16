@@ -23,7 +23,7 @@ def x0(p):
 block = FullStateOutput(metadata, dfdx, x0)
 
 
-def test_autodif():
+def test_autodiff():
 
     t_f = 10
     with SolverContext(block, t_f) as soln:
