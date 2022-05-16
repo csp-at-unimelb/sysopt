@@ -75,8 +75,8 @@ class FlattenedSystem:
 
     @staticmethod
     def from_block(block):
-        domain, x0, f, g, h, _ = create_functions_from_block(block)
-
+        x0, f, g, h, _ = create_functions_from_block(block)
+        domain = g.domain
         self = FlattenedSystem()
         self.X = SymbolicVector('x', domain.states)
         self.Z = SymbolicVector('z', domain.constraints)

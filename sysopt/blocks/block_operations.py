@@ -288,7 +288,7 @@ def _create_functions_from_leaf_block(block: Block):
         )
 
     tables = create_tables_from_block(block)
-    return domain, x0, f, g, h, tables
+    return x0, f, g, h, tables
 
 
 def create_tables_from_block(block):
@@ -338,17 +338,17 @@ def create_functions_from_block(block: Union[Block, Composite]):
     domain = Domain()
     out_table = {}
 
-    for component, (comp_domain, _, f, g, h, table) in functions.items():
+    for component, (_, f, g, h, table) in functions.items():
 
         domain_offsets[component] = copy.copy(domain)
-        domain += comp_domain
+        domain += g.domain
         out_table = merge_table(out_table, table)
         if g:
             output_offsets[component] = output_codomain
             output_codomain += g.codomain
 
     lists = zip(*list(functions.values()))
-    _, x0_list, f_list, g_list, h_list, _ = [
+    x0_list, f_list, g_list, h_list, _ = [
         strip_nones(item) for item in lists
     ]
 
@@ -358,7 +358,7 @@ def create_functions_from_block(block: Union[Block, Composite]):
     g = coproduct(domain, *g_list) if g_list else None
 
     if not block.wires:
-        return domain, x0, f, g, h, out_table
+        return x0, f, g, h, out_table
 
     arg_permute = ArgPermute(domain)
     in_wires = [
@@ -431,7 +431,7 @@ def create_functions_from_block(block: Union[Block, Composite]):
     else:
         g = None
 
-    return arg_permute.domain, x0, f, g, h, out_table
+    return x0, f, g, h, out_table
 
 
 def partition_tree(block, leaves, trunks):
