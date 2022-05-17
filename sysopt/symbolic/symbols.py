@@ -8,11 +8,10 @@ import numpy as np
 from scipy.sparse import dok_matrix, spmatrix
 from typing import Union, List, Callable, Tuple, Optional, Dict
 
-import sysopt.backends as backend
-from sysopt.backends import SymbolicVector
+# import sysopt.backends as backend
 from sysopt.symbolic.casts import cast_type
 from sysopt.helpers import flatten
-
+array = np.array
 epsilon = 1e-12
 
 
@@ -32,18 +31,18 @@ def sparse_matrix(shape: Tuple[int, int]):
     return dok_matrix(shape, dtype=float)
 
 
-def is_symbolic(obj):
-    try:
-        return obj.is_symbolic
-    except AttributeError:
-        return backend.is_symbolic(obj)
+# def is_symbolic(obj):
+#     try:
+#         return obj.is_symbolic
+#     except AttributeError:
+#         return backend.is_symbolic(obj)
 
 
-def list_symbols(obj):
-    try:
-        return obj.symbols()
-    except AttributeError:
-        return backend.list_symbols(obj)
+# def list_symbols(obj):
+#     try:
+#         return obj.symbols()
+#     except AttributeError:
+#         return backend.list_symbols(obj)
 
 
 def projection_matrix(indices: List[int], dimension: int):
@@ -353,12 +352,15 @@ class ExpressionGraph(Algebraic):
 
     def __init__(self, op, *args):
         self.nodes = []
-        op_node = self.add_or_get_node(op)
         self.edges = {}
-        self.edges.update(
-            {op_node: [self.add_or_get_node(a) for a in args]}
-        )
-        self.head = op_node
+        self.head = None
+
+        if op:
+            op_node = self.add_or_get_node(op)
+            self.edges.update(
+                {op_node: [self.add_or_get_node(a) for a in args]}
+            )
+            self.head = op_node
 
     @property
     def shape(self):
@@ -469,8 +471,18 @@ class ExpressionGraph(Algebraic):
             for child in children
         ))
         edge_hash = hash(tuple(edge_list))
-        node_hash = hash(tuple(n for n in self.nodes))
-        return hash((edge_hash,  node_hash))
+
+        def hash_nodes():
+            hashes = []
+            for node in self.nodes:
+                try:
+                    hashes.append(hash(node))
+                except TypeError:
+                    dok_hash = tuple(node.todok().items())
+                    hashes.append(dok_hash)
+            return hashes
+
+        return hash((edge_hash, *hash_nodes()))
 
     def symbols(self):
 
@@ -549,6 +561,10 @@ class Variable(Algebraic):
 
 
 _t = Variable('t')
+
+
+def SymbolicVector(name, length):
+    return Variable(name, (length,))
 
 
 class Parameter(Algebraic):
@@ -709,6 +725,19 @@ class SignalReference(Algebraic):
             return result
 
 
+def list_symbols(arg):
+    return arg.symbols()
+
+
+def is_symbolic(arg):
+    if isinstance(arg, list):
+        return any(is_symbolic(a) for a in arg)
+    try:
+        return arg.is_symbolic
+    except AttributeError:
+        return False
+
+
 def as_vector(arg):
     try:
         return flatten(arg)
@@ -716,8 +745,8 @@ def as_vector(arg):
         if isinstance(arg, (int, float)):
             return arg,
 
-    if is_symbolic(arg):
-        return backend.cast(arg)
+    # if is_symbolic(arg):
+    #     return backend.cast(arg)
 
     raise NotImplementedError(
         f'Don\'t know to to vectorise {arg.__class__}'
@@ -753,49 +782,13 @@ def is_temporal(symbol):
     return False
 
 
+def copy(graph: ExpressionGraph):
+
+    return graph.copy()
+
+
 def is_matrix(obj):
     return isinstance(obj, (np.ndarray, spmatrix))
-
-
-def lambdify(graph: ExpressionGraph,
-             arguments: List[Union[Algebraic, List[Algebraic]]],
-             name: str = 'f'
-             ):
-
-    substitutions = {}
-    for i, arg in enumerate(arguments):
-        if isinstance(arg, list):
-            assert all(sub_arg.shape == scalar_shape for sub_arg in arg), \
-                'Invalid arguments, lists must be a list of scalars'
-            symbol = SymbolicVector(f'x_{i}', len(arg))
-            substitutions.update(
-                {sub_arg: symbol[j] for j, sub_arg in enumerate(arg)})
-        else:
-            try:
-                n,  = arg.shape
-            except ValueError as ex:
-                n, m = arg.shape
-                if m > 1:
-                    raise ex
-            symbol = SymbolicVector(f'x_{i}', n)
-            substitutions[arg] = symbol
-
-    def recurse(node):
-        obj = graph.nodes[node]
-        if is_op(obj):
-            args = [recurse(child) for child in graph.edges[node]]
-            return obj(*args)
-        if is_matrix(obj):
-            return backend.cast(obj)
-        try:
-            return substitutions[obj]
-        except (KeyError, TypeError):
-            return obj
-
-    symbolic_expressions = recurse(graph.head)
-    return backend.lambdify(
-        symbolic_expressions, list(substitutions.values()), name
-    )
 
 
 class Quadrature(Algebraic):
@@ -897,4 +890,5 @@ def create_log_barrier_function(constraint, stiffness):
     # pylint: disable=import-outside-toplevel
     from sysopt.symbolic.scalar_ops import log
     return - stiffness * log(stiffness * constraint + 1)
+
 

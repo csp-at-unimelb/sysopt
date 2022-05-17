@@ -14,10 +14,6 @@ from sysopt.symbolic.function_ops import (
     FunctionOp, Concatenate, project, compose
 )
 
-from sysopt.backends import (
-    concatenate_symbols,  is_symbolic
-)
-
 
 @dataclass
 class TableEntry:
@@ -131,8 +127,8 @@ def concatenate(*args):
     flat_args = strip_nones(flatten(args, 2))
     if any(isinstance(arg, FunctionOp) for arg in flat_args):
         return Concatenate(*flat_args)
-    if any(is_symbolic(arg) for arg in flat_args):
-        return concatenate_symbols(*flat_args)
+    # if any(is_symbolic(arg) for arg in flat_args):
+    #     return concatenate_symbols(*flat_args)
     if all(isinstance(arg, (float, int)) for arg in flat_args):
         return flat_args
 

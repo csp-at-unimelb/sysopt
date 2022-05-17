@@ -34,6 +34,8 @@ def cast_type(var, to_type=None):
             raise TypeError(msg)
 
         caster, = casters.values()
+    elif to_type is from_type:
+        return var
     else:
         try:
             caster = _registry[from_type][to_type]

@@ -2,10 +2,10 @@ import pytest
 
 from sysopt.types import *
 from sysopt.block import Block, Composite
-from sysopt.symbolic import is_symbolic
-from sysopt.backends import SymbolicVector
+
 from sysopt.blocks.block_operations import create_functions_from_block
 from sysopt.blocks import Gain
+from sysopt.symbolic import is_symbolic, SymbolicVector
 
 
 class BlockMock(Block):
@@ -187,7 +187,6 @@ class TestSymbolicFunctionsFromCompositeBlock:
         q = SymbolicVector('q', 3)
         result = x0(q)
         assert len(result) == x0.codomain
-        assert is_symbolic(q)
 
     def test_composite_block_functions_numerical_eval(self):
         composite = MockComposite()

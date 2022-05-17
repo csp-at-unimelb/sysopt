@@ -2,6 +2,7 @@
 import casadi as _casadi
 from sysopt.backends.casadi.math import fmin, fmax, heaviside
 from sysopt.backends.casadi.symbols import *
+from sysopt.backends.casadi.expression_graph import lambdify
 from sysopt.symbolic.casts import cast_like
 
 epsilon = 1e-9
@@ -112,7 +113,10 @@ class Integrator:
 
         self.n_alg = 0
         if system.h is not None:
-            self.dae_spec.update({'z': system.Z, 'alg': system.h})
+            self.dae_spec.update({
+                'z': system.Z,
+                'alg': _casadi.vertcat(*system.h)
+            })
             self.n_alg, _ = system.Z.shape
             self.g = _casadi.Function(
                 'g',
@@ -171,16 +175,6 @@ class Integrator:
         soln = self.integrate(t, p)
 
         return soln(t)
-
-
-def lambdify(expressions, arguments, name='f'):
-    # CasADI api - throws general exception
-    # pylint: disable=broad-except
-    try:
-        outputs = [concatenate(expr) for expr in expressions]
-    except Exception:
-        outputs = [expressions]
-    return _casadi.Function(name, arguments, outputs)
 
 
 def sparse_matrix(shape):

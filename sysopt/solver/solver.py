@@ -5,9 +5,10 @@ import weakref
 from typing import Optional, Dict, List, Union, NewType
 
 from sysopt import symbolic
+from sysopt.backends import Integrator
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
-    lambdify, is_temporal, create_log_barrier_function
+    is_temporal, create_log_barrier_function
 )
 
 from sysopt.solver.symbol_database import SymbolDatabase, FlattenedSystem
@@ -86,7 +87,6 @@ class SolverContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._flat_system = None
-        pass
 
     def add_quadrature(self, integrand):
 
@@ -94,8 +94,8 @@ class SolverContext:
         unbound_params = integrand.symbols() - {y_var, self.t}
         assert not unbound_params
 
-        f = lambdify(integrand, [self.t, y_var])
-        dot_q = f(self.symbol_db.t, self._flat_system.g)
+        f = symbolic.lambdify(integrand, [self.t, y_var])
+        dot_q = f(self.symbol_db.t, *self._flat_system.g)
         idx = self._flat_system.add_quadrature(dot_q)
         return idx
 
@@ -127,6 +127,45 @@ class SolverContext:
 
         return func, t_final
 
+    def _create_parameter_projections(self):
+        constants = []
+        proj_indices = []
+
+        if symbolic.is_symbolic(self.end):
+            constants.append(0)
+            proj_indices.append(1)
+        else:
+            constants.append(self.end)
+
+        for row, parameter in enumerate(self.model.parameters):
+            try:
+                constants.append(self.constants[parameter])
+            except KeyError:
+                constants.append(0)
+                proj_indices.append(row)
+
+        out_dimension = len(constants)
+        arguments = symbolic.Variable(shape=(len(proj_indices),))
+        projector = symbolic.projection_matrix(proj_indices, out_dimension)
+        const_vector = symbolic.array(constants)
+        graph = projector @ arguments + const_vector
+
+        return symbolic.lambdify(graph, [arguments], 'params')
+
+    def get_symbolic_integrator(self):
+        integrator = self.get_integrator()
+        param_map = self._create_parameter_projections()
+        if symbolic.is_symbolic(self.end):
+            def func(t, p):
+                p_prime = param_map.call(p)
+                return integrator(t, p_prime)
+        else:
+            def func(p):
+                p_prime = param_map.call(p)
+                t_end = self.end
+                return integrator(t_end, p_prime)
+        return func
+
     def evaluate(self, problem: 'Problem',
                  decision_variables: Dict[DecisionVariable, float]):
         y, _ = self.prepare_path(decision_variables)
@@ -156,10 +195,11 @@ class SolverContext:
     def integrate(self, parameters=None, t_final=None, resolution=50):
 
         integrator = self.get_integrator(resolution)
+
         p = self._parameter_map(parameters)
+
         if not t_final:
             t_final = self.symbol_db.t_final
-
         soln = integrator.integrate(t_final, p)
 
         return soln
@@ -169,7 +209,7 @@ class SolverContext:
         return self._flat_system
 
     def get_integrator(self, resolution=50):
-        return symbolic.Integrator(
+        return Integrator(
             self.symbol_db.t,
             self._flat_system,
             resolution=resolution

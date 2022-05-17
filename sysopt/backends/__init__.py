@@ -9,7 +9,7 @@ if backend_name == 'casadi':
 else:
     raise NotImplementedError(f'Backend {backend_name} is not implemented')
 
-SymbolicVector = backend.SymbolicVector
+
 lambdify = backend.lambdify
 InterpolatedPath = backend.InterpolatedPath
 Integrator = backend.Integrator

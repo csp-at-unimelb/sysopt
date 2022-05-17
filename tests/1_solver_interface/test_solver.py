@@ -34,7 +34,6 @@ def build_example():
     return model, constants, output
 
 
-@pytest.mark.skip
 def test_integrate():
     model, constants, output = build_example()
 
@@ -55,7 +54,6 @@ def test_integrate():
         assert abs(result_2 - expected_2) < 1e-4
 
 
-@pytest.mark.skip
 def test_quadrature():
     osc = Oscillator()
     gain = Gain(channels=1)
