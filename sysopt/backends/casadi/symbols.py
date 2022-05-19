@@ -31,7 +31,8 @@ def cast(arg):
     if arg is None:
         return None
     if isinstance(arg, np.ndarray):
-        return _casadi.DM_from_array(arg)
+        r = _casadi.DM_from_array(arg, check_only=False)
+        return r
 
     return casts.cast_type(arg)
 
@@ -44,7 +45,7 @@ def cast_scalar(arg):
 
 @casts.register(list, _casadi.SX)
 def cast_iterable(arg):
-    return  _casadi.vertcat(
+    return _casadi.vertcat(
         *[casts.cast_type(a, _casadi.SX) for a in arg]
     )
 

@@ -27,22 +27,26 @@ def find_param_index_by_name(block, name: str):
     raise ValueError(f'Could not find parameter {name} in block {block}.')
 
 
+class Matrix(np.ndarray):
+    def __hash__(self):
+        shape_hash = hash(self.shape)
+        data_hash = hash(tuple(self.ravel()))
+        return hash((shape_hash, data_hash))
+
+
 def sparse_matrix(shape: Tuple[int, int]):
-    return dok_matrix(shape, dtype=float)
+    return np.zeros(shape, dtype=float).view(Matrix)
 
 
-# def is_symbolic(obj):
-#     try:
-#         return obj.is_symbolic
-#     except AttributeError:
-#         return backend.is_symbolic(obj)
+numpy_handlers = {}
 
 
-# def list_symbols(obj):
-#     try:
-#         return obj.symbols()
-#     except AttributeError:
-#         return backend.list_symbols(obj)
+def implements(numpy_function):
+    """Register an __array_function__ implementation for MyArray objects."""
+    def decorator(func):
+        numpy_handlers[numpy_function] = func
+        return func
+    return decorator
 
 
 def projection_matrix(indices: List[int], dimension: int):
@@ -122,7 +126,9 @@ def register_op(shape_func=infer_scalar_shape):
 
 def wrap_as_op(func: Callable,
                arguments: Optional[int] = None,
-               shape_func=infer_scalar_shape) -> Callable:
+               shape_func=infer_scalar_shape,
+               numpy_func=None
+               ) -> Callable:
     """Wraps the function for use in expression graphs.
 
     Args:
@@ -142,10 +148,14 @@ def wrap_as_op(func: Callable,
 
     __shape_ops[func] = shape_func
 
+    if numpy_func is not None:
+        numpy_handlers[numpy_func] = wrapper
+
     return wrapper
 
 
 @register_op()
+@implements(np.power)
 def power(base, exponent):
     return base ** exponent
 
@@ -160,7 +170,7 @@ def sub(lhs, rhs):
     return lhs - rhs
 
 
-@register_op(matmul_shape)
+@register_op(shape_func=matmul_shape)
 def matmul(lhs, rhs):
     return lhs @ rhs
 
@@ -180,7 +190,7 @@ def div(lhs, rhs):
     return lhs / rhs
 
 
-@register_op(transpose_shape)
+@register_op(shape_func=transpose_shape)
 def transpose(matrix):
     return matrix.T
 
@@ -252,8 +262,20 @@ class PathInequality(Inequality):
 
 class Algebraic(metaclass=ABCMeta):
     """Base class for symbolic terms in expression graphs."""
-    def __init_subclass__(cls, **kwargs):
-        setattr(cls, '__array_ufunc__', None)
+
+    def __array_ufunc__(self, func, method, *args, **kwargs):
+        if func not in numpy_handlers:
+            return NotImplemented
+        if method != '__call__':
+            return NotImplemented
+        return numpy_handlers[func](*args, **kwargs)
+
+    def __array_function__(self, func, types, args, kwargs):
+        if func not in numpy_handlers:
+            return NotImplemented
+        # if not all(issubclass(t, Algebraic) for t in types):
+        #     return NotImplemented
+        return numpy_handlers[func](*args, **kwargs)
 
     @property
     @abstractmethod
@@ -347,6 +369,8 @@ def is_op(value):
         return False
 
 
+
+
 class ExpressionGraph(Algebraic):
     """Graph representation of a symbolic expression."""
 
@@ -361,6 +385,14 @@ class ExpressionGraph(Algebraic):
                 {op_node: [self.add_or_get_node(a) for a in args]}
             )
             self.head = op_node
+
+    @property
+    def domain(self):
+        symbols = self.symbols()
+        return [
+            n.shape[0] if len(n.shape) == 1 else n.shape
+            for n in self.nodes if n in symbols
+        ]
 
     @property
     def shape(self):
@@ -529,6 +561,17 @@ class ExpressionGraph(Algebraic):
                 unvisited |= set(self.edges[item])
 
         return visited
+
+
+numpy_handlers.update(
+    {
+        np.matmul: lambda a, b: ExpressionGraph(matmul, a, b)
+    }
+)
+
+
+def symbolic_vector(name, length):
+    return Variable(name, shape=(length, ))
 
 
 class Variable(Algebraic):
@@ -744,7 +787,8 @@ def as_vector(arg):
     except TypeError:
         if isinstance(arg, (int, float)):
             return arg,
-
+    if arg is None:
+        return []
     # if is_symbolic(arg):
     #     return backend.cast(arg)
 
@@ -780,11 +824,6 @@ def is_temporal(symbol):
     if is_op(symbol):
         return False
     return False
-
-
-def copy(graph: ExpressionGraph):
-
-    return graph.copy()
 
 
 def is_matrix(obj):
@@ -890,5 +929,3 @@ def create_log_barrier_function(constraint, stiffness):
     # pylint: disable=import-outside-toplevel
     from sysopt.symbolic.scalar_ops import log
     return - stiffness * log(stiffness * constraint + 1)
-
-

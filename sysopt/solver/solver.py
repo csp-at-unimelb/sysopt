@@ -5,13 +5,13 @@ import weakref
 from typing import Optional, Dict, List, Union, NewType
 
 from sysopt import symbolic
-from sysopt.backends import Integrator
+from sysopt.backends import Integrator, lambdify
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
-    is_temporal, create_log_barrier_function
+    is_temporal, create_log_barrier_function, as_vector, is_symbolic
 )
 
-from sysopt.solver.symbol_database import SymbolDatabase, FlattenedSystem
+from sysopt.solver.symbol_database import FlattenedSystem
 from sysopt.block import Block, Composite
 
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
@@ -39,7 +39,6 @@ class SolverContext:
                  path_resolution: int = 50
                  ):
         self.model = model
-        self.symbol_db = SymbolDatabase(t_final)
         self.start = 0
         self.end = t_final
         self.t = get_time_variable()
@@ -88,24 +87,30 @@ class SolverContext:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._flat_system = None
 
-    def add_quadrature(self, integrand):
-
-        y_var = self.model.outputs(self.t)
-        unbound_params = integrand.symbols() - {y_var, self.t}
-        assert not unbound_params
-
-        f = symbolic.lambdify(integrand, [self.t, y_var])
-        dot_q = f(self.symbol_db.t, *self._flat_system.g)
-        idx = self._flat_system.add_quadrature(dot_q)
-        return idx
+    # def add_quadrature(self, integrand):
+    #
+    #     y_var = self.model.outputs(self.t)
+    #     unbound_params = integrand.symbols() - {y_var, self.t}
+    #     assert not unbound_params
+    #
+    #     #f = symbolic.lambdify(integrand, [self.t, y_var])
+    #     args = [
+    #         self.t,
+    #     ]
+    #     expression = integrand.call(
+    #
+    #     )
+    #     dot_q = f(self.end, *self._flat_system.g)
+    #     idx = self._flat_system.add_quadrature(dot_q)
+    #     return idx
 
     def prepare_path(self, decision_variables: Dict[DecisionVariable, float]):
-        t_final = self.symbol_db.t_final
+        t_final = self.end
         parameters = self.constants.copy()
 
         for dv in decision_variables:
-            if dv is self.symbol_db.t_final:
-                t_final = float(decision_variables[self.symbol_db.t_final])
+            if dv is self.end:
+                t_final = float(decision_variables[self.end])
             else:
                 block, slc = dv.get_source_and_slice()
                 values = decision_variables[dv]
@@ -146,7 +151,7 @@ class SolverContext:
 
         out_dimension = len(constants)
         arguments = symbolic.Variable(shape=(len(proj_indices),))
-        projector = symbolic.projection_matrix(proj_indices, out_dimension)
+        projector = symbolic.projection_matrix(proj_indices, out_dimension).T
         const_vector = symbolic.array(constants)
         graph = projector @ arguments + const_vector
 
@@ -155,16 +160,27 @@ class SolverContext:
     def get_symbolic_integrator(self):
         integrator = self.get_integrator()
         param_map = self._create_parameter_projections()
-        if symbolic.is_symbolic(self.end):
-            def func(t, p):
-                p_prime = param_map.call(p)
-                return integrator(t, p_prime)
+
+        if is_symbolic(self.end):
+            def f(t, p):
+                args = param_map(p)
+                return integrator(t, args)
         else:
-            def func(p):
-                p_prime = param_map.call(p)
-                t_end = self.end
-                return integrator(t_end, p_prime)
-        return func
+            def f(p):
+                args = param_map(p)
+                return integrator(args[0], args[1:])
+        return f
+
+        # if symbolic.is_symbolic(self.end):
+        #     def func(t, p):
+        #         p_prime = param_map.call(as_vector(p))
+        #         return integrator(t, *p_prime)
+        # else:
+        #     def func(p):
+        #         p_prime = param_map.call(as_vector(p))
+        #         t_end = self.end
+        #         return integrator(t_end, *p_prime)
+        # return func
 
     def evaluate(self, problem: 'Problem',
                  decision_variables: Dict[DecisionVariable, float]):
@@ -189,8 +205,8 @@ class SolverContext:
     def solve(self, problem):
         raise NotImplementedError
 
-    def _get_parameter_vector(self):
-        return [self.constants[p] for p in self.model.parameters]
+    # def _get_parameter_vector(self):
+    #     return [self.constants[p] for p in self.model.parameters]
 
     def integrate(self, parameters=None, t_final=None, resolution=50):
 
@@ -199,7 +215,7 @@ class SolverContext:
         p = self._parameter_map(parameters)
 
         if not t_final:
-            t_final = self.symbol_db.t_final
+            t_final = self.end
         soln = integrator.integrate(t_final, p)
 
         return soln
@@ -210,23 +226,9 @@ class SolverContext:
 
     def get_integrator(self, resolution=50):
         return Integrator(
-            self.symbol_db.t,
             self._flat_system,
             resolution=resolution
         )
-
-    def is_time_varying(self, symbol_or_expression):
-
-        symbols = symbolic.list_symbols(symbol_or_expression)
-        if self.t in symbols:
-            return True
-
-        for s, _ in self.symbol_db.path_variables:
-            for s_prime in symbols:
-                if id(s) == id(s_prime):
-                    return True
-
-        return False
 
     def problem(self, arguments, cost, subject_to=None):
         return Problem(self, arguments, cost, subject_to)

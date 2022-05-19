@@ -135,6 +135,26 @@ def concatenate(*args):
     raise NotImplementedError
 
 
+def to_graph(wrapper):
+    from sysopt.symbolic import ExpressionGraph, concatenate
+    from sysopt.symbolic.symbols import symbolic_vector
+    import numpy as np
+    if isinstance(wrapper.domain, int):
+        x = symbolic_vector('parameters', wrapper.domain)
+        return wrapper.function(x)
+
+    symbols = [
+        symbolic_vector(name, length) if length > 0 else None
+        for name, length in asdict(wrapper.domain).items()
+    ]
+    g = concatenate(*wrapper(*symbols))
+    if not isinstance(g, ExpressionGraph):
+        n, = g.shape
+        g = np.eye(n) @ g
+
+    return g
+
+
 class BlockFunctionWrapper(FunctionOp):
     """Wrapper for differentiable functions.
 
@@ -160,6 +180,7 @@ class BlockFunctionWrapper(FunctionOp):
         ]
 
         return self.function(t, *args)
+
 
     @staticmethod
     def _partition_func(d: Domain,

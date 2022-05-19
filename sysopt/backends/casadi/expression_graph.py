@@ -52,7 +52,7 @@ def lambdify(graph,
             args = [recurse(child) for child in graph.edges[node]]
             return obj(*args)
         if is_matrix(obj):
-            return cast(obj)
+            return _casadi.SX(obj)
         try:
             return substitutions[obj]
         except (KeyError, TypeError):

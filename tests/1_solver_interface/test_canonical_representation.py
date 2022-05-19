@@ -44,21 +44,21 @@ class DampedHarmonicOscillator(Block):
         return states[1],
 
 
-def test_add_quadratures():
-    """
+# def test_add_quadratures():
+#     """
+#
+#     """
+#     from sysopt.symbolic import time_integral
+#     block = DampedHarmonicOscillator()
+#
+#     t_final = 10
+#     constants = {block.parameters[0]: 0.1}
+#     frequency = Parameter(block, 1)
+#     with SolverContext(block, t_final, constants) as solver:
+#         y = block.outputs(solver.t)
+#         q_dot = y ** 2
+#         quadrature = time_integral(q_dot)
+#
+#         # integrate solution
 
-    """
-
-    block = DampedHarmonicOscillator()
-
-    t_final = 10
-    constants = {block.parameters[0]: 0.1}
-    frequency = Parameter(block, 1)
-    with SolverContext(block, t_final, constants) as solver:
-        y = block.outputs(solver.t)
-        q_dot = y ** 2
-        quad_idx = solver.add_quadrature(q_dot)
-
-        # integrate solution
-        soln = solver.prepare_path({frequency: 1})
 

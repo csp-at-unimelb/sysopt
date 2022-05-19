@@ -18,7 +18,6 @@ plt.ion()
 """
 # @nb.code_cell
 from sysopt import Block, Metadata, Composite
-from sysopt.backends import heaviside, exp
 from sysopt.symbolic import Variable, Parameter
 from sysopt.solver import SolverContext
 import numpy as np
@@ -126,7 +125,7 @@ class DragModel(Block):
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
         d_max, rho = parameters
         y, = inputs
-        return d_max * exp(- rho * y),
+        return d_max * np.exp(- rho * y),
 
 
 # @nb.text_cell
@@ -155,7 +154,7 @@ class OpenLoopController(Block):
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
 
         cutoff_time, = parameters
-        return heaviside(cutoff_time - t, eps=1e-2),
+        return np.heaviside(cutoff_time - t, 0.5),
 
 
 # @nb.text_cell

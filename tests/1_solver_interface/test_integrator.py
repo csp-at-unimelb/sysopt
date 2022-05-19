@@ -40,7 +40,7 @@ class LinearScalarEquation(Block):
 
     def initial_state(self, parameters: Parameters) -> Numeric:
         _, x0 = parameters
-        return x0,
+        return x0
 
     def compute_dynamics(self,
                          t: Time,
@@ -50,7 +50,7 @@ class LinearScalarEquation(Block):
                          parameters: Parameters):
         x, = states
         a, _ = parameters
-        return [-x*a]
+        return -x*a
 
     def compute_outputs(self,
                         t: Time,
