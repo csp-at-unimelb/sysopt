@@ -2,7 +2,6 @@ from dataclasses import asdict
 
 import casadi as _casadi
 from sysopt.backends.casadi.math import fmin, fmax, heaviside
-from sysopt.backends.casadi.symbols import *
 from sysopt.backends.casadi.expression_graph import lambdify
 from sysopt.types import Domain
 # from sysopt.solver.symbol_database import FlattenedSystem
@@ -124,7 +123,7 @@ def evaluate(func, symbols):
     return result
 
 
-def generate_dae_from(flattened_system):
+def generate_dae_from(flattened_system, quadratures):
     symbols = construct_symbols_from(flattened_system.domain)
     t, x, z, u, p = symbols.values()
     assert u.size() == (0, 1), u.size()
@@ -149,8 +148,13 @@ def generate_dae_from(flattened_system):
         assert z.size() == (0, 1)
         solver = 'idas'
 
-    if flattened_system.quadratures:
-        raise NotImplementedError
+    if quadratures:
+        integrand = quadratures.vector_quadrature.call(
+            {quadratures.output_variable: flattened_system.output_map}
+        )
+
+        q_dot = t_final * evaluate(integrand, symbols)
+        spec.update(dict(quad=q_dot))
 
     p_name = list(symbols.keys())[-1]
 
@@ -163,19 +167,22 @@ def generate_dae_from(flattened_system):
     output_map = _casadi.Function(
         'g', [t, x, z, p], [evaluate(flattened_system.output_map, symbols)]
     )
-    return solver, spec, initial_conditions, output_map
+
+    return solver, spec, initial_conditions, output_map, symbols
 
 
 class Integrator:
     """A casadi based solve for the given system."""
-    def __init__(self, system, resolution=50):
+    def __init__(self, system, resolution=50, quadratures=None):
         solver_options = {
             'grid': [i / resolution for i in range(resolution + 1)],
             'output_t0': True
         }
-        solver, self.dae_spec, self.x0, self.g = generate_dae_from(system)
+        solver, self.dae_spec, self.x0, self.g, symbols = generate_dae_from(
+            system, quadratures)
         self.f = _casadi.integrator('F', 'idas', self.dae_spec, solver_options)
         self.domain = system.domain
+        self.quadratures = quadratures
 
     def pushforward(self, t, p, dp):
         p_sym = _casadi.MX.sym('p', len(p))
@@ -207,10 +214,16 @@ class Integrator:
         z = soln['zf']
 
         y = self.g(tf, x, z, p)
+        if self.quadratures:
+            q = soln['qf']
+            return InterpolatedPath('y', tf, y), InterpolatedPath('q', tf, q)
         return InterpolatedPath('y', tf, y)
 
     def __call__(self, t, p):
         """Integrate from 0 to t"""
         soln = self.integrate(t, p)
-
-        return soln(t)
+        if self.quadratures:
+            y, q = soln
+            return y(t), q(t)
+        else:
+            return soln(t)

@@ -4,14 +4,17 @@ import dataclasses
 import weakref
 from typing import Optional, Dict, List, Union, NewType
 
+import numpy as np
+
 from sysopt import symbolic
 from sysopt.backends import Integrator, lambdify
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
-    is_temporal, create_log_barrier_function, as_vector, is_symbolic
+    is_temporal, create_log_barrier_function, as_vector, is_symbolic,
+    ConstantFunction
 )
 
-from sysopt.solver.symbol_database import FlattenedSystem
+from sysopt.solver.symbol_database import FlattenedSystem, Quadratures
 from sysopt.block import Block, Composite
 
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
@@ -44,7 +47,7 @@ class SolverContext:
         self.t = get_time_variable()
         self.constants = constants
         self.resolution = path_resolution
-        self.quadratures = []
+        self.quadratures = None
         self.parameters = [t_final] if isinstance(t_final, Variable) else []
         self._flat_system = None
         self._parameter_map = None
@@ -86,23 +89,6 @@ class SolverContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._flat_system = None
-
-    # def add_quadrature(self, integrand):
-    #
-    #     y_var = self.model.outputs(self.t)
-    #     unbound_params = integrand.symbols() - {y_var, self.t}
-    #     assert not unbound_params
-    #
-    #     #f = symbolic.lambdify(integrand, [self.t, y_var])
-    #     args = [
-    #         self.t,
-    #     ]
-    #     expression = integrand.call(
-    #
-    #     )
-    #     dot_q = f(self.end, *self._flat_system.g)
-    #     idx = self._flat_system.add_quadrature(dot_q)
-    #     return idx
 
     def prepare_path(self, decision_variables: Dict[DecisionVariable, float]):
         t_final = self.end
@@ -151,7 +137,7 @@ class SolverContext:
 
         out_dimension = len(constants)
         arguments = symbolic.Variable(shape=(len(proj_indices),))
-        projector = symbolic.projection_matrix(proj_indices, out_dimension).T
+        projector = symbolic.inclusion_map(proj_indices, out_dimension)
         const_vector = symbolic.array(constants)
         graph = projector @ arguments + const_vector
 
@@ -171,16 +157,26 @@ class SolverContext:
                 return integrator(args[0], args[1:])
         return f
 
-        # if symbolic.is_symbolic(self.end):
-        #     def func(t, p):
-        #         p_prime = param_map.call(as_vector(p))
-        #         return integrator(t, *p_prime)
-        # else:
-        #     def func(p):
-        #         p_prime = param_map.call(as_vector(p))
-        #         t_end = self.end
-        #         return integrator(t_end, *p_prime)
-        # return func
+    def add_quadrature(self, integrand):
+        if not self.quadratures:
+            idx = 0
+            self.quadratures = Quadratures(
+                self.model.outputs(self.t), integrand)
+        else:
+            idx = self.quadratures.vector_quadrature.shape[0]
+            self.quadratures.vector_quadrature = symbolic.concatenate(
+                self.quadratures.vector_quadrature,
+                integrand
+            )
+        return idx
+
+    def evaluate_quadrature(self, index, t, params):
+        integrator = self.get_integrator()
+        param_map = self._create_parameter_projections()
+        args = param_map(params)
+        y, q = integrator.integrate(self.end, args[1:])
+
+        return q(t)[index]
 
     def evaluate(self, problem: 'Problem',
                  decision_variables: Dict[DecisionVariable, float]):
@@ -205,9 +201,6 @@ class SolverContext:
     def solve(self, problem):
         raise NotImplementedError
 
-    # def _get_parameter_vector(self):
-    #     return [self.constants[p] for p in self.model.parameters]
-
     def integrate(self, parameters=None, t_final=None, resolution=50):
 
         integrator = self.get_integrator(resolution)
@@ -227,11 +220,15 @@ class SolverContext:
     def get_integrator(self, resolution=50):
         return Integrator(
             self._flat_system,
-            resolution=resolution
+            resolution=resolution,
+            quadratures=self.quadratures
         )
 
     def problem(self, arguments, cost, subject_to=None):
         return Problem(self, arguments, cost, subject_to)
+
+    def integral(self, integrand):
+        return symbolic.Quadrature(integrand, self)
 
 
 def lambdify_terminal_constraint(problem: 'Problem',
@@ -308,3 +305,45 @@ class Problem:
         value = cost_term.call(arguments)
         return CandidateSolution(value, y, constraints)
 
+
+def create_parameter_map(model, constants, final_time):
+    try:
+        output_idx, params = zip(*[
+            (idx, Parameter(model, name))
+            for idx, name in enumerate(model.parameters)
+            if name not in constants
+        ])
+    except ValueError:
+        output_idx = []
+        params = []
+    # Parameter Map should look like:
+    #
+    # t_final = < (e_0, params) >
+    # p_final = [ b_i (e^i , params) ,...]
+    # where e^i is the cobasis vector of the parameter in the domain (inputs)
+    # and b_i is the correspnding basis in the output space (output, index)
+
+    constants = np.array([
+        constants[p] if p in constants else 0 for p in model.parameters
+    ])
+
+    if is_symbolic(final_time):
+        params.insert(0, final_time)
+        args = symbolic.symbolic_vector('parameter vector', len(params))
+        pi = symbolic.restriction_map([0], len(params))
+        t_func = pi @ args
+        basis_map = {
+            out_i: in_i
+            for out_i, in_i in zip(output_idx, range(1, len(params)))
+        }
+
+    else:
+        args = symbolic.symbolic_vector('parameter vector', len(params))
+        t_func = ConstantFunction(final_time, arguments=args)
+        basis_map = {k: v for k, v in enumerate(output_idx)}
+    if basis_map:
+        inject = symbolic.inclusion_map(basis_map, len(model.parameters))
+        p_func = inject @ args + constants
+    else:
+        p_func = ConstantFunction(constants, args)
+    return params, t_func, p_func

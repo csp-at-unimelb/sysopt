@@ -1,6 +1,6 @@
 from sysopt.symbolic import (
     Variable, is_symbolic, list_symbols, Parameter,
-    is_temporal, ExpressionGraph, lambdify
+    is_temporal, ExpressionGraph, lambdify, PathInequality
 )
 
 from sysopt.symbolic.symbols import get_time_variable
@@ -135,10 +135,11 @@ def test_supremum_to_function():
     sig = source.outputs(t)
     param = Parameter(source, 0)
 
-    supremum = sig(t) < param
-
     def y(t_):
         return np.exp(-t_)
+
+    supremum = sig(t) < param
+    assert isinstance(supremum, PathInequality)
 
     expr = supremum.call({param: 2, sig: y})
 

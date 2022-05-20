@@ -1,7 +1,7 @@
 """Symbol Database for simulation and optimisation."""
 # pylint: disable=invalid-name
 from typing import Iterable, Callable, Optional, List
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from sysopt.types import Domain
 from sysopt.symbolic import Variable, ExpressionGraph
@@ -20,8 +20,6 @@ class FlattenedSystem:
     output_map: Optional[ExpressionGraph] = None
     constraints: Optional[ExpressionGraph] = None
     inverse_tables: Optional[dict] = None
-    quadratures: Optional[ExpressionGraph] = None
-    reguliarisers: Optional[List[Variable]] = None
     domain: Domain = None
 
     @staticmethod
@@ -38,3 +36,10 @@ class FlattenedSystem:
         graphs = [to_graph(f) if f else None for f in functions]
 
         return FlattenedSystem(*graphs, tables, domain=domain)
+
+
+@dataclass
+class Quadratures:
+    output_variable: Variable
+    vector_quadrature: ExpressionGraph
+    regularisers: List[Variable] = field(default_factory=list)

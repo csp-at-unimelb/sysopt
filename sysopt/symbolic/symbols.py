@@ -3,13 +3,10 @@ import weakref
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from inspect import signature
-
+from functools import cache
 import numpy as np
-from scipy.sparse import dok_matrix, spmatrix
 from typing import Union, List, Callable, Tuple, Optional, Dict
 
-# import sysopt.backends as backend
-from sysopt.symbolic.casts import cast_type
 from sysopt.helpers import flatten
 array = np.array
 epsilon = 1e-12
@@ -18,7 +15,7 @@ epsilon = 1e-12
 def find_param_index_by_name(block, name: str):
     try:
         return block.find_by_name('parameters', name)
-    except ValueError:
+    except (AttributeError, ValueError):
         pass
     try:
         return block.parameters.index(name)
@@ -32,6 +29,25 @@ class Matrix(np.ndarray):
         shape_hash = hash(self.shape)
         data_hash = hash(tuple(self.ravel()))
         return hash((shape_hash, data_hash))
+
+    def __cmp__(self, other):
+        return self is other
+
+    def __eq__(self, other):
+        if isinstance(other, (list, tuple)):
+            return other == self.tolist()
+        try:
+            if self.shape != other.shape:
+                return False
+        except AttributeError:
+            return False
+        if hash(self) != hash(other):
+            return False
+        result = (self - other) == 0
+        if isinstance(result, np.ndarray):
+            return result.all()
+        else:
+            return result
 
 
 def sparse_matrix(shape: Tuple[int, int]):
@@ -49,9 +65,64 @@ def implements(numpy_function):
     return decorator
 
 
-def projection_matrix(indices: List[int], dimension: int):
-    matrix = sparse_matrix((len(indices), dimension))
-    for i, j in enumerate(indices):
+def restriction_map(indices: Union[List[int], Dict[int, int]],
+                    domain_dimension: int):
+    """Project the domain onto a subspace spanned by the indices.
+
+    row space: dimension of the subspace
+    col space: dimension of the source
+    Args:
+        indices:            Coordinate indices of the vector subspace.
+        domain_dimension:   Dimension of the domain.
+
+    Returns:
+        A matrix
+
+    """
+    if isinstance(indices, (list, tuple)):
+        range_dimension = len(indices)
+        iterator = [(j, i) for i, j in enumerate(indices)]
+    else:
+        range_dimension = max(indices.values()) + 1
+        iterator = indices.items()
+    matrix = sparse_matrix((domain_dimension, range_dimension))
+
+    for i, j in iterator:
+        matrix[j, i] = 1
+    return matrix
+
+
+def basis_vector(index, dimension):
+    e_i = np.zeros((dimension,), dtype=float)
+    e_i[index] = 1
+    return e_i
+
+
+def inclusion_map(indices: Union[List[int], Dict[int, int]],
+                  superset_dimension: int) -> Callable:
+    """Map the domain onto a subset of the superset
+
+    Args:
+        indices:
+        superset_dimension:
+
+    Returns:
+
+    """
+
+    if isinstance(indices, (list, tuple)):
+        domain = len(indices)
+        iterator = enumerate(indices)
+    else:
+        domain = max(indices.keys()) + 1
+        iterator = indices.items()
+
+    # if domain == 1:
+    #     _, subspace = next(iterator)
+    #     return basis_vector(subspace, superset_dimension)
+
+    matrix = sparse_matrix((domain, superset_dimension))
+    for i, j in iterator:
         matrix[i, j] = 1
 
     return matrix
@@ -277,6 +348,12 @@ class Algebraic(metaclass=ABCMeta):
         #     return NotImplemented
         return numpy_handlers[func](*args, **kwargs)
 
+    @abstractmethod
+    def __str__(self):
+        raise NotImplementedError(
+            f'{str(self.__class__)} is missing this method'
+        )
+
     @property
     @abstractmethod
     def shape(self):
@@ -300,7 +377,7 @@ class Algebraic(metaclass=ABCMeta):
             indices = slice_to_list(item)
         else:
             indices = [item]
-        pi = projection_matrix(indices, n)
+        pi = inclusion_map(indices, n)
         return ExpressionGraph(matmul, pi, self)
 
     def __add__(self, other):
@@ -369,10 +446,25 @@ def is_op(value):
         return False
 
 
+def recursively_apply(graph: 'ExpressionGraph',
+                      trunk_function,
+                      leaf_function,
+                      current_node=None):
+    if not current_node:
+        current_node = graph.head
+    node_object = graph.nodes[current_node]
+    if current_node not in graph.edges:
+        return leaf_function(node_object)
+
+    children_results = [
+        recursively_apply(graph, trunk_function, leaf_function, child)
+        for child in graph.edges[current_node]
+    ]
+    return trunk_function(node_object, *children_results)
 
 
 class ExpressionGraph(Algebraic):
-    """Graph representation of a symbolic expression."""
+    """Graph stresentation of a symbolic expression."""
 
     def __init__(self, op, *args):
         self.nodes = []
@@ -416,6 +508,13 @@ class ExpressionGraph(Algebraic):
             f'Don\'t know how to get the shape of {obj}'
         )
 
+    def __call__(self, *args, **kwargs):
+
+        assert len(args) == len(self.symbols()),\
+            f'Tried to call function with {self.symbols()} '
+        values = {k: v for k, v in zip(self.symbols(), args)}
+        return self.call(values)
+
     def call(self, values):
 
         def recurse(node):
@@ -432,8 +531,6 @@ class ExpressionGraph(Algebraic):
             except (KeyError, TypeError):
                 pass
 
-            if is_matrix(obj):
-                return cast_type(obj)
             return obj
 
         return recurse(self.head)
@@ -562,10 +659,23 @@ class ExpressionGraph(Algebraic):
 
         return visited
 
+    def __str__(self):
+        def trunk_function(node_object, *children):
+            args = ','.join(children)
+            return f'({str(node_object)}: {args})'
+
+        return recursively_apply(self, trunk_function, str)
+
+
 
 numpy_handlers.update(
     {
-        np.matmul: lambda a, b: ExpressionGraph(matmul, a, b)
+        np.matmul: lambda a, b: ExpressionGraph(matmul, a, b),
+        np.multiply: lambda a, b: ExpressionGraph(mul, a, b),
+        np.add: lambda a, b: ExpressionGraph(add, a, b),
+        np.subtract: lambda a, b: ExpressionGraph(sub, a, b),
+        np.divide: lambda a, b: ExpressionGraph(div, a, b),
+        np.negative: lambda x: ExpressionGraph(neg, x)
     }
 )
 
@@ -583,12 +693,12 @@ class Variable(Algebraic):
         self._shape = shape
         self.name = name
 
-    def __repr__(self):
+    def __str__(self):
         if self.name is not None:
             return f'{self.__class__.__name__}({self.name})'
         else:
-            return super().__repr__()
-
+            return 'unnamed_variable'
+    
     @property
     def shape(self):
         return self._shape
@@ -658,6 +768,9 @@ class Parameter(Algebraic):
     def name(self):
         return self._parent().parameters[self.index]
 
+    def __str__(self):
+        return self.name
+
     @property
     def shape(self):
         return scalar_shape
@@ -683,6 +796,10 @@ class Function(Algebraic):
         self.function = function
         self.arguments = arguments
 
+    def __str__(self):
+        args = ','.join(self.arguments)
+        return f'{str(self.function)}({args})'
+
     @property
     def shape(self):
         return self._shape
@@ -702,7 +819,7 @@ class Function(Algebraic):
 
 
 class SignalReference(Algebraic):
-    """Symbolic variable representing a time varying signal.
+    """Symbolic variable stresenting a time varying signal.
 
     Args:
         port: The model port from which this signal is derived.
@@ -726,6 +843,9 @@ class SignalReference(Algebraic):
         new_signal = super().__new__(cls)
         SignalReference._signals[source_id] = weakref.ref(new_signal)
         return new_signal
+
+    def __str__(self):
+        return str(self.port)
 
     @property
     def t(self):
@@ -761,7 +881,11 @@ class SignalReference(Algebraic):
 
     def call(self, args):
         function = args[self]
-        result = Function(self.shape, function, [self.t])
+        if isinstance(function, ExpressionGraph):
+            result = function
+        else:
+            result = Function(self.shape, function, [self.t])
+
         if self.t in args:
             return result.call(args)
         else:
@@ -827,16 +951,19 @@ def is_temporal(symbol):
 
 
 def is_matrix(obj):
-    return isinstance(obj, (np.ndarray, spmatrix))
+    return isinstance(obj, np.ndarray)
 
 
 class Quadrature(Algebraic):
-    """Variable representing a quadrature."""
+    """Variable stresenting a quadrature."""
 
     def __init__(self, integrand, context):
         self.integrand = integrand
         self._context = weakref.ref(context)
         self.index = context.add_quadrature(integrand)
+
+    def __str__(self):
+        return f'(int_0^t {str(self.integrand)} dt'
 
     @property
     def shape(self):
@@ -853,13 +980,7 @@ class Quadrature(Algebraic):
         return self.integrand.symbols()
 
     def __call__(self, t, *args):
-        f = self.context.get_symbolic_integrator(self.context.parameters)
-        return f(t, *args)
-
-
-@register_op()
-def time_integral(integrand, context):
-    return Quadrature(integrand, context)
+        return self.context.evaluate_quadrature(0, t, *args)
 
 
 def concatenate(*arguments):
@@ -881,12 +1002,12 @@ def concatenate(*arguments):
     inclusions = []
     if constants:
         constant_indices, constant_vector = zip(*constants.items())
-        inclusion = projection_matrix(constant_indices, length).T
+        inclusion = inclusion_map(constant_indices, length)
         vector = np.array(constant_vector)
         inclusions.append((inclusion, vector))
 
     for variable, indices in variables.items():
-        inclusion_v = projection_matrix(indices, length).T
+        inclusion_v = inclusion_map(indices, length)
         inclusions.append((inclusion_v, variable))
 
     pair = inclusions.pop()
@@ -929,3 +1050,28 @@ def create_log_barrier_function(constraint, stiffness):
     # pylint: disable=import-outside-toplevel
     from sysopt.symbolic.scalar_ops import log
     return - stiffness * log(stiffness * constraint + 1)
+
+
+class ConstantFunction(Algebraic):
+    def __init__(self, value, arguments: List[Union[Variable, Parameter]]):
+        self.value = value
+        self.arguments = arguments
+
+    def __hash__(self):
+        return hash((*self.arguments, self.value))
+
+    @property
+    def shape(self):
+        if isinstance(self.value, (float, int)):
+            return scalar_shape
+        else:
+            return self.value.shape
+
+    def __str__(self):
+        return str(self.value)
+
+    def symbols(self):
+        return self.arguments
+
+    def __call__(self, *args, **kwargs):
+        return self.value

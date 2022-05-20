@@ -1,6 +1,6 @@
 """Casadi Backend Implementation."""
 import casadi as _casadi
-from sysopt.backends.casadi.symbols import *
+
 from sysopt.backends.casadi.expression_graph import lambdify
 from sysopt.backends.casadi.solvers import Integrator, InterpolatedPath
 epsilon = 1e-9

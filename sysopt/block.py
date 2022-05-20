@@ -5,7 +5,7 @@ from dataclasses import asdict
 from sysopt.types import (Signature, Metadata, Time, States, Parameters,
                           Inputs, Algebraics, Numeric)
 
-from sysopt.symbolic.symbols import SignalReference, projection_matrix
+from sysopt.symbolic.symbols import SignalReference, inclusion_map
 
 Pin = NewType('Pin', Union['Port', 'Channel'])
 Connection = NewType('Connection', Tuple[Pin, Pin])
@@ -107,7 +107,7 @@ class Channel:
     def __call__(self, t):
         y = self.port(t)
 
-        pi = projection_matrix(self.indices, y.shape[0])
+        pi = inclusion_map(self.indices, y.shape[0])
         return pi @ y
 
     @property
@@ -385,9 +385,9 @@ class Composite(ComponentBase):  # noqa
 
     @property
     def parameters(self):
-
-        return [p for sub_block in self.components
-                for p in sub_block.parameters]
+        return [
+            p for sub_block in self.components for p in sub_block.parameters
+        ]
 
     def find_by_type_and_name(self, var_type, var_name):
         for component in self.components:

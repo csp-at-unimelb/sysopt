@@ -17,7 +17,7 @@ import pytest
 
 from sysopt import Signature, Composite
 from sysopt.solver import SolverContext, Parameter
-from sysopt.symbolic import time_integral
+
 from sysopt.blocks.builders import FullStateOutput, InputOutput
 
 import numpy as np
@@ -77,7 +77,7 @@ def test_model_assembly():
         u = model.outputs[4:6](t)
         x = model.outputs[0:4](t)
 
-        loss = time_integral(x.T @ Q_x @ x + u.T @ Q_u @ u)
+        loss = solver.integral(x.T @ Q_x @ x + u.T @ Q_u @ u)
         constraints = [
             x[0: 2].T @ x[0: 2] < 2,
             u.T @ u < 1

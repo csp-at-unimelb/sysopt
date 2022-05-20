@@ -11,8 +11,6 @@
 
 # Requirements:
 # - fixed window of integration
-import numpy
-import numpy as np
 
 from sysopt.types import *
 from sysopt.block import Block
@@ -121,4 +119,8 @@ class TestSymbolicIntegrator:
 
             expected = block.pushforward(t, params, dparams)
             assert abs(result[0][0] - expected) < 1e-2
+
+
+
+
 
