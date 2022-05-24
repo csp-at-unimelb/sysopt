@@ -136,7 +136,7 @@ class SymbolDatabase:
         import sympy as sp
 
         for i in range(len(flat_system.f)):
-            flat_system.f[i] = sp.factor(flat_system.f[i])
+            flat_system.f[i] = sp.simplify(flat_system.f[i])
         return flat_system
 
     def sub_explicit_eqs(self,flat_system):

@@ -9,6 +9,7 @@ from sympy import (
     Pow as power,
     Max as fmax, Min as fmin, sign
 )
+import sympy as sp
 
 def heaviside(x, eps=1e-4):
     return 1/(1 + exp(-2*x/eps))
@@ -17,3 +18,10 @@ def heaviside(x, eps=1e-4):
 def dirac(x, eps=1e-4):
     """Dirac delta function"""
     return heaviside(x - eps) + heaviside(eps - x)
+
+def piecewise(*pieces):
+
+    f = sp.Piecewise(*pieces)
+    return f
+
+    

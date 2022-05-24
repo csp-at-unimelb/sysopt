@@ -9,6 +9,70 @@ import numpy as np
 from sysopt.backends import atan2, sin, cos
 # from sysopt.backends import heaviside
 
+
+class Environment_3DoF_polar(Block):
+    """
+    Phyisical Simualtion Environment for 3 Degree of Freedom (3-DoF) trimmed
+    simulations.
+    """
+    def __init__(self):
+        metadata = Metadata(
+            state = ["X", "Y", "Z", "V", "Chi", "Gamma"],
+            inputs=["f1", "f2", "f3", "Fuel_Mass", "ISP", "g_x", "g_y", "g_z"],
+            outputs=["Velocity", "Altitude", "Chi", "Gamma"],
+            parameters=["X0", "Y0", "Z0", "V0", "Chi0", "Gamma0", "Vehicle mass (dry) in kg"]
+        )
+        super().__init__(metadata)
+
+    def initial_state(self, parameters):
+        X0, Y0, Z0, V0, Chi0, Gamma0, _1 = parameters
+        return [
+            X0,
+            Y0,
+            Z0,
+            V0,
+            Chi0,
+            Gamma0
+        ]
+
+    def compute_dynamics(self, t, state, algebraics, inputs, parameters):
+        X, Y, Z, V, Chi, Gamma = state
+        f1, f2, f3, fuel_mass, _1, g_x, g_y, g_z = inputs
+        X0, Y0, Z0, V0, Chi0, Gamma0, vehicle_mass_dry = parameters
+
+        mass = vehicle_mass_dry + fuel_mass
+
+        Xdot = cos(Gamma)*cos(Chi)*V 
+        Ydot = cos(Gamma)*sin(Chi)*V 
+        Zdot = -sin(Gamma)*V
+
+        V_dot = f1/mass + cos(Gamma)*cos(Chi)*g_x + cos(Gamma)*sin(Chi)*g_y -sin(Gamma)*g_z
+        Chi_dot = (1/(V*cos(Gamma))) * ( f2/mass  -sin(Chi)*g_x + cos(Chi)*g_y)
+        Gamma_dot = (-1/V)* (f3/mass + sin(Gamma)*cos(Chi)*g_x + sin(Gamma)*sin(Chi)*g_y + cos(Gamma)*g_z)
+
+        return [
+            Xdot,
+            Ydot,
+            Zdot,
+            V_dot,
+            Chi_dot,
+            Gamma_dot
+        ]
+
+    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+        X, Y, Z, V, Chi, Gamma = state
+        f1, f2, f3, fuel_mass, _1, g_x, g_y, g_z = inputs
+        X0, Y0, Z0, V0, Chi0, Gamma0, vehicle_mass_dry = parameters
+        vehicle_mass_wet = vehicle_mass_dry + fuel_mass
+
+        return [
+            V,  # 0
+            -Z,  # 1
+            Chi,  # 2
+            Gamma  # 3
+        ]
+
+
 class Environment_3DoF(Block):
     """
     Phyisical Simualtion Environment for 3 Degree of Freedom (3-DoF) trimmed

@@ -7,6 +7,7 @@ Collection of atmospheric models to be used by sysopt for hypersonic vehicle sim
 from sysopt import Block, Metadata
 from sysopt.backends import heaviside
 from sysopt.backends import exp
+from sysopt.backends import piecewise
 import numpy as np
 
 
@@ -78,10 +79,12 @@ class AtmosphereINT1962(Block):
         geopotential_altitude = R_e*geometric_altitude / (R_e+geometric_altitude)
         h = geopotential_altitude/1000  # geopotential altitude in km
 
-        print("updated")
-        T = (288.15 - 6.5*h) * heaviside(11-h) + 216.65 * heaviside(h-11)
-        P = (101325.0 * (T/288.15)**5.2559) * heaviside(11-h) + (22632.06 * exp(-0.15769 * (h - 11))) * heaviside(h-11)
+        #  print("updated")
+        #  T = (288.15 - 6.5*h) * heaviside(11-h) + 216.65 * heaviside(h-11)
+        #  P = (101325.0 * (T/288.15)**5.2559) * heaviside(11-h) + (22632.06 * exp(-0.15769 * (h - 11))) * heaviside(h-11)
 
+        T = piecewise( (288.15 - 6.5*h,h<=11),(216.65,True) )
+        P = piecewise( (101325*((288.15 - 6.5*h)/288.15)**5.2559,h<=11),(22630*exp(-0.15769 * (h-11)),True) )
 
         #T = 216.65 + ((11-h) * 6.5 * heaviside(11-h))
         #P = (101325.0 * (T/288.15)**5.2559) #* heaviside(11-h)
@@ -173,3 +176,43 @@ class AtmosphereUS1976(Block):
             velocity/speed_of_sound,
             T
         ]
+
+class AtmosphereUS1976Poly(Block):
+    """
+    Curve-fit using US 1976 points:
+    https://en.wikipedia.org/wiki/U.S._Standard_Atmosphere#cite_note-USA_1962-4
+    """
+    def __init__(self):
+        metadata = Metadata(
+            inputs=["Altitude", "Velocity"],
+            outputs=["Density", "Mach", "Temperature"],
+            parameters=[],
+        )
+        super().__init__(metadata)
+
+    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+        # T0 = 288.15  # K
+        # P0 = 101325  # Pa
+        gamma = 1.4  # -
+        R = 287.053  # J/kg-K
+
+        geometric_altitude, velocity = inputs
+        #  geopotential_altitude = R_e*geometric_altitude / (R_e+geometric_altitude)
+        h = -geometric_altitude/1000  # geopotential altitude in km
+
+        C_T = [2.49698758e-05, -6.30596313e-03,  4.57479877e-01, -1.08795947e+01, 2.95390111e+02]
+        C_p = [ 3.01088666e-02, -5.52942148e+00,  3.65461083e+02, -1.02955447e+04, 1.05136679e+05]
+
+        T = C_T[0]*h**4 + C_T[1]*h**3 + C_T[2]*h**2 + C_T[3]*h + C_T[4]
+        P = C_p[0]*h**4 + C_p[1]*h**3 + C_p[2]*h**2 + C_p[3]*h + C_p[4]
+
+        density = P / (R*T)
+        speed_of_sound = (gamma * R * T)**0.5
+
+        return [
+            density,
+            velocity/speed_of_sound,
+            T
+        ]
+
+

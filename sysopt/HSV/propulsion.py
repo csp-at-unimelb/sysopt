@@ -58,11 +58,11 @@ class PropulsionSimple2(Block):
     """
     def __init__(self):
         metadata = Metadata(
-            inputs=["Throttle", "Altitude", "Density", "Mach"],
-            state=["Fuel_mass"],
-            constraints=["Fuel_flow"],
+            inputs=["throttle", "Altitude", "Density", "Mach"],
+            state=["fuel_mass"],
+            constraints=["fuel_flow"],
             outputs=["thrust_1", "thrust_2", "thrust_3", "Fuel_mass", "isp"],
-            parameters=["thrust_max in N", "ISP in seconds"]
+            parameters=["thrust_max in N", "ISP in seconds", "]
         )
         super().__init__(metadata)
 
@@ -106,24 +106,23 @@ class PropulsionSimple2(Block):
             isp
         ]
 
-class PropulsionSimple3(Block):
+class PropulsionAxial(Block):
     """
     Propuslion system with simple scalable thrust
-    Reconfigured from PropulsionSimple2 without residuals and with dynamics
-    Also removes heaviside from fuel level
+    Note: Does not include heaviside function for negative fuel mass
     """
     def __init__(self):
         metadata = Metadata(
-            inputs=["Throttle", "Altitude", "Density", "Mach"],
-            state=["Fuel_mass"],
+            inputs=["throttle in fraction", "altitude in m", "density in kg/m3", "mach in -"],
+            state=["fuel_mass in kg"],
             constraints=[],
-            outputs=["thrust_1", "thrust_2", "thrust_3", "Fuel_mass", "isp"],
-            parameters=["thrust_max in N", "ISP in seconds"]
+            outputs=["thrust_1 in N", "thrust_2 in N", "thrust_3 in N", "fuel_mass in kg", "isp in s"],
+            parameters=["thrust_max in N", "ISP in s", "fuel_mass0 in kg"]
         )
         super().__init__(metadata)
 
     def initial_state(self, parameters):
-        fuel_mass_0 = 3
+        _, _, fuel_mass_0 = parameters
         return [
             fuel_mass_0
         ]
@@ -134,7 +133,6 @@ class PropulsionSimple3(Block):
         throttle, _, _, _ = inputs
         thrust_max, isp = parameters
         max_fuel_flow =  thrust_max / (g0 * isp)
-        #  m_dot_fuel = throttle * max_fuel_flow * heaviside(fuel_mass)
         m_dot_fuel = throttle * max_fuel_flow
 
         return [
