@@ -13,7 +13,7 @@ def lambdify(graph,
         if isinstance(arg, list):
             assert all(sub_arg.shape == scalar_shape for sub_arg in arg), \
                 'Invalid arguments, lists must be a list of scalars'
-            symbol = _casadi.SX.sym(f'x_{i}', (len(arg), 1))
+            symbol = _casadi.SX.sym(f'x_{i}', len(arg))
             substitutions.update(
                 {sub_arg: symbol[j] for j, sub_arg in enumerate(arg)})
         else:
@@ -23,21 +23,25 @@ def lambdify(graph,
                 n, m = arg.shape
                 if m > 1:
                     raise ex
-            symbol = _casadi.SX.sym(f'x_{i}', (n, 1))
+            symbol = _casadi.SX.sym(f'x_{i}', n)
             substitutions[arg] = symbol
+
+    def casadify(item):
+        if is_matrix(item):
+            return _casadi.SX(item)
+        if isinstance(item, (int, float, complex)):
+            return _casadi.SX(item)
+        if item in substitutions:
+            return substitutions[item]
+        raise NotImplementedError(f'Don\'t know how to handle {item}')
 
     def recurse(node):
         obj = graph.nodes[node]
         if is_op(obj):
             args = [recurse(child) for child in graph.edges[node]]
             return obj(*args)
-        if is_matrix(obj):
-            return _casadi.SX(obj)
-        try:
-            return substitutions[obj]
-        except (KeyError, TypeError):
-            return obj
-
+        else:
+            return casadify(obj)
     expressions = recurse(graph.head)
 
     try:

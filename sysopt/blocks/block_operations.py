@@ -4,14 +4,16 @@ import copy
 from dataclasses import dataclass, asdict
 from typing import Callable, Union, Iterable
 
-from sysopt.types import Domain
 
+from sysopt.types import Domain
 from sysopt.block import Block, Composite
 from sysopt.helpers import flatten, strip_nones
-
-from sysopt.symbolic.symbols import as_vector, sparse_matrix
+from sysopt.symbolic.symbols import (
+    as_vector, sparse_matrix, as_function, symbolic_vector,
+    get_time_variable, concatenate
+)
 from sysopt.symbolic.function_ops import (
-    FunctionOp, Concatenate, project, compose
+    FunctionOp, Concatenate, project, compose,
 )
 
 
@@ -123,7 +125,7 @@ class VectorFunctionWrapper:
         )
 
 
-def concatenate(*args):
+def concatenate_block_func(*args):
     flat_args = strip_nones(flatten(args, 2))
     if any(isinstance(arg, FunctionOp) for arg in flat_args):
         return Concatenate(*flat_args)
@@ -136,9 +138,7 @@ def concatenate(*args):
 
 
 def to_graph(wrapper):
-    from sysopt.symbolic import ExpressionGraph, concatenate
-    from sysopt.symbolic.symbols import symbolic_vector
-    import numpy as np
+
     if isinstance(wrapper.domain, int):
         x = symbolic_vector('parameters', wrapper.domain)
         return wrapper.function(x)
@@ -147,12 +147,12 @@ def to_graph(wrapper):
         symbolic_vector(name, length) if length > 0 else None
         for name, length in asdict(wrapper.domain).items()
     ]
-    g = concatenate(*wrapper(*symbols))
-    if not isinstance(g, ExpressionGraph):
-        n, = g.shape
-        g = np.eye(n) @ g
 
-    return g
+    symbols[0] = get_time_variable()
+    symbolic_call = wrapper(*symbols)
+    graph = as_function(symbolic_call, symbols)
+
+    return graph
 
 
 class BlockFunctionWrapper(FunctionOp):
@@ -180,7 +180,6 @@ class BlockFunctionWrapper(FunctionOp):
         ]
 
         return self.function(t, *args)
-
 
     @staticmethod
     def _partition_func(d: Domain,
@@ -439,12 +438,12 @@ def create_functions_from_block(block: Union[Block, Composite]):
 
     f = compose(f, arg_permute)
     if h:
-        h = concatenate(compose(h, arg_permute), *h_new)
+        h = concatenate_block_func(compose(h, arg_permute), *h_new)
     else:
-        h = concatenate(*h_new)
+        h = concatenate_block_func(*h_new)
     if g_actual:
         items = list(g_actual[i] for i in range(len(block.outputs)))
-        g = concatenate(*items)
+        g = concatenate_block_func(*items)
     else:
         g = None
 

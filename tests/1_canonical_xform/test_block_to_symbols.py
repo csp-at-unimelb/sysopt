@@ -3,9 +3,12 @@ import pytest
 from sysopt.types import *
 from sysopt.block import Block, Composite
 
-from sysopt.blocks.block_operations import create_functions_from_block
+from sysopt.blocks.block_operations import (
+    create_functions_from_block, to_graph)
 from sysopt.blocks import Gain
-from sysopt.symbolic import is_symbolic, SymbolicVector
+from sysopt.symbolic import (
+    is_symbolic, SymbolicVector, match_args_by_name, as_vector
+)
 
 
 class BlockMock(Block):
@@ -116,6 +119,24 @@ class TestSymbolicFunctionsFromLeafBlock:
 
         h_result = h(*args)
         assert is_symbolic(h_result)
+
+    def test_functions_to_expression_graph(self):
+        block_1 = BlockMock("block_1")
+        x0, f, g, h, _ = create_functions_from_block(block_1)
+        funcs = [f, g, h]
+        values = dict(
+            time=0, states=2, constraints=3, inputs=5, parameters=0
+        )
+
+        for func in funcs:
+            graph = to_graph(func)
+            func_result = func(*values.values())
+
+            graph_result = as_vector(
+                graph.call(match_args_by_name(graph, values))
+            )
+            print(graph.nodes)
+            assert graph_result == func_result
 
     def test_skip_not_implemented_functions(self):
         # Makes sure we are skipping stuff that isn't defined.
@@ -317,4 +338,3 @@ class TestSymbolicFunctionsFromCompositeBlock:
         actual_names = {entry.name for entry in tables['constraints']}
         for name in expected_names:
             assert name in actual_names
-

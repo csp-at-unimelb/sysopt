@@ -152,10 +152,10 @@ def generate_dae_from(flattened_system, quadratures):
         integrand = quadratures.vector_quadrature.call(
             {quadratures.output_variable: flattened_system.output_map}
         )
-
         q_dot = t_final * evaluate(integrand, symbols)
-        spec.update(dict(quad=q_dot))
 
+        spec.update(dict(quad=q_dot))
+        print(spec)
     p_name = list(symbols.keys())[-1]
 
     x0_impl = _casadi.vertcat(
@@ -180,6 +180,7 @@ class Integrator:
         }
         solver, self.dae_spec, self.x0, self.g, symbols = generate_dae_from(
             system, quadratures)
+
         self.f = _casadi.integrator('F', 'idas', self.dae_spec, solver_options)
         self.domain = system.domain
         self.quadratures = quadratures

@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 import random
 from sysopt.block import Composite
@@ -31,7 +32,20 @@ def build_example():
     def output(t, w):
         return (w * math.cos(t) + math.sin(t))/(w**2 + 1)
 
-    return model, constants, output
+    def quadrature(t, w):
+        # Analytically determined via Wolfram Alpha, or Sympy
+        scaling = 4 * (1 + w ** 2) ** 2
+
+        def integral(tau):
+            return (
+              2 * (tau * (1 + w**2) + w)
+              + (w**2 - 1) * math.sin(2 * tau)
+              - 2 * w * math.cos(2 * tau)
+            ) / scaling
+
+        return integral(t) - integral(0)
+
+    return model, constants, output, quadrature
 
 
 class TestParameterMap:
@@ -47,7 +61,7 @@ class TestParameterMap:
     """
 
     def test_generates_identity_map_with_fixed_time_no_args(self):
-        model, _, _ = build_example()
+        model, *_ = build_example()
 
         expected_params = [Parameter(model, p) for p in model.parameters]
 
@@ -65,7 +79,7 @@ class TestParameterMap:
         assert p_test == p_result
 
     def test_generates_constant_map_with_variable_time(self):
-        model, _, _ = build_example()
+        model, *_ = build_example()
         constants = {p: random.random() for p in model.parameters}
 
         t_final = Variable('t_final')
@@ -79,15 +93,15 @@ class TestParameterMap:
         assert p_result == list(constants.values())
 
     def test_mixed_map(self):
-        model, constants, _ = build_example()
+        model, constants, *_ = build_example()
         t_final = Variable('t_final')
-        params, mapping = create_parameter_map(model, constants, t_final)
+        params, t_map, p_map = create_parameter_map(model, constants, t_final)
 
         assert params[0] == t_final
 
-
+@pytest.mark.skip
 def test_quadrature():
-    model, constants, output = build_example()
+    model, constants, output, quad = build_example()
 
     t_f = 10
     with SolverContext(model, t_f, constants) as solver:
@@ -115,13 +129,18 @@ def test_quadrature():
 
         # we should be able to check that this is now a function
         # with 2 arguments: time t and
-        assert len(squared.symbols()) == 2
+
+        w = 1
+        y_f, q_f = solver.integrate(parameters=w, t_final=t_f)
+        error = [
+            output(t_i, 1) - y_f(t_i) for t_i in np.linspace(0, t_f, 50)
+        ]
+
 
         soln = squared(t_f, 1)
         # calling
 
         # solution should be given by
-        # integral_0^10 cos^2(t) dt = 5 + sin(20)/4
-        expected_soln = 5 + math.sin(20) / 4
+        expected_soln = quad(t_f, w)
         assert abs(soln - expected_soln) < eps
 

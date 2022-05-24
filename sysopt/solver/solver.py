@@ -136,11 +136,13 @@ class SolverContext:
                 proj_indices.append(row)
 
         out_dimension = len(constants)
-        arguments = symbolic.Variable(shape=(len(proj_indices),))
+        arguments = symbolic.Variable(shape=(len(proj_indices), ))
+
         projector = symbolic.inclusion_map(proj_indices, out_dimension)
         const_vector = symbolic.array(constants)
-        graph = projector @ arguments + const_vector
+        pi_args = projector(arguments)
 
+        graph = pi_args + const_vector
         return symbolic.lambdify(graph, [arguments], 'params')
 
     def get_symbolic_integrator(self):
@@ -313,6 +315,7 @@ def create_parameter_map(model, constants, final_time):
             for idx, name in enumerate(model.parameters)
             if name not in constants
         ])
+        params = list(params)
     except ValueError:
         output_idx = []
         params = []
@@ -330,20 +333,19 @@ def create_parameter_map(model, constants, final_time):
     if is_symbolic(final_time):
         params.insert(0, final_time)
         args = symbolic.symbolic_vector('parameter vector', len(params))
-        pi = symbolic.restriction_map([0], len(params))
-        t_func = pi @ args
+        pi = symbolic.inclusion_map([0], len(params))
+        t_func = pi(args)
         basis_map = {
             out_i: in_i
             for out_i, in_i in zip(output_idx, range(1, len(params)))
         }
-
     else:
         args = symbolic.symbolic_vector('parameter vector', len(params))
         t_func = ConstantFunction(final_time, arguments=args)
         basis_map = {k: v for k, v in enumerate(output_idx)}
     if basis_map:
-        inject = symbolic.inclusion_map(basis_map, len(model.parameters))
-        p_func = inject @ args + constants
+        inject = symbolic.restriction_map(basis_map, len(model.parameters))
+        p_func = inject(args) + constants
     else:
         p_func = ConstantFunction(constants, args)
     return params, t_func, p_func

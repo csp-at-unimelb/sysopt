@@ -1,16 +1,12 @@
 """Symbol Database for simulation and optimisation."""
 # pylint: disable=invalid-name
-from typing import Iterable, Callable, Optional, List
+from typing import Optional, List
 from dataclasses import dataclass, field
-from functools import cached_property
 from sysopt.types import Domain
 from sysopt.symbolic import Variable, ExpressionGraph
 from sysopt.blocks.block_operations import (
-    VectorFunctionWrapper, BlockFunctionWrapper, to_graph
+    to_graph, create_functions_from_block
 )
-
-from sysopt.blocks.block_operations import create_functions_from_block
-from sysopt.helpers import flatten
 
 
 @dataclass
@@ -24,13 +20,12 @@ class FlattenedSystem:
 
     @staticmethod
     def from_block(block):
-
+        domain = None
         *functions, tables = create_functions_from_block(block)
         for f in functions[1:]:
             if f:
                 domain = f.domain
                 break
-
         assert isinstance(domain, Domain)
 
         graphs = [to_graph(f) if f else None for f in functions]

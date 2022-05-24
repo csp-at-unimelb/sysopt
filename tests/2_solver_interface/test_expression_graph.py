@@ -147,6 +147,21 @@ def test_supremum_to_function():
     result = expr.call({t: 0})
     assert result > 0
 
+
+def test_graph_merging():
+
+    a = Variable('a')
+    b = Variable('b')
+
+    graph_1 = 1 + a ** 2
+    graph_2 = 1 - b ** 2
+    graph_3 = graph_1 - graph_2 + 2 * a * b
+    dummy_var = graph_3 + 2
+    values = {a: 3, b: 5}
+    result = graph_3.call(values)
+    assert result == 8 ** 2
+    assert dummy_var.call(values) == 8 ** 2 + 2
+
 # Optimisation problem setup for a model m
 # 1. Assemble flattened system s from m
 # 2. Add
