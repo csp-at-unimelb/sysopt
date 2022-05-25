@@ -70,40 +70,33 @@ def implements(numpy_function):
     return decorator
 
 
-def inclusion_map(indices: Union[List[int], Dict[int, int]],
+def inclusion_map(basis_map: Dict[int, int],
+                  domain_dimension: int,
                   codomain_dimension: int):
     """Project the domain onto a subspace spanned by the indices.
 
     row space: dimension of the subspace
     col space: dimension of the source
     Args:
-        indices:            Coordinate indices of the vector subspace.
-        codomain_dimension:   Dimension of the domain.
-
-    Returns:
-        A matrix
+        basis_map:            Coordinate indices of the vector subspace.
+        domain_dimension:   Dimension of the domain.
+        codomain_dimension: Dimension of the codomain
 
     """
-    if isinstance(indices, (list, tuple)):
-        range_dimension = len(indices)
-        iterator = iter((j, i) for i, j in enumerate(indices))
-    else:
-        range_dimension = max(indices.values()) + 1
-        iterator = indices.items()
 
-    if range_dimension == 1:
+    if domain_dimension == 1:
         if codomain_dimension == 1:
             return lambda x: ExpressionGraph(mul, 1, x)
         else:
+            assert len(basis_map) == 1
+            j = basis_map[0]
+            e_j = basis_vector(j, codomain_dimension)
+            return lambda x: ExpressionGraph(mul, x, e_j)
 
-            j, _ = next(iterator)
-            e_i = basis_vector(j, codomain_dimension)
-            return lambda x: ExpressionGraph(mul, e_i, x)
+    matrix = sparse_matrix((codomain_dimension, domain_dimension))
 
-    matrix = sparse_matrix((codomain_dimension, range_dimension))
-
-    for i, j in iterator:
-        matrix[i, j] = 1
+    for i, j in basis_map.items():
+        matrix[j, i] = 1
     return lambda x: ExpressionGraph(matmul, matrix, x)
 
 
@@ -124,7 +117,7 @@ def restriction_map(indices: Union[List[int], Dict[int, int]],
         iterator = indices.items()
 
     if domain == superset_dimension == 1:
-        return lambda x: x
+        return lambda x: ExpressionGraph(mul, 1, x)
 
     matrix = sparse_matrix((domain, superset_dimension))
     for i, j in iterator:
@@ -1061,39 +1054,33 @@ class Quadrature(Algebraic):
 
 def concatenate(*arguments):
     length = 0
-    constants = {}
-    variables = {}
+    scalar_constants = []
+    vectors = []
+    # put all scalar constants into a single vector
+    # multiply all vector constants and vector graphs by inclusion maps
+
     for arg in arguments:
         if isinstance(arg, (int, float, complex)):
-            constants[length] = arg
+            scalar_constants.append((length, arg))
             length += 1
             continue
-
         assert len(arg.shape) == 1,\
             f'Cannot concatenate object with shape {arg.shape}'
 
         n, = arg.shape
-        variables[arg] = list(range(length, length + n))
+        basis_map = {i: j for i, j in enumerate(range(length, length + n))}
+        vectors.append((basis_map, n, arg))
         length = length + n
 
-    inclusions = []
-    if constants:
-        constant_indices, constant_vector = zip(*constants.items())
-        inclusion = inclusion_map(constant_indices, length)
-        vector = np.array(constant_vector)
-        inclusions.append((inclusion, vector))
+    result = sparse_matrix((length, ))
+    while scalar_constants:
+        i, v = scalar_constants.pop()
+        result[i] = v
 
-    for variable, indices in variables.items():
-        inclusion_v = inclusion_map(indices, length)
-        inclusions.append((inclusion_v, variable))
-
-    pair = inclusions.pop()
-    assert pair is not None
-
-    result = pair[0](pair[1])
-    while inclusions:
-        pair = inclusions.pop()
-        result += pair[0](pair[1])
+    while vectors:
+        basis_map, domain, vector = vectors.pop()
+        inclusion = inclusion_map(basis_map, domain, length)
+        result = result + inclusion(vector)
 
     return result
 

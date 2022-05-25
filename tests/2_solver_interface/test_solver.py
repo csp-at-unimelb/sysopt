@@ -98,49 +98,64 @@ class TestParameterMap:
         params, t_map, p_map = create_parameter_map(model, constants, t_final)
 
         assert params[0] == t_final
+        values = [0, 1]
+        result = p_map(values)
 
-@pytest.mark.skip
-def test_quadrature():
-    model, constants, output, quad = build_example()
-
-    t_f = 10
-    with SolverContext(model, t_f, constants) as solver:
-        # the Solver object should contain a function
-        # that represents the solution to the ode
-        # with arguments
-        #  - t in [0, t_f]
-        #  - p in R^1
-
-        # we should have a set identifying the un-assigned variables
-        # 3 notions of 't'
-        # - 't' as an argument
-        # - 't' as a free variable symbol
-        # - 't' as the independent variable of an integration scheme
-        t = solver.t            # a symbol for t in [0,t_f]
-
-        # this should bind the y to the solver context via t
-        y = model.outputs(t)    # a symbol for y at time t
-
-        squared = solver.integral(y ** 2)
-        # this should add a quadrature to the state variables.
-        # in particular, we should have
-        # dot{q_0} = y^2, q(0) = 0
-        # stored somewhere in the solver workspace
-
-        # we should be able to check that this is now a function
-        # with 2 arguments: time t and
-
-        w = 1
-        y_f, q_f = solver.integrate(parameters=w, t_final=t_f)
-        error = [
-            output(t_i, 1) - y_f(t_i) for t_i in np.linspace(0, t_f, 50)
-        ]
+        assert result == [1, 0, 1, 1]
 
 
-        soln = squared(t_f, 1)
-        # calling
+class TestSolver:
 
-        # solution should be given by
-        expected_soln = quad(t_f, w)
-        assert abs(soln - expected_soln) < eps
+    def test_init(self):
+        model, constants, output, quad = build_example()
+
+        t_f = 10
+        with SolverContext(model, t_f, constants) as solver:
+            fs = solver.flattened_system
+
+        assert False
+
+
+    def test_quadrature(self):
+        model, constants, output, quad = build_example()
+
+        t_f = 10
+        with SolverContext(model, t_f, constants) as solver:
+            # the Solver object should contain a function
+            # that represents the solution to the ode
+            # with arguments
+            #  - t in [0, t_f]
+            #  - p in R^1
+
+            # we should have a set identifying the un-assigned variables
+            # 3 notions of 't'
+            # - 't' as an argument
+            # - 't' as a free variable symbol
+            # - 't' as the independent variable of an integration scheme
+            t = solver.t            # a symbol for t in [0,t_f]
+
+            # this should bind the y to the solver context via t
+            y = model.outputs(t)    # a symbol for y at time t
+
+            squared = solver.integral(y ** 2)
+            # this should add a quadrature to the state variables.
+            # in particular, we should have
+            # dot{q_0} = y^2, q(0) = 0
+            # stored somewhere in the solver workspace
+
+            # we should be able to check that this is now a function
+            # with 2 arguments: time t and
+
+            w = 1
+            y_f, q_f = solver.integrate(parameters=w, t_final=t_f)
+            error = [
+                output(t_i, 1) - y_f(t_i) for t_i in np.linspace(0, t_f, 50)
+            ]
+
+            soln = squared(t_f, 1)
+            # calling
+
+            # solution should be given by
+            expected_soln = quad(t_f, w)
+            assert abs(soln - expected_soln) < eps
 

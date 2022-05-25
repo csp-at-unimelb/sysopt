@@ -54,8 +54,8 @@ class TestVectorSpaceMappings:
         assert all(v == 0 for v in expect_zero.tolist())
 
     def test_inclusion_map(self):
-        indices = [1, 2, 3]
-        i_map = inclusion_map(indices, 5)
+        indices = dict((i, j) for i, j in enumerate([1, 2, 3]))
+        i_map = inclusion_map(indices, 3, 5)
         test_vector = np.array([3, 5, 7], dtype=float)
         expected_result = np.array([0, 3, 5, 7, 0], dtype=float)
         result = i_map(test_vector)

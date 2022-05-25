@@ -153,9 +153,8 @@ def generate_dae_from(flattened_system, quadratures):
             {quadratures.output_variable: flattened_system.output_map}
         )
         q_dot = t_final * evaluate(integrand, symbols)
-
         spec.update(dict(quad=q_dot))
-        print(spec)
+
     p_name = list(symbols.keys())[-1]
 
     x0_impl = _casadi.vertcat(
