@@ -77,10 +77,13 @@ def inclusion_map(basis_map: Dict[int, int],
 
     row space: dimension of the subspace
     col space: dimension of the source
+
     Args:
-        basis_map:            Coordinate indices of the vector subspace.
+        basis_map:          Coordinate indices of the vector subspace.
         domain_dimension:   Dimension of the domain.
         codomain_dimension: Dimension of the codomain
+
+    basis map should be of the form domain -> codomain
 
     """
 

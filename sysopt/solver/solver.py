@@ -43,77 +43,42 @@ class SolverContext:
                  ):
         self.model = model
         self.start = 0
-        self.end = t_final
+        self.t_final = t_final
         self.t = get_time_variable()
         self.constants = constants
         self.resolution = path_resolution
         self.quadratures = None
-        self.parameters = [t_final] if isinstance(t_final, Variable) else []
         self._flat_system = None
         self._parameter_map = None
+        self._params_to_t_final = None
+        self.parameters = None
 
     def __enter__(self):
         self._flat_system = FlattenedSystem.from_block(self.model)
-        try:
-            free_params = list(
-                set(self.model.parameters) - set(self.constants.keys())
-            )
-        except AttributeError:
-            free_params = self.model.parameters
+        self.parameters, t_map, p_map = create_parameter_map(
+            self.model, self.constants, self.t_final
+        )
+        self._parameter_map = p_map
+        self._params_to_t_final = t_map
 
-        for param in free_params:
-            block, index = self.model.find_by_type_and_name('parameters', param)
-            self.parameters.append(Parameter(block, index))
-
-        self._parameter_map = self.get_parameter_map()
         return self
-
-    def get_parameter_map(self):
-
-        if self.constants and \
-                set(self.constants.keys()) == set(self.model.parameters):
-            return lambda _: list(self.constants.values())
-
-        result = []
-        index = 0
-        constants = self.constants if self.constants else []
-        for param in self.model.parameters:
-            if param not in constants:
-                result.append(self.parameters[index])
-                index += 1
-            else:
-                result.append(self.constants[param])
-        result = symbolic.concatenate(*result)
-
-        return symbolic.lambdify(result, self.parameters)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._flat_system = None
 
     def prepare_path(self, decision_variables: Dict[DecisionVariable, float]):
-        t_final = self.end
-        parameters = self.constants.copy()
+        try:
+            values = [
+                decision_variables[p] for p in self.parameters
+            ]
+        except KeyError as ex:
+            raise ValueError(
+                f'Undefined parameters: expected {self.parameters}, '
+                f'received {decision_variables}') from ex
 
-        for dv in decision_variables:
-            if dv is self.end:
-                t_final = float(decision_variables[self.end])
-            else:
-                block, slc = dv.get_source_and_slice()
-                values = decision_variables[dv]
-
-                if slc.stop - slc.start == 1:
-                    parameters[block.parameters[slc.start]] = float(values)
-                else:
-                    iterator = range(
-                        slc.start, slc.stop, slc.step if slc.step else 1
-                    )
-                    for i in iterator:
-                        parameters[block.parameters[i]] = float(values[i])
-
-        assert not symbolic.is_symbolic(t_final), 'Must specify a final time'
-        integrator = self.get_integrator(self.resolution)
-
-        params = [float(parameters[p]) for p in self.model.parameters]
+        t_final = self._params_to_t_final(values)
+        params = self._parameter_map(values)
+        integrator = self.get_integrator()
         func = integrator.integrate(t_final, params)
 
         return func, t_final
@@ -122,11 +87,11 @@ class SolverContext:
         constants = []
         proj_indices = []
 
-        if symbolic.is_symbolic(self.end):
+        if symbolic.is_symbolic(self.t_final):
             constants.append(0)
             proj_indices.append(1)
         else:
-            constants.append(self.end)
+            constants.append(self.t_final)
 
         for row, parameter in enumerate(self.model.parameters):
             try:
@@ -137,8 +102,10 @@ class SolverContext:
 
         out_dimension = len(constants)
         arguments = symbolic.Variable(shape=(len(proj_indices), ))
-
-        projector = symbolic.inclusion_map(proj_indices, out_dimension)
+        basis_map = {i: j for i, j in enumerate(proj_indices)}
+        projector = symbolic.inclusion_map(
+            basis_map, len(proj_indices), out_dimension
+        )
         const_vector = symbolic.array(constants)
         pi_args = projector(arguments)
 
@@ -149,7 +116,7 @@ class SolverContext:
         integrator = self.get_integrator()
         param_map = self._create_parameter_projections()
 
-        if is_symbolic(self.end):
+        if is_symbolic(self.t_final):
             def f(t, p):
                 args = param_map(p)
                 return integrator(t, args)
@@ -176,7 +143,7 @@ class SolverContext:
         integrator = self.get_integrator()
         param_map = self._create_parameter_projections()
         args = param_map(params)
-        y, q = integrator.integrate(self.end, args[1:])
+        y, q = integrator.integrate(self.t_final, args[1:])
 
         return q(t)[index]
 
@@ -210,7 +177,7 @@ class SolverContext:
         p = self._parameter_map(parameters)
 
         if not t_final:
-            t_final = self.end
+            t_final = self.t_final
         soln = integrator.integrate(t_final, p)
 
         return soln
@@ -235,7 +202,7 @@ class SolverContext:
 
 def lambdify_terminal_constraint(problem: 'Problem',
                                  constraint: symbolic.Inequality):
-    t_f = problem.context.end
+    t_f = problem.context.t_final
     terminal_values = problem.context.model.outputs(t_f)
     args = [terminal_values, problem.arguments]
 
@@ -313,7 +280,7 @@ def create_parameter_map(model, constants, final_time):
         output_idx, params = zip(*[
             (idx, Parameter(model, name))
             for idx, name in enumerate(model.parameters)
-            if name not in constants
+            if not constants or name not in constants
         ])
         params = list(params)
     except ValueError:
@@ -325,27 +292,31 @@ def create_parameter_map(model, constants, final_time):
     # p_final = [ b_i (e^i , params) ,...]
     # where e^i is the cobasis vector of the parameter in the domain (inputs)
     # and b_i is the correspnding basis in the output space (output, index)
-
-    constants = np.array([
+    offset = 0
+    param_constants = np.array([
         constants[p] if p in constants else 0 for p in model.parameters
-    ])
+    ]) if constants else np.zeros((len(model.parameters), ), dtype=float)
 
     if is_symbolic(final_time):
         params.insert(0, final_time)
         args = symbolic.symbolic_vector('parameter vector', len(params))
-        pi = symbolic.inclusion_map([0], len(params))
+        pi = symbolic.inclusion_map({0: 0}, len(params), 1)
         t_func = pi(args)
-        basis_map = {
-            out_i: in_i
-            for out_i, in_i in zip(output_idx, range(1, len(params)))
-        }
+        offset = 1
     else:
         args = symbolic.symbolic_vector('parameter vector', len(params))
         t_func = ConstantFunction(final_time, arguments=args)
-        basis_map = {k: v for k, v in enumerate(output_idx)}
-    if basis_map:
-        inject = symbolic.restriction_map(basis_map, len(model.parameters))
-        p_func = inject(args) + constants
+
+    if output_idx:
+        basis_map = {
+                in_i + offset: out_i for in_i, out_i in enumerate(output_idx)
+        }
+        inject = symbolic.inclusion_map(
+            basis_map,
+            len(params),
+            len(model.parameters)
+        )
+        p_func = inject(args) + param_constants
     else:
-        p_func = ConstantFunction(constants, args)
+        p_func = ConstantFunction(param_constants, args)
     return params, t_func, p_func
