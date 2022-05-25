@@ -773,6 +773,11 @@ def SymbolicVector(name, length):
     return Variable(name, (length,))
 
 
+def resolve_parameter_uid(block, index):
+    name = block.parameters[index]
+    return hash(name)
+
+
 class Parameter(Algebraic):
     """Symbolic type for variables bound to a block parameter.
 
@@ -784,6 +789,7 @@ class Parameter(Algebraic):
     _table = {}
 
     def __new__(cls, block, parameter: Union[str, int]):
+
         if isinstance(parameter, str):
             index = find_param_index_by_name(block, parameter)
         else:
@@ -792,9 +798,11 @@ class Parameter(Algebraic):
             f'Invalid parameter index for {block}: got {parameter},'\
             f'expected a number between 0 and {len(block.parameters)}'
 
-        uid = (id(block), index)
+        uid = resolve_parameter_uid(block, index)
+
         try:
-            return Parameter._table[uid]
+            obj = Parameter._table[uid]
+            return obj
         except KeyError:
             pass
         obj = Algebraic.__new__(cls)
@@ -803,6 +811,7 @@ class Parameter(Algebraic):
         setattr(obj, 'index', index)
         setattr(obj, '_parent', weakref.ref(block))
         Parameter._table[uid] = obj
+        print(f'New {obj}')
         return obj
 
     def __hash__(self):
@@ -819,7 +828,8 @@ class Parameter(Algebraic):
 
     @property
     def name(self):
-        return self._parent().parameters[self.index]
+        parent = self._parent()
+        return parent.parameters[self.index]
 
     def __repr__(self):
         return self.name

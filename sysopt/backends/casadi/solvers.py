@@ -139,14 +139,24 @@ def generate_dae_from(flattened_system, quadratures):
         p=_casadi.vertcat(t_final, p),
         ode=f_impl
     )
+    p_name = list(symbols.keys())[-1]
+    x0 = evaluate(flattened_system.initial_conditions, {p_name: p})
+    x0_impl = _casadi.vertcat(_casadi.SX.zeros(1, 1), x0)
+    initial_conditions = _casadi.Function('x0', [p], [x0_impl])
+
     if flattened_system.constraints is not None:
         assert z.size() != (0, 1)
         h_impl = evaluate(flattened_system.constraints, symbols)
+        h = _casadi.Function('h', [t, x, z, p], [h_impl])
+        h0_impl = h(0, x0, z, p)
+        objective = _casadi.Function('norm_z0', [z, p], [h0_impl])
+        z0_func = _casadi.rootfinder('z0', 'newton', objective)
         spec.update(dict(alg=h_impl, z=z))
         solver = 'idas'
     else:
         assert z.size() == (0, 1)
         solver = 'idas'
+        z0_func = None
 
     if quadratures:
         integrand = quadratures.vector_quadrature.call(
@@ -155,19 +165,11 @@ def generate_dae_from(flattened_system, quadratures):
         q_dot = t_final * evaluate(integrand, symbols)
         spec.update(dict(quad=q_dot))
 
-    p_name = list(symbols.keys())[-1]
-
-    x0_impl = _casadi.vertcat(
-        _casadi.SX.zeros(1, 1),
-        evaluate(flattened_system.initial_conditions, {p_name: p})
-    )
-    initial_conditions = _casadi.Function('x0', [p], [x0_impl])
-
     output_map = _casadi.Function(
         'g', [t, x, z, p], [evaluate(flattened_system.output_map, symbols)]
     )
 
-    return solver, spec, initial_conditions, output_map, symbols
+    return solver, spec, initial_conditions, z0_func, output_map, symbols
 
 
 class Integrator:
@@ -177,10 +179,11 @@ class Integrator:
             'grid': [i / resolution for i in range(resolution + 1)],
             'output_t0': True
         }
-        solver, self.dae_spec, self.x0, self.g, symbols = generate_dae_from(
+        solver, self.dae_spec, self.x0, self.z0, self.g, symbols = generate_dae_from(
             system, quadratures)
 
         self.f = _casadi.integrator('F', 'idas', self.dae_spec, solver_options)
+        print(self.dae_spec)
         self.domain = system.domain
         self.quadratures = quadratures
 
@@ -189,7 +192,10 @@ class Integrator:
         t_sym = _casadi.MX.sym('t')
         p_prime = _casadi.vertcat(t_sym, p_sym)
         x0 = self.x0(p_sym)
-        z0 = [0] * self.domain.constraints
+        z0_est = [0] * self.domain.constraints
+
+        z0 = self.z0(z0_est, p_sym) if self.z0 else z0_est
+
         f = _casadi.integrator('F', 'idas', self.dae_spec)
         soln = f(x0=x0, p=p_prime, z0=z0)
         tf = soln['xf'][0, :]
@@ -205,14 +211,15 @@ class Integrator:
 
     def integrate(self, t, p):
         x0 = self.x0(p)
-        z0 = [0] * self.domain.constraints
+        z0_est = [0] * self.domain.constraints
+        z0 = self.z0(z0_est, p) if self.z0 else z0_est
+
         p_prime = _casadi.vertcat(t, p)
         soln = self.f(x0=x0, p=p_prime, z0=z0)
 
         tf = soln['xf'][0, :]
         x = soln['xf'][1:, :]
         z = soln['zf']
-
         y = self.g(tf, x, z, p)
         if self.quadratures:
             q = soln['qf']

@@ -72,6 +72,7 @@ class SolverContext:
                 decision_variables[p] for p in self.parameters
             ]
         except KeyError as ex:
+
             raise ValueError(
                 f'Undefined parameters: expected {self.parameters}, '
                 f'received {decision_variables}') from ex
