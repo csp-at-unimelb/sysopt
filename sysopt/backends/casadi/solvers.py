@@ -1,6 +1,8 @@
 from dataclasses import asdict
 
 import casadi as _casadi
+import numpy as np
+
 from sysopt.backends.casadi.math import fmin, fmax, heaviside
 from sysopt.backends.casadi.expression_graph import lambdify
 from sysopt.types import Domain
@@ -25,8 +27,9 @@ class InterpolatedPath(_casadi.Callback):
                  x,        # As per CasADI docs.
                  opts={}):
         super().__init__()
-        self.t = t
-        self.x = x
+        self.t = _casadi.DM(t) if isinstance(t, np.ndarray) else t
+        self.x = _casadi.DM(x) if isinstance(x, np.ndarray) else x
+
         self.construct(name, opts)
 
     def __len__(self):
@@ -49,14 +52,32 @@ class InterpolatedPath(_casadi.Callback):
         return _casadi.Sparsity.dense((self.x.shape[0], 1))
 
     def eval(self, arg):
+        return self.linearly_interpolate(arg[0])
 
-        t = fmax(fmin(arg[0], self.t[-1]), self.t[0])
+    def linearly_interpolate(self, t):
+
+        dt = self.t[1:] - self.t[:-1]
+        dx = self.x[:, 1:] - self.x[:, :-1]
+        dh = 1 / dt
+
+        dh_rep = _casadi.repmat(dh, (dx.shape[0], 1))
+
+        delta_x = dh_rep * dx
+        t_rel = t - self.t
+        window = (heaviside(t_rel[1:]) - heaviside(t_rel[:-1]))
+
+        x_t = window * (self.x[:, :-1] + t_rel * delta_x)
+        return [x_t]
+
+    def cubic_interpolate(self, t):
 
         dt = self.t[1:] - self.t[:-1]
         dh = 1 / dt
         dx = self.x[:, 1:] - self.x[:, :-1]
 
-        delta_x = dx * _casadi.repmat(dh, (dx.shape[0], 1))
+        dh_rep = _casadi.repmat(dh, (dx.shape[0], 1))
+
+        delta_x = dh_rep * dx
         m = _casadi.horzcat(dx[:, 0] * dh[0],
                     0.5 * (delta_x[: 1:] + delta_x[:, :-1]),
                     dx[:, -1] * dh[-1])
@@ -182,8 +203,7 @@ class Integrator:
         solver, self.dae_spec, self.x0, self.z0, self.g, symbols = generate_dae_from(
             system, quadratures)
 
-        self.f = _casadi.integrator('F', 'idas', self.dae_spec, solver_options)
-        print(self.dae_spec)
+        self.f = _casadi.integrator('F', solver, self.dae_spec, solver_options)
         self.domain = system.domain
         self.quadratures = quadratures
 
@@ -221,6 +241,7 @@ class Integrator:
         x = soln['xf'][1:, :]
         z = soln['zf']
         y = self.g(tf, x, z, p)
+
         if self.quadratures:
             q = soln['qf']
             return InterpolatedPath('y', tf, y), InterpolatedPath('q', tf, q)

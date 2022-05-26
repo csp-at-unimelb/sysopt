@@ -811,7 +811,6 @@ class Parameter(Algebraic):
         setattr(obj, 'index', index)
         setattr(obj, '_parent', weakref.ref(block))
         Parameter._table[uid] = obj
-        print(f'New {obj}')
         return obj
 
     def __hash__(self):

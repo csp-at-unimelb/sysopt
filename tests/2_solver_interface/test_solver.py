@@ -1,13 +1,72 @@
 import numpy as np
 import pytest
 import random
-from sysopt.block import Composite
+from sysopt import Metadata
+from sysopt.block import Composite, Block
 from sysopt.blocks import Gain, Oscillator, LowPassFilter
 from sysopt.solver import SolverContext, Parameter, create_parameter_map
 from sysopt.symbolic import Variable, find_param_index_by_name
 import math
 
 eps = 1e-4
+
+
+def ode_solution(t, w_osc=1, phase=0, w_coff=1, gain=1, x0=0):
+    alpha = 1 / w_coff
+    mag = alpha ** 2 + w_osc ** 2
+    out = alpha ** 2 * np.cos(w_osc * t + phase) / mag
+    out += alpha * w_osc * np.sin(w_osc * t + phase) / mag
+    out += np.exp(-alpha * t) * (
+        x0
+        - alpha ** 2 * np.cos(phase) / mag
+        - w_osc * alpha * np.sin(phase) / mag
+    )
+    return gain * out
+
+
+def expected_output(t, w):
+    return ode_solution(t, w_coff=w)
+
+
+def expected_quadrature(t, w):
+    # assuming q = int_0^t y(t)^2 dt
+    # Analytically determined via Wolfram Alpha, or Sympy
+    scaling = 4 * (1 + w ** 2) ** 2
+
+    def integral(tau):
+        return (
+                   2 * (tau * (1 + w ** 2) + w)
+                   + (w ** 2 - 1) * math.sin(2 * tau)
+                   - 2 * w * math.cos(2 * tau)
+               ) / scaling
+
+    return integral(t) - integral(0)
+
+
+class FilteredOscMockUnconstrained(Block):
+    def __init__(self):
+        metadata = Metadata(
+            states=['filter'],
+            outputs=['post gain'],
+            parameters=['osc frequency',
+                        'phase',
+                        'cutoff frequency',
+                        'gain']
+        )
+        super().__init__(metadata, 'FilteredOsc')
+
+    def initial_state(self, parameters):
+        return 0
+
+    def compute_dynamics(self, t, states, algebraics, inputs, parameters):
+        x, = states
+        w_osc, phi, w_cf, _ = parameters
+        return (np.cos(w_osc * t + phi) - x) / w_cf
+
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
+        *_, gain = parameters
+        x, = states
+        return gain * x
 
 
 def build_example():
@@ -29,23 +88,7 @@ def build_example():
         gain.parameters[0]: 1
     }
 
-    def output(t, w):
-        return (w * math.cos(t) + math.sin(t))/(w**2 + 1)
-
-    def quadrature(t, w):
-        # Analytically determined via Wolfram Alpha, or Sympy
-        scaling = 4 * (1 + w ** 2) ** 2
-
-        def integral(tau):
-            return (
-              2 * (tau * (1 + w**2) + w)
-              + (w**2 - 1) * math.sin(2 * tau)
-              - 2 * w * math.cos(2 * tau)
-            ) / scaling
-
-        return integral(t) - integral(0)
-
-    return model, constants, output, quadrature
+    return model, constants, expected_output, expected_quadrature
 
 
 class TestParameterMap:
@@ -104,9 +147,62 @@ class TestParameterMap:
 
         assert result == [1, 0, 1, 1]
 
-@pytest.mark.skip
-class TestSolver:
 
+class TestSolverUnconstrained:
+
+    def test_builds_solver(self):
+        block = FilteredOscMockUnconstrained()
+        constants = {
+            block.parameters[0]: 1,
+            block.parameters[1]: 0,
+            block.parameters[3]: 1
+        }
+
+        t_f = 2
+        test_params = [1, 0, 1, 1]
+        t_test = np.pi
+        x_test = [-1]
+        dx_expected = -2
+
+        with SolverContext(block, t_f, constants) as solver:
+            integrator = solver.get_integrator(resolution=150)
+            x0 = integrator.x0(test_params)
+            assert x0.shape == (2, 1)
+            x0 = [x0[0, 0], x0[1, 0]]
+            assert x0 == [0, 0]
+
+    def test_solution(self):
+        block = FilteredOscMockUnconstrained()
+        constants = {
+            block.parameters[0]: 1,
+            block.parameters[1]: 0,
+            block.parameters[3]: 1
+        }
+
+        t_f = 2
+        res = 50
+        with SolverContext(block, t_f, constants) as solver:
+            w = 1
+            y = solver.integrate(w, t_f, resolution=res)
+            error = [
+                abs(expected_output(y.t[i], w) - y.x[i])
+                for i in range(res)
+            ]
+            assert all(list(e < 1e-4 for e in error)), \
+                "Error performing integration - solution points dont match" \
+                "analytic result"
+
+            t_test = [(i / t_f) * 17 / 19 for i in range(res)]
+            error = [
+                abs(expected_output(t, w) - y(t))
+                for t in t_test
+            ]
+            assert all(list(e < 1e-2 for e in error)), \
+                "Error interpolating solution between grid points"
+
+
+@pytest.mark.skip
+class TestSolverCompositeModel:
     def test_solution(self):
         model, constants, output, quad = build_example()
 

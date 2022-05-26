@@ -176,7 +176,7 @@ class SolverContext:
         integrator = self.get_integrator(resolution)
 
         p = self._parameter_map(parameters)
-
+        print(p)
         if not t_final:
             t_final = self.t_final
         soln = integrator.integrate(t_final, p)
