@@ -18,7 +18,6 @@ plt.ion()
 """
 # @nb.code_cell
 from sysopt import Block, Metadata, Composite
-from sysopt.backends import heaviside, exp
 from sysopt.symbolic import Variable, Parameter
 from sysopt.solver import SolverContext
 import numpy as np
@@ -126,7 +125,7 @@ class DragModel(Block):
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
         d_max, rho = parameters
         y, = inputs
-        return d_max * exp(- rho * y),
+        return d_max * np.exp(- rho * y),
 
 
 # @nb.text_cell
@@ -155,7 +154,7 @@ class OpenLoopController(Block):
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
 
         cutoff_time, = parameters
-        return heaviside(cutoff_time - t, eps=1e-2),
+        return np.heaviside(cutoff_time - t, 0.5),
 
 
 # @nb.text_cell
@@ -214,15 +213,15 @@ def evaluate():
     }
 
     with SolverContext(model, t_f, parameters) as context:
-        x_T = x(context.end)    # Final positions
-        y_T = y(context.end)
+        x_T = x(context.t_final)    # Final positions
+        y_T = y(context.t_final)
 
-        cost = context.end + y_T ** 2 + (x_T - x_goal) ** 2
+        cost = context.t_final + y_T ** 2 + (x_T - x_goal) ** 2
 
         constraints = [
-            context.end <= 10,
+            context.t_final <= 10,
             0 < p,
-            p <= context.end,
+            p <= context.t_final,
             t_f > 0
         ]
 
@@ -300,15 +299,15 @@ def parameter_sweep():
     Z = np.empty_like(X)
 
     with SolverContext(model, t_f, parameters) as context:
-        x_T = x(context.end)
-        y_T = y(context.end)
+        x_T = x(context.t_final)
+        y_T = y(context.t_final)
 
-        cost = context.end + y_T ** 2 + (x_T - x_goal) ** 2
+        cost = context.t_final + y_T ** 2 + (x_T - x_goal) ** 2
 
         constraints = [
-            context.end <= 10,
+            context.t_final <= 10,
             0 < p,
-            p <= context.end,
+            p <= context.t_final,
             t_f > 0
         ]
 

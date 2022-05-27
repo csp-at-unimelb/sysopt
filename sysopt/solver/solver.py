@@ -4,13 +4,17 @@ import dataclasses
 import weakref
 from typing import Optional, Dict, List, Union, NewType
 
+import numpy as np
+
 from sysopt import symbolic
+from sysopt.backends import Integrator
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
-    lambdify, is_temporal, create_log_barrier_function
+    is_temporal, create_log_barrier_function, is_symbolic,
+    ConstantFunction
 )
 
-from sysopt.solver.symbol_database import SymbolDatabase, FlattenedSystem
+from sysopt.solver.symbol_database import FlattenedSystem, Quadratures
 from sysopt.block import Block, Composite
 
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
@@ -38,94 +42,111 @@ class SolverContext:
                  path_resolution: int = 50
                  ):
         self.model = model
-        self.symbol_db = SymbolDatabase(t_final)
         self.start = 0
-        self.end = t_final
+        self.t_final = t_final
         self.t = get_time_variable()
         self.constants = constants
         self.resolution = path_resolution
-        self.quadratures = []
-        self.parameters = [t_final] if isinstance(t_final, Variable) else []
+        self.quadratures = None
         self._flat_system = None
         self._parameter_map = None
+        self._params_to_t_final = None
+        self.parameters = None
 
     def __enter__(self):
         self._flat_system = FlattenedSystem.from_block(self.model)
-        try:
-            free_params = list(
-                set(self.model.parameters) - set(self.constants.keys())
-            )
-        except AttributeError:
-            free_params = self.model.parameters
+        self.parameters, t_map, p_map = create_parameter_map(
+            self.model, self.constants, self.t_final
+        )
+        self._parameter_map = p_map
+        self._params_to_t_final = t_map
 
-        for param in free_params:
-            block, index = self.model.find_by_type_and_name('parameters', param)
-            self.parameters.append(Parameter(block, index))
-
-        self._parameter_map = self.get_parameter_map()
         return self
-
-    def get_parameter_map(self):
-
-        if self.constants and \
-                set(self.constants.keys()) == set(self.model.parameters):
-            return lambda _: list(self.constants.values())
-
-        result = []
-        index = 0
-        constants = self.constants if self.constants else []
-        for param in self.model.parameters:
-            if param not in constants:
-                result.append(self.parameters[index])
-                index += 1
-            else:
-                result.append(self.constants[param])
-        result = symbolic.concatenate(*result)
-
-        return symbolic.lambdify(result, self.parameters)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._flat_system = None
-        pass
-
-    def add_quadrature(self, integrand):
-
-        y_var = self.model.outputs(self.t)
-        unbound_params = integrand.symbols() - {y_var, self.t}
-        assert not unbound_params
-
-        f = lambdify(integrand, [self.t, y_var])
-        dot_q = f(self.symbol_db.t, self._flat_system.g)
-        idx = self._flat_system.add_quadrature(dot_q)
-        return idx
 
     def prepare_path(self, decision_variables: Dict[DecisionVariable, float]):
-        t_final = self.symbol_db.t_final
-        parameters = self.constants.copy()
+        try:
+            values = [
+                decision_variables[p] for p in self.parameters
+            ]
+        except KeyError as ex:
 
-        for dv in decision_variables:
-            if dv is self.symbol_db.t_final:
-                t_final = float(decision_variables[self.symbol_db.t_final])
-            else:
-                block, slc = dv.get_source_and_slice()
-                values = decision_variables[dv]
+            raise ValueError(
+                f'Undefined parameters: expected {self.parameters}, '
+                f'received {decision_variables}') from ex
 
-                if slc.stop - slc.start == 1:
-                    parameters[block.parameters[slc.start]] = float(values)
-                else:
-                    iterator = range(
-                        slc.start, slc.stop, slc.step if slc.step else 1
-                    )
-                    for i in iterator:
-                        parameters[block.parameters[i]] = float(values[i])
-
-        assert not symbolic.is_symbolic(t_final), 'Must specify a final time'
-        integrator = self.get_integrator(self.resolution)
-
-        params = [float(parameters[p]) for p in self.model.parameters]
+        t_final = self._params_to_t_final(values)
+        params = self._parameter_map(values)
+        integrator = self.get_integrator()
         func = integrator.integrate(t_final, params)
 
         return func, t_final
+
+    def _create_parameter_projections(self):
+        constants = []
+        proj_indices = []
+
+        if symbolic.is_symbolic(self.t_final):
+            constants.append(0)
+            proj_indices.append(1)
+        else:
+            constants.append(self.t_final)
+
+        for row, parameter in enumerate(self.model.parameters):
+            try:
+                constants.append(self.constants[parameter])
+            except KeyError:
+                constants.append(0)
+                proj_indices.append(row)
+
+        out_dimension = len(constants)
+        arguments = symbolic.Variable(shape=(len(proj_indices), ))
+        basis_map = dict(enumerate(proj_indices))
+        projector = symbolic.inclusion_map(
+            basis_map, len(proj_indices), out_dimension
+        )
+        const_vector = symbolic.array(constants)
+        pi_args = projector(arguments)
+
+        graph = pi_args + const_vector
+        return symbolic.lambdify(graph, [arguments], 'params')
+
+    def get_symbolic_integrator(self):
+        integrator = self.get_integrator()
+        param_map = self._create_parameter_projections()
+
+        if is_symbolic(self.t_final):
+            def f(t, p):
+                args = param_map(p)
+                return integrator(t, args)
+        else:
+            def f(p):
+                args = param_map(p)
+                return integrator(args[0], args[1:])
+        return f
+
+    def add_quadrature(self, integrand):
+        if not self.quadratures:
+            idx = 0
+            self.quadratures = Quadratures(
+                self.model.outputs(self.t), integrand)
+        else:
+            idx = self.quadratures.vector_quadrature.shape[0]
+            self.quadratures.vector_quadrature = symbolic.concatenate(
+                self.quadratures.vector_quadrature,
+                integrand
+            )
+        return idx
+
+    def evaluate_quadrature(self, index, t, params):
+        integrator = self.get_integrator()
+        param_map = self._create_parameter_projections()
+        args = param_map(params)
+        _, q = integrator.integrate(self.t_final, args[1:])
+
+        return q(t)[index]
 
     def evaluate(self, problem: 'Problem',
                  decision_variables: Dict[DecisionVariable, float]):
@@ -150,16 +171,14 @@ class SolverContext:
     def solve(self, problem):
         raise NotImplementedError
 
-    def _get_parameter_vector(self):
-        return [self.constants[p] for p in self.model.parameters]
-
     def integrate(self, parameters=None, t_final=None, resolution=50):
 
         integrator = self.get_integrator(resolution)
-        p = self._parameter_map(parameters)
-        if not t_final:
-            t_final = self.symbol_db.t_final
 
+        p = self._parameter_map(parameters)
+
+        if not t_final:
+            t_final = self.t_final
         soln = integrator.integrate(t_final, p)
 
         return soln
@@ -169,32 +188,22 @@ class SolverContext:
         return self._flat_system
 
     def get_integrator(self, resolution=50):
-        return symbolic.Integrator(
-            self.symbol_db.t,
+        return Integrator(
             self._flat_system,
-            resolution=resolution
+            resolution=resolution,
+            quadratures=self.quadratures
         )
-
-    def is_time_varying(self, symbol_or_expression):
-
-        symbols = symbolic.list_symbols(symbol_or_expression)
-        if self.t in symbols:
-            return True
-
-        for s, _ in self.symbol_db.path_variables:
-            for s_prime in symbols:
-                if id(s) == id(s_prime):
-                    return True
-
-        return False
 
     def problem(self, arguments, cost, subject_to=None):
         return Problem(self, arguments, cost, subject_to)
 
+    def integral(self, integrand):
+        return symbolic.Quadrature(integrand, self)
+
 
 def lambdify_terminal_constraint(problem: 'Problem',
                                  constraint: symbolic.Inequality):
-    t_f = problem.context.end
+    t_f = problem.context.t_final
     terminal_values = problem.context.model.outputs(t_f)
     args = [terminal_values, problem.arguments]
 
@@ -266,3 +275,49 @@ class Problem:
         value = cost_term.call(arguments)
         return CandidateSolution(value, y, constraints)
 
+
+def create_parameter_map(model, constants, final_time):
+    try:
+        output_idx, params = zip(*[
+            (idx, Parameter(model, name))
+            for idx, name in enumerate(model.parameters)
+            if not constants or name not in constants
+        ])
+        params = list(params)
+    except ValueError:
+        output_idx = []
+        params = []
+    # Parameter Map should look like:
+    #
+    # t_final = < (e_0, params) >
+    # p_final = [ b_i (e^i , params) ,...]
+    # where e^i is the cobasis vector of the parameter in the domain (inputs)
+    # and b_i is the correspnding basis in the output space (output, index)
+    offset = 0
+    param_constants = np.array([
+        constants[p] if p in constants else 0 for p in model.parameters
+    ]) if constants else np.zeros((len(model.parameters), ), dtype=float)
+
+    if is_symbolic(final_time):
+        params.insert(0, final_time)
+        args = symbolic.symbolic_vector('parameter vector', len(params))
+        pi = symbolic.inclusion_map({0: 0}, len(params), 1)
+        t_func = pi(args)
+        offset = 1
+    else:
+        args = symbolic.symbolic_vector('parameter vector', len(params))
+        t_func = ConstantFunction(final_time, arguments=args)
+
+    if output_idx:
+        basis_map = {
+                in_i + offset: out_i for in_i, out_i in enumerate(output_idx)
+        }
+        inject = symbolic.inclusion_map(
+            basis_map,
+            len(params),
+            len(model.parameters)
+        )
+        p_func = inject(args) + param_constants
+    else:
+        p_func = ConstantFunction(param_constants, args)
+    return params, t_func, p_func

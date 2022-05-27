@@ -1,6 +1,6 @@
 from sysopt.symbolic import (
     Variable, is_symbolic, list_symbols, Parameter,
-    is_temporal, ExpressionGraph, lambdify
+    is_temporal, ExpressionGraph, lambdify, PathInequality
 )
 
 from sysopt.symbolic.symbols import get_time_variable
@@ -135,10 +135,11 @@ def test_supremum_to_function():
     sig = source.outputs(t)
     param = Parameter(source, 0)
 
-    supremum = sig(t) < param
-
     def y(t_):
         return np.exp(-t_)
+
+    supremum = sig(t) < param
+    assert isinstance(supremum, PathInequality)
 
     expr = supremum.call({param: 2, sig: y})
 
@@ -146,6 +147,20 @@ def test_supremum_to_function():
     result = expr.call({t: 0})
     assert result > 0
 
+
+def test_graph_merging():
+
+    a = Variable('a')
+    b = Variable('b')
+
+    graph_1 = 1 + a ** 2
+    graph_2 = 1 - b ** 2
+    graph_3 = graph_1 - graph_2 + 2 * a * b
+    dummy_var = graph_3 + 2
+    values = {a: 3, b: 5}
+    result = graph_3.call(values)
+    assert result == 8 ** 2
+    assert dummy_var.call(values) == 8 ** 2 + 2
 
 # Optimisation problem setup for a model m
 # 1. Assemble flattened system s from m

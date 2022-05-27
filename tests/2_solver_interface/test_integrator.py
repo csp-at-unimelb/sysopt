@@ -11,13 +11,12 @@
 
 # Requirements:
 # - fixed window of integration
-import numpy
-import numpy as np
 
 from sysopt.types import *
 from sysopt.block import Block
 from sysopt.solver import SolverContext
-
+from sysopt.blocks.block_operations import create_functions_from_block
+from sysopt.solver.symbol_database import FlattenedSystem
 
 class LinearScalarEquation(Block):
     r"""Linear ODE of the form
@@ -40,7 +39,7 @@ class LinearScalarEquation(Block):
 
     def initial_state(self, parameters: Parameters) -> Numeric:
         _, x0 = parameters
-        return x0,
+        return x0
 
     def compute_dynamics(self,
                          t: Time,
@@ -50,7 +49,7 @@ class LinearScalarEquation(Block):
                          parameters: Parameters):
         x, = states
         a, _ = parameters
-        return [-x*a]
+        return -x*a
 
     def compute_outputs(self,
                         t: Time,
@@ -58,7 +57,8 @@ class LinearScalarEquation(Block):
                         algebraics: Algebraics,
                         inputs: Inputs,
                         parameters: Parameters) -> Numeric:
-        return states
+        x, = states
+        return x
 
     def explicit_solution(self, t, parameters):
         a, x0 = parameters
@@ -80,6 +80,24 @@ class LinearScalarEquation(Block):
 
 
 class TestSymbolicIntegrator:
+
+    def test_build_functions(self):
+        block = LinearScalarEquation()
+        x0, f, g, h, out_table = create_functions_from_block(block)
+        p = [3, 5]
+        args = [1, [2], [], [], p]
+
+        assert x0(p) == p[1]
+        assert f(*args) == -6
+        assert g(*args) == 2
+        assert f.codomain == 1
+        flat_system = FlattenedSystem.from_block(block)
+        assert flat_system.domain == Domain(1, 1, 0, 0, 2)
+        assert flat_system.vector_field is not None
+        assert flat_system.initial_conditions is not None
+        assert flat_system.output_map is not None
+
+        assert flat_system.vector_field.shape == (1, )
 
     def test_init(self):
         block = LinearScalarEquation()
@@ -121,4 +139,8 @@ class TestSymbolicIntegrator:
 
             expected = block.pushforward(t, params, dparams)
             assert abs(result[0][0] - expected) < 1e-2
+
+
+
+
 

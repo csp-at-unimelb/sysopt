@@ -5,21 +5,22 @@ from collections import defaultdict
 from inspect import signature
 
 import numpy as np
-from scipy.sparse import dok_matrix, spmatrix
-from typing import Union, List, Callable, Tuple, Optional, Dict
+from typing import Union, List, Callable, Tuple, Optional, Dict, NewType, Any
 
-import sysopt.backends as backend
-from sysopt.backends import SymbolicVector
-from sysopt.symbolic.casts import cast_type
 from sysopt.helpers import flatten
-
+array = np.array
 epsilon = 1e-12
+
+SymbolicAtom = NewType('SymbolicAtom', Union['Variable', 'Parameter'])
+SymbolicArray = NewType(
+    'SymbolicArray', Union[List[SymbolicAtom], Tuple[SymbolicAtom]]
+)
 
 
 def find_param_index_by_name(block, name: str):
     try:
         return block.find_by_name('parameters', name)
-    except ValueError:
+    except (AttributeError, ValueError):
         pass
     try:
         return block.parameters.index(name)
@@ -28,30 +29,106 @@ def find_param_index_by_name(block, name: str):
     raise ValueError(f'Could not find parameter {name} in block {block}.')
 
 
+class Matrix(np.ndarray):
+    """View of a numpy matrix for use in expression graphs."""
+
+    def __hash__(self):
+        shape_hash = hash(self.shape)
+        data_hash = hash(tuple(self.ravel()))
+        return hash((shape_hash, data_hash))
+
+    def __cmp__(self, other):
+        return self is other
+
+    def __eq__(self, other):
+        if isinstance(other, (list, tuple)):
+            return other == self.tolist()
+        try:
+            if self.shape != other.shape:
+                return False
+        except AttributeError:
+            return False
+        if hash(self) != hash(other):
+            return False
+        result = (self - other) == 0
+        if isinstance(result, np.ndarray):
+            return result.all()
+        else:
+            return result
+
+
 def sparse_matrix(shape: Tuple[int, int]):
-    return dok_matrix(shape, dtype=float)
+    return np.zeros(shape, dtype=float).view(Matrix)
 
 
-def is_symbolic(obj):
-    try:
-        return obj.is_symbolic
-    except AttributeError:
-        return backend.is_symbolic(obj)
+numpy_handlers = {}
 
 
-def list_symbols(obj):
-    try:
-        return obj.symbols()
-    except AttributeError:
-        return backend.list_symbols(obj)
+def implements(numpy_function):
+    """Register an __array_function__ implementation for MyArray objects."""
+    def decorator(func):
+        numpy_handlers[numpy_function] = func
+        return func
+    return decorator
 
 
-def projection_matrix(indices: List[int], dimension: int):
-    matrix = sparse_matrix((len(indices), dimension))
-    for i, j in enumerate(indices):
+def inclusion_map(basis_map: Dict[int, int],
+                  domain_dimension: int,
+                  codomain_dimension: int):
+    """Project the domain onto a subspace spanned by the indices.
+
+    row space: dimension of the subspace
+    col space: dimension of the source
+
+    Args:
+        basis_map:          Coordinate indices of the vector subspace.
+        domain_dimension:   Dimension of the domain.
+        codomain_dimension: Dimension of the codomain
+
+    basis map should be of the form domain -> codomain
+
+    """
+
+    if domain_dimension == 1:
+        if codomain_dimension == 1:
+            return lambda x: ExpressionGraph(mul, 1, x)
+        else:
+            assert len(basis_map) == 1
+            j = basis_map[0]
+            e_j = basis_vector(j, codomain_dimension)
+            return lambda x: ExpressionGraph(mul, x, e_j)
+
+    matrix = sparse_matrix((codomain_dimension, domain_dimension))
+
+    for i, j in basis_map.items():
+        matrix[j, i] = 1
+    return lambda x: ExpressionGraph(matmul, matrix, x)
+
+
+def basis_vector(index, dimension):
+    e_i = np.zeros(shape=(dimension, ), dtype=float).view(Matrix)
+    e_i[index] = 1
+    return e_i
+
+
+def restriction_map(indices: Union[List[int], Dict[int, int]],
+                    superset_dimension: int) -> Callable:
+
+    if isinstance(indices, (list, tuple)):
+        domain = len(indices)
+        iterator = enumerate(indices)
+    else:
+        domain = max(indices.keys()) + 1
+        iterator = indices.items()
+
+    if domain == superset_dimension == 1:
+        return lambda x: ExpressionGraph(mul, 1, x)
+
+    matrix = sparse_matrix((domain, superset_dimension))
+    for i, j in iterator:
         matrix[i, j] = 1
 
-    return matrix
+    return lambda x: ExpressionGraph(matmul, matrix, x)
 
 
 __ops = defaultdict(list)
@@ -123,7 +200,9 @@ def register_op(shape_func=infer_scalar_shape):
 
 def wrap_as_op(func: Callable,
                arguments: Optional[int] = None,
-               shape_func=infer_scalar_shape) -> Callable:
+               shape_func=infer_scalar_shape,
+               numpy_func=None
+               ) -> Callable:
     """Wraps the function for use in expression graphs.
 
     Args:
@@ -143,10 +222,14 @@ def wrap_as_op(func: Callable,
 
     __shape_ops[func] = shape_func
 
+    if numpy_func is not None:
+        numpy_handlers[numpy_func] = wrapper
+
     return wrapper
 
 
 @register_op()
+@implements(np.power)
 def power(base, exponent):
     return base ** exponent
 
@@ -161,7 +244,7 @@ def sub(lhs, rhs):
     return lhs - rhs
 
 
-@register_op(matmul_shape)
+@register_op(shape_func=matmul_shape)
 def matmul(lhs, rhs):
     return lhs @ rhs
 
@@ -181,7 +264,7 @@ def div(lhs, rhs):
     return lhs / rhs
 
 
-@register_op(transpose_shape)
+@register_op(shape_func=transpose_shape)
 def transpose(matrix):
     return matrix.T
 
@@ -200,7 +283,7 @@ class Inequality:
         self.smaller = smaller
         self.bigger = bigger
 
-    def __str__(self):
+    def __repr__(self):
         return f'{self.smaller} <= {self.bigger}'
 
     def symbols(self):
@@ -253,8 +336,26 @@ class PathInequality(Inequality):
 
 class Algebraic(metaclass=ABCMeta):
     """Base class for symbolic terms in expression graphs."""
-    def __init_subclass__(cls, **kwargs):
-        setattr(cls, '__array_ufunc__', None)
+
+    def __array_ufunc__(self, func, method, *args, **kwargs):
+        if func not in numpy_handlers:
+            return NotImplemented
+        if method != '__call__':
+            return NotImplemented
+        return numpy_handlers[func](*args, **kwargs)
+
+    def __array_function__(self, func, types, args, kwargs):
+        if func not in numpy_handlers:
+            return NotImplemented
+        # if not all(issubclass(t, Algebraic) for t in types):
+        #     return NotImplemented
+        return numpy_handlers[func](*args, **kwargs)
+
+    @abstractmethod
+    def __repr__(self):
+        raise NotImplementedError(
+            f'{str(self.__class__)} is missing this method'
+        )
 
     @property
     @abstractmethod
@@ -279,8 +380,17 @@ class Algebraic(metaclass=ABCMeta):
             indices = slice_to_list(item)
         else:
             indices = [item]
-        pi = projection_matrix(indices, n)
-        return ExpressionGraph(matmul, pi, self)
+
+        if indices == [range(n)]:
+            return self
+
+        pi = restriction_map(indices, n)
+        return pi(self)
+
+    def __iter__(self):
+        n = self.shape[0]
+        for i in range(n):
+            yield restriction_map([i], n)(self)
 
     def __add__(self, other):
         return ExpressionGraph(add, self, other)
@@ -348,17 +458,53 @@ def is_op(value):
         return False
 
 
+def recursively_apply(graph: 'ExpressionGraph',
+                      trunk_function,
+                      leaf_function,
+                      current_node=None):
+    if not current_node:
+        current_node = graph.head
+    node_object = graph.nodes[current_node]
+    if current_node not in graph.edges:
+        return leaf_function(node_object)
+
+    children_results = [
+        recursively_apply(graph, trunk_function, leaf_function, child)
+        for child in graph.edges[current_node]
+    ]
+
+    return trunk_function(node_object, *children_results)
+
+
+def match_args_by_name(expr: Algebraic, arguments: Dict[str, Any]):
+    return {
+        a: arguments[a.name] for a in expr.symbols()
+        if hasattr(a, 'name') and a.name in arguments
+    }
+
+
 class ExpressionGraph(Algebraic):
-    """Graph representation of a symbolic expression."""
+    """Graph stresentation of a symbolic expression."""
 
     def __init__(self, op, *args):
         self.nodes = []
-        op_node = self.add_or_get_node(op)
-        self.edges = {}
-        self.edges.update(
-            {op_node: [self.add_or_get_node(a) for a in args]}
-        )
-        self.head = op_node
+        self.edges = defaultdict(list)
+        self.head = None
+
+        if op:
+            op_node = self.add_or_get_node(op)
+            self.edges.update(
+                {op_node: [self.add_or_get_node(a) for a in args]}
+            )
+            self.head = op_node
+
+    @property
+    def domain(self):
+        symbols = self.symbols()
+        return [
+            n.shape[0] if len(n.shape) == 1 else n.shape
+            for n in self.nodes if n in symbols
+        ]
 
     @property
     def shape(self):
@@ -382,6 +528,13 @@ class ExpressionGraph(Algebraic):
             f'Don\'t know how to get the shape of {obj}'
         )
 
+    def __call__(self, *args, **kwargs):
+
+        assert len(args) == len(self.symbols()),\
+            f'Tried to call function with {self.symbols()} '
+        values = dict(zip(self.symbols(), args))
+        return self.call(values)
+
     def call(self, values):
 
         def recurse(node):
@@ -398,8 +551,6 @@ class ExpressionGraph(Algebraic):
             except (KeyError, TypeError):
                 pass
 
-            if is_matrix(obj):
-                return cast_type(obj)
             return obj
 
         return recurse(self.head)
@@ -412,14 +563,12 @@ class ExpressionGraph(Algebraic):
         if value is self:
             assert self.head is not None
             return self.head
-        if is_op(value):
-            idx = len(self.nodes)
-            self.nodes.append(value)
-            return idx
+
         if isinstance(value, ExpressionGraph):
             return self.merge_and_return_subgraph_head(value)
         try:
-            return self.nodes.index(value)
+            if not is_op(value):
+                return self.nodes.index(value)
         except ValueError:
             pass
         # else
@@ -433,17 +582,18 @@ class ExpressionGraph(Algebraic):
             old_idx: self.add_or_get_node(node)
             for old_idx, node in enumerate(other.nodes)
         }
-
-        self.edges.update({
-            new_indices[parent]: [new_indices[child] for child in children]
-            for parent, children in other.edges.items()
-        })
+        for parent, children in other.edges.items():
+            new_source_idx = new_indices[parent]
+            if not children:
+                continue
+            self.edges[new_source_idx] += [
+                new_indices[child] for child in children
+            ]
         return new_indices[other.head]
 
     def push_op(self, op, *nodes):
         op_node = self.add_or_get_node(op)
         node_indices = [self.add_or_get_node(node) for node in nodes]
-
         self.edges[op_node] = node_indices
         self.head = op_node
         return self
@@ -469,11 +619,16 @@ class ExpressionGraph(Algebraic):
             for child in children
         ))
         edge_hash = hash(tuple(edge_list))
-        node_hash = hash(tuple(n for n in self.nodes))
-        return hash((edge_hash,  node_hash))
+
+        def hash_nodes():
+            hashes = []
+            for node in self.nodes:
+                hashes.append(hash(node))
+            return hashes
+
+        return hash((edge_hash, *hash_nodes()))
 
     def symbols(self):
-
         def recurse(node):
             obj = self.nodes[node]
             if not is_op(obj):
@@ -481,6 +636,7 @@ class ExpressionGraph(Algebraic):
                     return obj.symbols()
                 except AttributeError:
                     return set()
+
             child_symbols = set.union(
                     *(recurse(child)
                       for child in self.edges[node])
@@ -518,6 +674,70 @@ class ExpressionGraph(Algebraic):
 
         return visited
 
+    def get_topological_sorted_indices(self):
+        """Topological sort via Kahn's algorithm."""
+
+        # Tree is organised as:
+        #
+        #         parent
+        #         /   \
+        #      child  child
+        #
+        # edges point from parent to child
+
+        frontier = {self.head}
+        edges = {i: l for i, l in self.edges.items() if l}
+        reverse_graph = defaultdict(list)
+
+        for in_node, out_nodes in edges.items():
+            for out_node in out_nodes:
+                reverse_graph[out_node].append(in_node)
+        result = []
+        while frontier:
+            node = frontier.pop()
+            result.append(node)
+            if node not in edges:
+                continue
+            while edges[node]:
+                child = edges[node].pop()
+                reverse_graph[child].remove(node)
+                if not reverse_graph[child]:
+                    frontier.add(child)
+
+        if any(lst != [] for lst in edges.values()):
+            raise ValueError(f'Graph has cycles: {edges}')
+        return result
+
+    def is_acyclic(self):
+        self.get_topological_sorted_indices()
+        return True
+
+    def __repr__(self):
+        assert self.is_acyclic()
+
+        def trunk_function(node_object, *children):
+            args = ','.join(children)
+            return f'({str(node_object)}: {args})'
+
+        return recursively_apply(self, trunk_function, str)
+
+
+numpy_handlers.update(
+    {
+        np.matmul: lambda a, b: ExpressionGraph(matmul, a, b),
+        np.multiply: lambda a, b: ExpressionGraph(mul, a, b),
+        np.add: lambda a, b: ExpressionGraph(add, a, b),
+        np.subtract: lambda a, b: ExpressionGraph(sub, a, b),
+        np.divide: lambda a, b: ExpressionGraph(div, a, b),
+        np.negative: lambda x: ExpressionGraph(neg, x),
+        np.transpose: lambda x: ExpressionGraph(transpose, x)
+    }
+)
+
+
+def symbolic_vector(name, length):
+    return Variable(name, shape=(length, ))
+
 
 class Variable(Algebraic):
     """Symbolic type for a free variable."""
@@ -532,7 +752,7 @@ class Variable(Algebraic):
         if self.name is not None:
             return f'{self.__class__.__name__}({self.name})'
         else:
-            return super().__repr__()
+            return 'unnamed_variable'
 
     @property
     def shape(self):
@@ -548,7 +768,12 @@ class Variable(Algebraic):
         return id(self) == id(other)
 
 
-_t = Variable('t')
+_t = Variable('time')
+
+
+def resolve_parameter_uid(block, index):
+    name = block.parameters[index]
+    return hash(name)
 
 
 class Parameter(Algebraic):
@@ -562,6 +787,7 @@ class Parameter(Algebraic):
     _table = {}
 
     def __new__(cls, block, parameter: Union[str, int]):
+
         if isinstance(parameter, str):
             index = find_param_index_by_name(block, parameter)
         else:
@@ -570,9 +796,11 @@ class Parameter(Algebraic):
             f'Invalid parameter index for {block}: got {parameter},'\
             f'expected a number between 0 and {len(block.parameters)}'
 
-        uid = (id(block), index)
+        uid = resolve_parameter_uid(block, index)
+
         try:
-            return Parameter._table[uid]
+            obj = Parameter._table[uid]
+            return obj
         except KeyError:
             pass
         obj = Algebraic.__new__(cls)
@@ -597,7 +825,11 @@ class Parameter(Algebraic):
 
     @property
     def name(self):
-        return self._parent().parameters[self.index]
+        parent = self._parent()
+        return parent.parameters[self.index]
+
+    def __repr__(self):
+        return self.name
 
     @property
     def shape(self):
@@ -624,6 +856,10 @@ class Function(Algebraic):
         self.function = function
         self.arguments = arguments
 
+    def __repr__(self):
+        args = ','.join(self.arguments)
+        return f'{str(self.function)}({args})'
+
     @property
     def shape(self):
         return self._shape
@@ -641,9 +877,22 @@ class Function(Algebraic):
         args = [args_dict[arg] for arg in self.arguments]
         return self.function(*args)
 
+    @staticmethod
+    def from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
+        shape = graph.shape
+
+        indices = {
+            a: arguments.index(a) for a in graph.symbols()
+        }
+
+        def func(*args):
+            filtered_args = {arg: args[i] for arg, i in indices.items()}
+            return graph.call(filtered_args)
+        return Function(shape, func, arguments)
+
 
 class SignalReference(Algebraic):
-    """Symbolic variable representing a time varying signal.
+    """Symbolic variable stresenting a time varying signal.
 
     Args:
         port: The model port from which this signal is derived.
@@ -667,6 +916,9 @@ class SignalReference(Algebraic):
         new_signal = super().__new__(cls)
         SignalReference._signals[source_id] = weakref.ref(new_signal)
         return new_signal
+
+    def __repr__(self):
+        return str(self.port)
 
     @property
     def t(self):
@@ -702,22 +954,48 @@ class SignalReference(Algebraic):
 
     def call(self, args):
         function = args[self]
-        result = Function(self.shape, function, [self.t])
+        if isinstance(function, ExpressionGraph):
+            result = function
+        else:
+            result = Function(self.shape, function, [self.t])
+
         if self.t in args:
             return result.call(args)
         else:
             return result
 
 
-def as_vector(arg):
-    try:
-        return flatten(arg)
-    except TypeError:
-        if isinstance(arg, (int, float)):
-            return arg,
+def list_symbols(arg):
+    return arg.symbols()
 
-    if is_symbolic(arg):
-        return backend.cast(arg)
+
+def is_symbolic(arg):
+    if isinstance(arg, list):
+        return any(is_symbolic(a) for a in arg)
+    try:
+        return arg.is_symbolic
+    except AttributeError:
+        return False
+
+
+def is_vector_like(arg):
+    if is_matrix(arg):
+        return len(arg.shape) == 1 or (
+            len(arg.shape) == 2 and arg.shape[1] == 1)
+    return False
+
+
+def as_vector(arg):
+    if isinstance(arg, Algebraic) or is_vector_like(arg):
+        return arg
+    if isinstance(arg, (list, tuple)):
+        return flatten(arg, 1)
+
+    if isinstance(arg, (int, float)):
+        return [arg]
+
+    if arg is None:
+        return []
 
     raise NotImplementedError(
         f'Don\'t know to to vectorise {arg.__class__}'
@@ -754,48 +1032,7 @@ def is_temporal(symbol):
 
 
 def is_matrix(obj):
-    return isinstance(obj, (np.ndarray, spmatrix))
-
-
-def lambdify(graph: ExpressionGraph,
-             arguments: List[Union[Algebraic, List[Algebraic]]],
-             name: str = 'f'
-             ):
-
-    substitutions = {}
-    for i, arg in enumerate(arguments):
-        if isinstance(arg, list):
-            assert all(sub_arg.shape == scalar_shape for sub_arg in arg), \
-                'Invalid arguments, lists must be a list of scalars'
-            symbol = SymbolicVector(f'x_{i}', len(arg))
-            substitutions.update(
-                {sub_arg: symbol[j] for j, sub_arg in enumerate(arg)})
-        else:
-            try:
-                n,  = arg.shape
-            except ValueError as ex:
-                n, m = arg.shape
-                if m > 1:
-                    raise ex
-            symbol = SymbolicVector(f'x_{i}', n)
-            substitutions[arg] = symbol
-
-    def recurse(node):
-        obj = graph.nodes[node]
-        if is_op(obj):
-            args = [recurse(child) for child in graph.edges[node]]
-            return obj(*args)
-        if is_matrix(obj):
-            return backend.cast(obj)
-        try:
-            return substitutions[obj]
-        except (KeyError, TypeError):
-            return obj
-
-    symbolic_expressions = recurse(graph.head)
-    return backend.lambdify(
-        symbolic_expressions, list(substitutions.values()), name
-    )
+    return isinstance(obj, np.ndarray)
 
 
 class Quadrature(Algebraic):
@@ -805,6 +1042,9 @@ class Quadrature(Algebraic):
         self.integrand = integrand
         self._context = weakref.ref(context)
         self.index = context.add_quadrature(integrand)
+
+    def __repr__(self):
+        return f'(int_0^t {str(self.integrand)} dt'
 
     @property
     def shape(self):
@@ -821,49 +1061,38 @@ class Quadrature(Algebraic):
         return self.integrand.symbols()
 
     def __call__(self, t, *args):
-        f = self.context.get_symbolic_integrator(self.context.parameters)
-        return f(t, *args)
-
-
-@register_op()
-def time_integral(integrand, context):
-    return Quadrature(integrand, context)
+        return self.context.evaluate_quadrature(0, t, *args)
 
 
 def concatenate(*arguments):
     length = 0
-    constants = {}
-    variables = {}
+    scalar_constants = []
+    vectors = []
+    # put all scalar constants into a single vector
+    # multiply all vector constants and vector graphs by inclusion maps
 
     for arg in arguments:
         if isinstance(arg, (int, float, complex)):
-            constants[length] = arg
+            scalar_constants.append((length, arg))
             length += 1
             continue
+        assert len(arg.shape) == 1,\
+            f'Cannot concatenate object with shape {arg.shape}'
 
-        assert arg.shape == scalar_shape, 'Cannot concatenate matrices'
         n, = arg.shape
-        variables[arg] = list(range(length, length + n))
+        basis_map = dict(enumerate(range(length, length + n)))
+        vectors.append((basis_map, n, arg))
         length = length + n
 
-    inclusions = []
-    if constants:
-        constant_indices, constant_vector = zip(*constants.items())
-        inclusion = projection_matrix(constant_indices, length).T
-        vector = np.array(constant_vector)
-        inclusions.append((inclusion, vector))
+    result = sparse_matrix((length, ))
+    while scalar_constants:
+        i, v = scalar_constants.pop()
+        result[i] = v
 
-    for variable, indices in variables.items():
-        inclusion_v = projection_matrix(indices, length).T
-        inclusions.append((inclusion_v, variable))
-
-    pair = inclusions.pop()
-    assert pair is not None
-
-    result = pair[0] @ pair[1]
-    while inclusions:
-        pair = inclusions.pop()
-        result += pair[0] @ pair[1]
+    while vectors:
+        basis_map, domain, vector = vectors.pop()
+        inclusion = inclusion_map(basis_map, domain, length)
+        result = result + inclusion(vector)
 
     return result
 
@@ -898,3 +1127,48 @@ def create_log_barrier_function(constraint, stiffness):
     from sysopt.symbolic.scalar_ops import log
     return - stiffness * log(stiffness * constraint + 1)
 
+
+class ConstantFunction(Algebraic):
+    """Wrap a constant value and treat it like a function."""
+    def __init__(self, value, arguments: List[Union[Variable, Parameter]]):
+        if isinstance(value, np.ndarray):
+            self.value = value.view(Matrix)
+        elif isinstance(value, (list, tuple)):
+            self.value = np.array(value).view(Matrix)
+        else:
+            self.value = value
+
+        self.arguments = arguments
+
+    def __hash__(self):
+        return hash((*self.arguments, self.value))
+
+    @property
+    def shape(self):
+        if isinstance(self.value, (float, int)):
+            return scalar_shape
+        else:
+            return self.value.shape
+
+    def __repr__(self):
+        return str(self.value)
+
+    def symbols(self):
+        return self.arguments
+
+    def __call__(self, *args, **kwargs):
+        return self.value
+
+
+def as_function(expr: Algebraic, arguments: SymbolicArray):
+
+    if isinstance(expr, list):
+        return concatenate(*expr)
+
+    if not isinstance(expr, ExpressionGraph):
+        # coerce into an expression graph
+        zero = sparse_matrix(expr.shape)
+        return expr + zero
+    else:
+        return expr
+    raise NotImplementedError(f'Cannot turn {type(expr)} into a function')

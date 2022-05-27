@@ -13,17 +13,17 @@ def expected_result():
 
 
 def dfdx(t, x, u, p):
-    return -x[0] * p[0],
+    return -x[0] * p[0]
 
 
 def x0(p):
-    return p[1],
+    return p[1]
 
 
 block = FullStateOutput(metadata, dfdx, x0)
 
 
-def test_autodif():
+def test_autodiff():
 
     t_f = 10
     with SolverContext(block, t_f) as soln:

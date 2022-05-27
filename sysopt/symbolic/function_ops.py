@@ -5,7 +5,6 @@ from copy import copy
 from typing import Union
 
 from sysopt.types import Domain
-from sysopt.backends import concatenate_symbols
 from sysopt.symbolic.op_decorators import (
     require_equal_domains, require_equal_order_codomain
 )
@@ -55,7 +54,7 @@ class Concatenate(FunctionOp):
 
     def __call__(self, *args):
         result = [f(*args) for f in self.__vectors]
-        return concatenate_symbols(result)
+        return result
 
 
 class TensorProjection(FunctionOp):

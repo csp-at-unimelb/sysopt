@@ -4,18 +4,16 @@ import copy
 from dataclasses import dataclass, asdict
 from typing import Callable, Union, Iterable
 
-from sysopt.types import Domain
 
+from sysopt.types import Domain
 from sysopt.block import Block, Composite
 from sysopt.helpers import flatten, strip_nones
-
-from sysopt.symbolic.symbols import as_vector, sparse_matrix
-from sysopt.symbolic.function_ops import (
-    FunctionOp, Concatenate, project, compose
+from sysopt.symbolic.symbols import (
+    as_vector, sparse_matrix, as_function, symbolic_vector,
+    get_time_variable
 )
-
-from sysopt.backends import (
-    concatenate_symbols,  is_symbolic
+from sysopt.symbolic.function_ops import (
+    FunctionOp, Concatenate, project, compose,
 )
 
 
@@ -127,16 +125,34 @@ class VectorFunctionWrapper:
         )
 
 
-def concatenate(*args):
+def concatenate_block_func(*args):
     flat_args = strip_nones(flatten(args, 2))
     if any(isinstance(arg, FunctionOp) for arg in flat_args):
         return Concatenate(*flat_args)
-    if any(is_symbolic(arg) for arg in flat_args):
-        return concatenate_symbols(*flat_args)
+    # if any(is_symbolic(arg) for arg in flat_args):
+    #     return concatenate_symbols(*flat_args)
     if all(isinstance(arg, (float, int)) for arg in flat_args):
         return flat_args
 
     raise NotImplementedError
+
+
+def to_graph(wrapper):
+
+    if isinstance(wrapper.domain, int):
+        x = symbolic_vector('parameters', wrapper.domain)
+        return wrapper.function(x)
+
+    symbols = [
+        symbolic_vector(name, length) if length > 0 else None
+        for name, length in asdict(wrapper.domain).items()
+    ]
+
+    symbols[0] = get_time_variable()
+    symbolic_call = wrapper(*symbols)
+    graph = as_function(symbolic_call, symbols)
+
+    return graph
 
 
 class BlockFunctionWrapper(FunctionOp):
@@ -288,7 +304,7 @@ def _create_functions_from_leaf_block(block: Block):
         )
 
     tables = create_tables_from_block(block)
-    return domain, x0, f, g, h, tables
+    return x0, f, g, h, tables
 
 
 def create_tables_from_block(block):
@@ -338,17 +354,17 @@ def create_functions_from_block(block: Union[Block, Composite]):
     domain = Domain()
     out_table = {}
 
-    for component, (comp_domain, _, f, g, h, table) in functions.items():
+    for component, (_, f, g, h, table) in functions.items():
 
         domain_offsets[component] = copy.copy(domain)
-        domain += comp_domain
+        domain += g.domain
         out_table = merge_table(out_table, table)
         if g:
             output_offsets[component] = output_codomain
             output_codomain += g.codomain
 
     lists = zip(*list(functions.values()))
-    _, x0_list, f_list, g_list, h_list, _ = [
+    x0_list, f_list, g_list, h_list, _ = [
         strip_nones(item) for item in lists
     ]
 
@@ -358,7 +374,7 @@ def create_functions_from_block(block: Union[Block, Composite]):
     g = coproduct(domain, *g_list) if g_list else None
 
     if not block.wires:
-        return domain, x0, f, g, h, out_table
+        return x0, f, g, h, out_table
 
     arg_permute = ArgPermute(domain)
     in_wires = [
@@ -422,16 +438,16 @@ def create_functions_from_block(block: Union[Block, Composite]):
 
     f = compose(f, arg_permute)
     if h:
-        h = concatenate(compose(h, arg_permute), *h_new)
+        h = concatenate_block_func(compose(h, arg_permute), *h_new)
     else:
-        h = concatenate(*h_new)
+        h = concatenate_block_func(*h_new)
     if g_actual:
         items = list(g_actual[i] for i in range(len(block.outputs)))
-        g = concatenate(*items)
+        g = concatenate_block_func(*items)
     else:
         g = None
 
-    return arg_permute.domain, x0, f, g, h, out_table
+    return x0, f, g, h, out_table
 
 
 def partition_tree(block, leaves, trunks):
