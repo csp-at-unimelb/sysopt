@@ -1,12 +1,13 @@
+"""Module for differentiable path solvers."""
+
 from dataclasses import asdict
 
 import casadi as _casadi
 import numpy as np
 
-from sysopt.backends.casadi.math import fmin, fmax, heaviside
+from sysopt.backends.casadi.math import heaviside
 from sysopt.backends.casadi.expression_graph import lambdify
 from sysopt.types import Domain
-# from sysopt.solver.symbol_database import FlattenedSystem
 
 
 class InterpolatedPath(_casadi.Callback):
@@ -52,62 +53,73 @@ class InterpolatedPath(_casadi.Callback):
         return _casadi.Sparsity.dense((self.x.shape[0], 1))
 
     def eval(self, arg):
-        return self.linearly_interpolate(arg[0])
+        # return self.linearly_interpolate(arg[0])
+        return self.cubic_interpolate(arg[0])
 
     def linearly_interpolate(self, t):
 
-        dt = self.t[1:] - self.t[:-1]
-        dx = self.x[:, 1:] - self.x[:, :-1]
-        dh = 1 / dt
+        t_lower = t - self.t[:-1]
+        t_upper = t - self.t[1:]
+        dt = t_upper - t_lower
+        window = heaviside(t_lower) - heaviside(t_upper)
+        start = heaviside(self.t[0] - t)
+        end = heaviside(t - self.t[-1])
 
-        dh_rep = _casadi.repmat(dh, (dx.shape[0], 1))
+        s_lower = window * t_upper / dt
+        s_upper = - window * t_lower / dt
 
-        delta_x = dh_rep * dx
-        t_rel = t - self.t
-        window = (heaviside(t_rel[1:]) - heaviside(t_rel[:-1]))
+        x_start = start * self.x[:, 0]
+        x_end = end * self.x[:, -1]
+        x_t = (
+            self.x[:, :-1] @ s_lower.T + self.x[:, 1:] @ s_upper.T
+            + x_start + x_end
+        )
 
-        x_t = window * (self.x[:, :-1] + t_rel * delta_x)
         return [x_t]
 
     def cubic_interpolate(self, t):
+        # pylint: disable=invalid-name
 
-        dt = self.t[1:] - self.t[:-1]
-        dh = 1 / dt
-        dx = self.x[:, 1:] - self.x[:, :-1]
+        n = self.x.shape[0]
 
-        dh_rep = _casadi.repmat(dh, (dx.shape[0], 1))
+        t_lower = t - self.t[:-1]
+        t_upper = t - self.t[1:]
 
-        delta_x = dh_rep * dx
-        m = _casadi.horzcat(dx[:, 0] * dh[0],
-                    0.5 * (delta_x[: 1:] + delta_x[:, :-1]),
-                    dx[:, -1] * dh[-1])
+        dt = t_upper - t_lower
+        window = heaviside(t_lower) - heaviside(t_upper)
+        start = heaviside(self.t[0] - t)
+        end = heaviside(t - self.t[-1])
 
-        t_rel = self.t - t
-        r = -t_rel[:-1] / dt
-        s = 1 - r
-        window = (heaviside(t_rel[1:]) - heaviside(t_rel[:-1]))
+        s_lower = t_upper / dt
+        s_upper = - t_lower / dt
 
-        rrr = window * r * r * r
-        rrs = window * r * r * s
-        ssr = window * r * s * s
-        sss = window * s * s * s
+        x_start = start * self.x[:, 0]
+        x_end = end * self.x[:, -1]
 
-        # pylint: disable=invalid-names
-        p_0 = self.x[:, :-1]
+        T = _casadi.repmat(self.t, (n, 1))
 
-        p_1 = p_0 + m[:, :-1] / 3
-        p_3 = self.x[:, 1:]
-        p_2 = p_3 - m[:, 1:] / 3
+        dx = _casadi.horzcat(
+            (self.x[:, 1] - self.x[:, 0]) / (T[:, 1] - T[:, 0]),
+            (self.x[:, 2:] - self.x[:, :-2]) / (T[:, 2:] - T[:, :-2]) / 2,
+            (self.x[:, -1] - self.x[:, -2]) / (T[:, -1] - T[:, -2])
+        )
 
-        # Bezier Curve / Cubic Hermite Interpolation
-        result = p_0 @ sss.T\
-                 + 3 * p_1 @ ssr.T \
-                 + 3 * p_2 @ rrs.T\
-                 + p_3 @ rrr.T\
-                 + heaviside(self.t[0] - t) * self.x[:, 0]\
-                 + heaviside(t - self.t[-1]) * self.x[:, -1]
+        c_0 = window * s_lower * s_lower * s_lower
+        c_1 = window * s_lower * s_lower * s_upper
+        c_2 = window * s_lower * s_upper * s_upper
+        c_3 = window * s_upper * s_upper * s_upper
 
-        return [result]
+        p0 = self.x[:, :-1]
+        p1 = self.x[:, :-1] + dx[:, :-1] / 3
+        p2 = self.x[:, 1:] - dx[:, 1:] / 3
+        p3 = self.x[:, 1:]
+
+        x_t = (
+            p0 @ c_0.T + 3 * p1 @ c_1.T + 3 * p2 @ c_2.T + p3 @ c_3.T
+            + x_start + x_end
+        )
+
+        return [x_t]
 
 
 def construct_symbols_from(domain: Domain):
@@ -200,8 +212,8 @@ class Integrator:
             'grid': [i / resolution for i in range(resolution + 1)],
             'output_t0': True
         }
-        solver, self.dae_spec, self.x0, self.z0, self.g, symbols = generate_dae_from(
-            system, quadratures)
+        data = generate_dae_from(system, quadratures)
+        solver, self.dae_spec, self.x0, self.z0, self.g, _ = data
 
         self.f = _casadi.integrator('F', solver, self.dae_spec, solver_options)
         self.domain = system.domain

@@ -3,7 +3,7 @@ import weakref
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from inspect import signature
-from functools import cache
+
 import numpy as np
 from typing import Union, List, Callable, Tuple, Optional, Dict, NewType, Any
 
@@ -30,6 +30,8 @@ def find_param_index_by_name(block, name: str):
 
 
 class Matrix(np.ndarray):
+    """View of a numpy matrix for use in expression graphs."""
+
     def __hash__(self):
         shape_hash = hash(self.shape)
         data_hash = hash(tuple(self.ravel()))
@@ -530,7 +532,7 @@ class ExpressionGraph(Algebraic):
 
         assert len(args) == len(self.symbols()),\
             f'Tried to call function with {self.symbols()} '
-        values = {k: v for k, v in zip(self.symbols(), args)}
+        values = dict(zip(self.symbols(), args))
         return self.call(values)
 
     def call(self, values):
@@ -751,7 +753,7 @@ class Variable(Algebraic):
             return f'{self.__class__.__name__}({self.name})'
         else:
             return 'unnamed_variable'
-    
+
     @property
     def shape(self):
         return self._shape
@@ -767,10 +769,6 @@ class Variable(Algebraic):
 
 
 _t = Variable('time')
-
-
-def SymbolicVector(name, length):
-    return Variable(name, (length,))
 
 
 def resolve_parameter_uid(block, index):
@@ -979,9 +977,11 @@ def is_symbolic(arg):
     except AttributeError:
         return False
 
+
 def is_vector_like(arg):
     if is_matrix(arg):
-        return len(arg.shape) == 1 or ( len(arg.shape) == 2 and arg.shape[1] == 1)
+        return len(arg.shape) == 1 or (
+            len(arg.shape) == 2 and arg.shape[1] == 1)
     return False
 
 
@@ -1080,7 +1080,7 @@ def concatenate(*arguments):
             f'Cannot concatenate object with shape {arg.shape}'
 
         n, = arg.shape
-        basis_map = {i: j for i, j in enumerate(range(length, length + n))}
+        basis_map = dict(enumerate(range(length, length + n)))
         vectors.append((basis_map, n, arg))
         length = length + n
 
@@ -1129,6 +1129,7 @@ def create_log_barrier_function(constraint, stiffness):
 
 
 class ConstantFunction(Algebraic):
+    """Wrap a constant value and treat it like a function."""
     def __init__(self, value, arguments: List[Union[Variable, Parameter]]):
         if isinstance(value, np.ndarray):
             self.value = value.view(Matrix)

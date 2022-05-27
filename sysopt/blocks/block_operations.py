@@ -10,7 +10,7 @@ from sysopt.block import Block, Composite
 from sysopt.helpers import flatten, strip_nones
 from sysopt.symbolic.symbols import (
     as_vector, sparse_matrix, as_function, symbolic_vector,
-    get_time_variable, concatenate
+    get_time_variable
 )
 from sysopt.symbolic.function_ops import (
     FunctionOp, Concatenate, project, compose,

@@ -7,7 +7,7 @@ from sysopt.blocks.block_operations import (
     create_functions_from_block, to_graph)
 from sysopt.blocks import Gain
 from sysopt.symbolic import (
-    is_symbolic, SymbolicVector, match_args_by_name, as_vector
+    is_symbolic, symbolic_vector, match_args_by_name, as_vector
 )
 
 
@@ -106,7 +106,7 @@ class TestSymbolicFunctionsFromLeafBlock:
         assert f.domain == g.domain == h.domain
         domain = f.domain
         args = [
-            SymbolicVector(name=name, length=domain[i])
+            symbolic_vector(name=name, length=domain[i])
             for i, name in enumerate(['t', 'x', 'z', 'u', 'p'])
         ]
 
@@ -197,7 +197,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
     def test_evaluate_composite_initial_conditions_symbolically(self):
         composite = MockComposite()
         x0, f, g, h, _ = create_functions_from_block(composite)
-        p = SymbolicVector('p', 2)
+        p = symbolic_vector('p', 2)
         result = x0(p)
         assert len(result) == x0.codomain
         assert is_symbolic(p)
@@ -205,7 +205,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
         composite2 = Composite()
         composite2.components = [composite, BlockMock('block')]
         x0, f, _, h, _ = create_functions_from_block(composite2)
-        q = SymbolicVector('q', 3)
+        q = symbolic_vector('q', 3)
         result = x0(q)
         assert len(result) == x0.codomain
 
@@ -244,10 +244,10 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
         # computed from block arguments
         args = [1,
-                SymbolicVector('x', 2),
-                SymbolicVector('z', 2),
-                SymbolicVector('u', 2),
-                SymbolicVector('p', 2)
+                symbolic_vector('x', 2),
+                symbolic_vector('z', 2),
+                symbolic_vector('u', 2),
+                symbolic_vector('p', 2)
         ]
 
         f_result = f(*args)
@@ -260,10 +260,10 @@ class TestSymbolicFunctionsFromCompositeBlock:
         _, f, _, _, _ = create_functions_from_block(composite2)
 
         args = [1,
-                SymbolicVector('x', 3),
-                SymbolicVector('z', 3),
-                SymbolicVector('u', 3),
-                SymbolicVector('p', 3)
+                symbolic_vector('x', 3),
+                symbolic_vector('z', 3),
+                symbolic_vector('u', 3),
+                symbolic_vector('p', 3)
         ]
 
         f_result = f(*args)

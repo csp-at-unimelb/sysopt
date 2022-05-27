@@ -7,10 +7,10 @@ from typing import Optional, Dict, List, Union, NewType
 import numpy as np
 
 from sysopt import symbolic
-from sysopt.backends import Integrator, lambdify
+from sysopt.backends import Integrator
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
-    is_temporal, create_log_barrier_function, as_vector, is_symbolic,
+    is_temporal, create_log_barrier_function, is_symbolic,
     ConstantFunction
 )
 
@@ -103,7 +103,7 @@ class SolverContext:
 
         out_dimension = len(constants)
         arguments = symbolic.Variable(shape=(len(proj_indices), ))
-        basis_map = {i: j for i, j in enumerate(proj_indices)}
+        basis_map = dict(enumerate(proj_indices))
         projector = symbolic.inclusion_map(
             basis_map, len(proj_indices), out_dimension
         )
@@ -144,7 +144,7 @@ class SolverContext:
         integrator = self.get_integrator()
         param_map = self._create_parameter_projections()
         args = param_map(params)
-        y, q = integrator.integrate(self.t_final, args[1:])
+        _, q = integrator.integrate(self.t_final, args[1:])
 
         return q(t)[index]
 
@@ -176,7 +176,7 @@ class SolverContext:
         integrator = self.get_integrator(resolution)
 
         p = self._parameter_map(parameters)
-        print(p)
+
         if not t_final:
             t_final = self.t_final
         soln = integrator.integrate(t_final, p)

@@ -54,12 +54,7 @@ def test_interpolated_path_offgrid():
         h11 = tau**3 - tau**2
         p_expected = h00 * p1 + h10*m1 + h01*p2 + h11*m2
 
-        assert abs(f(s_i) - p_expected) < 1e-2
+        assert abs(f(s_i) - p_expected) < 0.1
+        p_actual = path(s_i)
 
-
-
-
-    assert False
-
-
-
+        assert abs(p_actual[0] - p_expected) < 0.1

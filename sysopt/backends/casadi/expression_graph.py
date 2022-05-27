@@ -1,3 +1,5 @@
+"""Module for converting sysopt expression graphs into casadi functions."""
+
 from typing import List, Union
 from sysopt.symbolic import Algebraic, scalar_shape, is_op, is_matrix
 
@@ -44,8 +46,10 @@ def lambdify(graph,
             return casadify(obj)
     expressions = recurse(graph.head)
 
+    # pylint: disable=broad-except
     try:
         outputs = [_casadi.vertcat(expr) for expr in expressions]
+
     except Exception:
         outputs = [expressions]
     return _casadi.Function(name,  list(substitutions.values()), outputs)
