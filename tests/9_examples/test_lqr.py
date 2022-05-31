@@ -1,10 +1,11 @@
-# @nb.code_cell
+# @nb.code_cell_from_text
 import os
 import pathlib
 import sys
 path = pathlib.Path(os.curdir)
 sys.path.append(str(path.absolute().parent))
 
+import matplotlib.pyplot as plt
 # @nb.text_cell
 r"""
 # The Linear Quadratic Regulator
@@ -22,8 +23,6 @@ the minimum.
 # @nb.code_cell
 import numpy as np
 
-import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
 
 # Used to solve LQR problems
 from scipy.linalg import solve_continuous_are
