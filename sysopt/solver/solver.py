@@ -19,6 +19,9 @@ from sysopt.block import Block, Composite
 
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
 
+class InvalidParameterException(Exception):
+    pass
+
 
 @dataclasses.dataclass
 class CandidateSolution:
@@ -142,11 +145,10 @@ class SolverContext:
 
     def evaluate_quadrature(self, index, t, params):
         integrator = self.get_integrator()
-        param_map = self._create_parameter_projections()
-        args = param_map(params)
-        _, q = integrator.integrate(self.t_final, args[1:])
-
-        return q(t)[index]
+        args = self._parameter_map(params)
+        _, q = integrator(t, args)
+        print(q)
+        return q[index]
 
     def evaluate(self, problem: 'Problem',
                  decision_variables: Dict[DecisionVariable, float]):
@@ -174,8 +176,11 @@ class SolverContext:
     def integrate(self, parameters=None, t_final=None, resolution=50):
 
         integrator = self.get_integrator(resolution)
-
-        p = self._parameter_map(parameters)
+        try:
+            p = self._parameter_map(parameters)
+        except ValueError as ex:
+            raise InvalidParameterException(
+                f"Failed to map parameters {parameters} to {self.parameters}")
 
         if not t_final:
             t_final = self.t_final

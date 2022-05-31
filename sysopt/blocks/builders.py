@@ -33,14 +33,15 @@ class FullStateOutput(Block):
     def __init__(self,
                  metadata: Union[Metadata, Signature],
                  dxdt: VectorField,
-                 x0: Optional[ParameterisedConstant] = None):
+                 x0: Optional[ParameterisedConstant] = None,
+                 name=None):
 
         assert not metadata.constraints, \
             f"{type(self)} must have no constraints"
 
         metadata.outputs = metadata.states
 
-        super().__init__(metadata)
+        super().__init__(metadata, name=name)
         self._dxdt = dxdt
         self._x0 = x0 if x0 is not None \
             else lambda p: [0] * len(metadata.states)
@@ -69,11 +70,12 @@ class InputOutput(Block):
 
     def __init__(self,
                  metadata: Union[Metadata, Signature],
-                 function: StatelessFunction):
+                 function: StatelessFunction,
+                 name=None):
         assert not metadata.states and not metadata.constraints,\
             f"{type(self)} must not have states"
 
-        super().__init__(metadata)
+        super().__init__(metadata, name=name)
         self._output_function = function
 
     def compute_outputs(self, t, states, algebraics, inputs, parameters):

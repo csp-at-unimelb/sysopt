@@ -1,12 +1,18 @@
 import numpy as np
 import pytest
 import random
+
+import sympy
+
 from sysopt import Metadata
 from sysopt.block import Composite, Block
 from sysopt.blocks import Gain, Oscillator, LowPassFilter
 from sysopt.solver import SolverContext, Parameter, create_parameter_map
 from sysopt.symbolic import Variable, find_param_index_by_name
 import math
+
+import sympy as sp
+
 
 eps = 1e-4
 
@@ -28,20 +34,23 @@ def expected_output(t, w):
     return ode_solution(t, w_coff=w)
 
 
-def expected_quadrature(t, w):
-    # assuming q = int_0^t y(t)^2 dt
-    # Analytically determined via Wolfram Alpha, or Sympy
+def expected_quadrature(t, w_coff, w_osc=1, phase=0, x0=1):
 
-    return (
-        -2 *np.exp(-2 * t)* w ** 4
-        - 4* np.exp(-2 * t)* w**2
-        + 2* t* w**2
-        - 8 * np.exp(-t)* (w**2 + 1) * np.cos(t * w)
-        - w* np.sin(2*t * w)
-        + np.sin(2* t * w)/w
-        - 2* np.cos(2* t* w)
-        - 2*np.exp(-2 * t) + 2* t) / (4* (w ** 2 + 1)** 2)
+    t_s = sympy.S('t')
+    alpha = 1 / w_coff
+    mag = alpha ** 2 + w_osc ** 2
+    out = alpha ** 2 * sympy.cos(w_osc * t_s + phase) / mag
+    out += alpha * w_osc * sympy.sin(w_osc * t_s + phase) / mag
+    out += sympy.exp(-alpha * t_s) * (
+        x0
+        - alpha ** 2 * sympy.cos(phase) / mag
+        - w_osc * alpha * sympy.sin(phase) / mag
+    )
+    integrand = out ** 2
+    c = integrand.evalf(10, {t_s: 0})
+    soln = sympy.integrate(integrand, (t_s, 0, t)) - c
 
+    return float(soln)
 
 
 class FilteredOscMockUnconstrained(Block):
@@ -161,9 +170,6 @@ class TestSolverUnconstrained:
 
         t_f = 2
         test_params = [1, 0, 1, 1]
-        t_test = np.pi
-        x_test = [-1]
-        dx_expected = -2
 
         with SolverContext(block, t_f, constants) as solver:
             integrator = solver.get_integrator(resolution=150)
@@ -224,13 +230,14 @@ class TestSolverUnconstrained:
             # with 2 arguments: time t and
 
             w = 1
-            soln = squared(t_f, 1)
+            y, q = solver.integrate(w, t_f, resolution=150)
+            result = squared(t_f, 1)
+
             # calling
 
             # solution should be given by
             expected_soln = quad(t_f, w)
-            assert abs(soln - expected_soln) < 0.05
-
+            assert abs(result - expected_soln) < 1e-4
 
 
 class TestSolverCompositeModel:
@@ -285,4 +292,4 @@ class TestSolverCompositeModel:
 
             # solution should be given by
             expected_soln = quad(t_f, w)
-            assert abs(soln - expected_soln) < 0.1
+            assert abs(soln - expected_soln) < 1e-4
