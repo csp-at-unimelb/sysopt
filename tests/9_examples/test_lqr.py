@@ -1,4 +1,5 @@
 # @nb.code_cell_from_text
+r"""
 import os
 import pathlib
 import sys
@@ -6,6 +7,8 @@ path = pathlib.Path(os.curdir)
 sys.path.append(str(path.absolute().parent))
 
 import matplotlib.pyplot as plt
+"""
+
 # @nb.text_cell
 r"""
 # The Linear Quadratic Regulator
