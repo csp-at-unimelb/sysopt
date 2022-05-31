@@ -1061,7 +1061,7 @@ class Quadrature(Algebraic):
         return self.integrand.symbols()
 
     def __call__(self, t, *args):
-        return self.context.evaluate_quadrature(0, t, *args)
+        return self.context.evaluate_quadrature(self.index, t, *args)
 
 
 def concatenate(*arguments):
