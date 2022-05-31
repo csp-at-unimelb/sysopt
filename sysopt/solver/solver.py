@@ -180,7 +180,8 @@ class SolverContext:
             p = self._parameter_map(parameters)
         except ValueError as ex:
             raise InvalidParameterException(
-                f"Failed to map parameters {parameters} to {self.parameters}")
+                f'Failed to map parameters {parameters} to {self.parameters}'
+            ) from ex
 
         if not t_final:
             t_final = self.t_final
