@@ -27,8 +27,11 @@ class Port:
         self.size = size
         """(int) Number of 'channel' on this port"""
 
-    def __repr__(self):
+    def __str__(self):
         return f'{str(self.parent)}->{self.port_type}'
+
+    def __repr__(self):
+        return f'Port({self.port_type}, {self.parent}, {self.size})'
 
     @property
     def size(self):
@@ -100,6 +103,12 @@ class Channel:
         self.port = port
         self.indices = indices  # type: List[int]
 
+    def __str__(self):
+        return f'{str(self.port)}{self.indices}'
+
+    def __repr__(self):
+        return f'{self.__class__}({repr(self.port)}, {repr(self.indices)})'
+
     @property
     def port_type(self):
         return self.port.port_type
@@ -151,8 +160,11 @@ class ComponentBase:
             node = node.parent
         return reversed(tree)
 
-    def __repr__(self):
+    def __str__(self):
         return '/'.join([node.name for node in self.trunk()])
+
+    def __repr__(self):
+        return f'{self.name}({self.__class__})'
 
     def compute_dynamics(self,
                          t: Time,

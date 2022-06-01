@@ -133,3 +133,4 @@ dmypy.json
 
 # Pytest
 .pytest_cache
+errors.txt
