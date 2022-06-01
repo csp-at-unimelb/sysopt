@@ -65,7 +65,8 @@ def test_build_outer_system():
     p = [3, 5]
     x0_value, = x0(p)
     assert x0_value == p[0]
-    domain = [1, 1, 3, 0, 2]
+
+    # domain = [1, 1, 3, 0, 2]
 
     f_values, = f(0, 2, [7, 11, 13], None, p)
 
