@@ -255,7 +255,7 @@ class Block(ComponentBase):
 
         name = str(self)
         return [f'{name}/{p}' for p in self.metadata.parameters]
-            
+
     def find_by_name(self, var_type, name):
         try:
             values = asdict(self.metadata)[var_type]

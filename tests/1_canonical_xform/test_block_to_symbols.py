@@ -135,7 +135,6 @@ class TestSymbolicFunctionsFromLeafBlock:
             graph_result = as_vector(
                 graph.call(match_args_by_name(graph, values))
             )
-            print(graph.nodes)
             assert graph_result == func_result
 
     def test_skip_not_implemented_functions(self):
