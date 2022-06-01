@@ -307,15 +307,17 @@ class ConnectionList(list):
         elif not dest.size and src.size:
             dest.size = src.size
         elif not src.size and not dest.size:
-            raise ConnectionError(f'Cannot connect {src} to {dest}, '
-                                  f'both have unknown dimensions. '
-                                  f'Error occurs in Composite {self._parent()} '
-                                  f'when connecting blocks {src.parent} to {dest.parent}')
+            raise ConnectionError(
+              f'Cannot connect {src} to {dest}, '
+              f'both have unknown dimensions. '
+              f'Error occurs in Composite {self._parent()} '
+              f'when connecting blocks {src.parent} to {dest.parent}.')
         elif src.size != dest.size:
-            raise ConnectionError(f'Cannot connect {src} to {dest}, '
-                                  f'incompatible dimensions. '
-                                  f'Error occurs in Composite {self._parent()} '
-                                  f'when connecting blocks {src.parent} to {dest.parent}, ')
+            raise ConnectionError(
+              f'Cannot connect {src} to {dest}, '
+              f'incompatible dimensions. '
+              f'Error occurs in Composite {self._parent()} '
+              f'when connecting blocks {src.parent} to {dest.parent}.')
         self.append((src, dest))
 
 
