@@ -370,7 +370,7 @@ class Composite(ComponentBase):  # noqa
                 if src.parent not in valid_components:
                     raise InvalidWire('Failed to add wires:'
                                       f'source component {src.parent} '
-                                      f'not found for wire {pair}' 
+                                      f'not found for wire {pair}'
                                       f'Error arises in composite {self}')
                 if dest.parent not in valid_components:
                     raise InvalidWire('Failed to add wires:'
