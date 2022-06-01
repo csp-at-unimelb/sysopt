@@ -250,6 +250,9 @@ class Block(ComponentBase):
 
     @property
     def parameters(self):
+        if not self.metadata.parameters:
+            return []
+
         name = str(self)
         return [f'{name}/{p}' for p in self.metadata.parameters]
 
