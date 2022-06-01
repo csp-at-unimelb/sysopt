@@ -310,11 +310,17 @@ class ConnectionList(list):
         elif not dest.size and src.size:
             dest.size = src.size
         elif not src.size and not dest.size:
-            raise ConnectionError(f'Cannot connect {src} to {dest}, '
-                                  f'both have unknown dimensions')
+            raise ConnectionError(
+              f'Cannot connect {src} to {dest}, '
+              f'both have unknown dimensions. '
+              f'Error occurs in Composite {self._parent()} '
+              f'when connecting blocks {src.parent} to {dest.parent}.')
         elif src.size != dest.size:
-            raise ConnectionError(f'Cannot connect {src} to {dest}, '
-                                  f'incompatible dimensions')
+            raise ConnectionError(
+              f'Cannot connect {src} to {dest}, '
+              f'incompatible dimensions. '
+              f'Error occurs in Composite {self._parent()} '
+              f'when connecting blocks {src.parent} to {dest.parent}.')
         self.append((src, dest))
 
 
@@ -367,11 +373,13 @@ class Composite(ComponentBase):  # noqa
                 if src.parent not in valid_components:
                     raise InvalidWire('Failed to add wires:'
                                       f'source component {src.parent} '
-                                      f'not found for wire {value}')
+                                      f'not found for wire {pair}'
+                                      f'Error arises in composite {self}')
                 if dest.parent not in valid_components:
                     raise InvalidWire('Failed to add wires:'
                                       f'Sink component {dest.parent} '
-                                      f'not found for wire {value}')
+                                      f'not found for wire {pair}'
+                                      f'Error arises in composite {self}')
                 self._wires.add(pair)
         elif value is self._wires:
             return
