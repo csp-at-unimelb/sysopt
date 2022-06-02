@@ -256,14 +256,24 @@ class ArgPermute(FunctionOp):
 
     def __call__(self, t, x, z, u, p):
         # This is the input vector that the internal components see
-        u_inner = [
-            z[self.constraint_to_input[i]] if i in self.constraint_to_input
-            else u[self.input_to_input[i]]
-            for i in range(self.codomain.inputs)
-        ]
+        try:
+            u_inner = [
+                z[self.constraint_to_input[i]] if i in self.constraint_to_input
+                else u[self.input_to_input[i]]
+                for i in range(self.codomain.inputs)
+            ]
+            z_inner = z[:self.codomain.constraints]
+            return t, x, z_inner, u_inner, p
 
-        z_inner = z[:self.codomain.constraints]
-        return t, x, z_inner, u_inner, p
+        except:
+            raise Exception(
+                  'Error occurred while connecting wires inside a composite\n' +
+                   f'Current Co-domain: {self.codomain} \n' +
+                   f'Number of inputs: {self.codomain.inputs} \n' +
+                   f'input->input dict: {self.input_to_input} \n' +
+                   f'constraint->input dict: {self.constraint_to_input} \n' +
+                   f'inputs: {u} \n' +
+                   f'constraints: {z}')
 
 
 def _create_functions_from_leaf_block(block: Block):
