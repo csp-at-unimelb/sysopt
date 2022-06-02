@@ -408,8 +408,8 @@ class Composite(ComponentBase):  # noqa
     def print_hierarchy(self, layer=None):
         if layer is None:
             layer = '00'
-            print("")
-            print("Composite Hierarchy:")
+            print('')
+            print('Composite Hierarchy:')
             print(f'{layer}-{self.name}')
         for i, component in enumerate(self.components):
             label = f'  {layer}.{i:02}'
@@ -424,8 +424,8 @@ class Composite(ComponentBase):  # noqa
     def print_wiring(self, layer=None):
         if layer is None:
             layer = '00'
-            print("")
-            print("Wiring Schematic:")
+            print('')
+            print('Wiring Schematic:')
             print(f'{layer}-{self.name}')
         w_label = f'    {layer}'
         for i, wire in enumerate(self.wires):
@@ -434,63 +434,70 @@ class Composite(ComponentBase):  # noqa
                     f'Channel has different number of wires as start & end'
                     f'{wire[0].parent}-{wire[0].indices} -->'
                     f'{wire[1].parent}-{wire[1].indices}')
-            if isinstance(wire[0].parent, Block) and isinstance(wire[1].parent, Block):
+            if (isinstance(wire[0].parent, Block)
+                    and isinstance(wire[1].parent, Block)):
                 for n in range(len(wire[0].indices)):
-                    print(f'{w_label}-{i}: {wire[0].parent.name}/'
-                          f'\"{wire[0].parent.metadata.outputs[wire[0].indices[n]]}\"'
-                          f' --> {wire[1].parent.name}/'
-                          f'\"{wire[1].parent.metadata.inputs[wire[1].indices[n]]}\"')
-            elif isinstance(wire[0].parent, Composite) and isinstance(wire[1].parent, Block):
+                    print(
+                      f'{w_label}-{i}: {wire[0].parent.name}/'
+                      f'\"{wire[0].parent.metadata.outputs[wire[0].indices[n]]}\"'
+                      f' --> {wire[1].parent.name}/'
+                      f'\"{wire[1].parent.metadata.inputs[wire[1].indices[n]]}\"')
+            elif (isinstance(wire[0].parent, Composite) 
+                    and isinstance(wire[1].parent, Block)):
                 if self == wire[0].parent:
                     for n in range(len(wire[0].indices)):
-                        print(f'{w_label}-{i}: {wire[0].parent.name}.'
-                              f'inputs[{wire[0].indices[n]}]'
-                              f' --> {wire[1].parent.name}/'
-                              f'\"{wire[1].parent.metadata.inputs[wire[1].indices[n]]}\"'
-                              f'    (self.inputs-->)')
+                        print(
+                          f'{w_label}-{i}: {wire[0].parent.name}.'
+                          f'inputs[{wire[0].indices[n]}]'
+                          f' --> {wire[1].parent.name}/'
+                          f'\"{wire[1].parent.metadata.inputs[wire[1].indices[n]]}\"'
+                          f'    (self.inputs-->)')
                 else:
                     for n in range(len(wire[0].indices)):
-                        print(f'{w_label}-{i}: {wire[0].parent.name}.'
-                              f'outputs[{wire[0].indices[n]}]'
-                              f' --> {wire[1].parent.name}/'
-                              f'\"{wire[1].parent.metadata.inputs[wire[1].indices[n]]}\"')
-            elif isinstance(wire[0].parent, Block) and isinstance(wire[1].parent, Composite):
+                        print(
+                        f'{w_label}-{i}: {wire[0].parent.name}.'
+                        f'outputs[{wire[0].indices[n]}]'
+                        f' --> {wire[1].parent.name}/'
+                        f'\"{wire[1].parent.metadata.inputs[wire[1].indices[n]]}\"')
+            elif (isinstance(wire[0].parent, Block) 
+                    and isinstance(wire[1].parent, Composite)):
                 if self == wire[1].parent:
                     for n in range(len(wire[0].indices)):
                         print(f'{w_label}-{i}: {wire[0].parent.name}/'
                               f'\"{wire[0].parent.metadata.outputs[wire[0].indices[n]]}\"'
                               f' --> {wire[1].parent.name}.'
-                              f'outputs[{wire[1].indices[n]}]    (-->self.outputs)')
+                              f'outputs[{wire[1].indices[n]}]'
+                              f'    (-->self.outputs)')
                 else:
                     for n in range(len(wire[0].indices)):
                         print(f'{w_label}-{i}: {wire[0].parent.name}/'
                               f'\"{wire[0].parent.metadata.outputs[wire[0].indices[n]]}\"'
                               f' --> {wire[1].parent.name}.'
                               f'inputs[{wire[1].indices[n]}]')
-            elif isinstance(wire[0].parent, Composite) and \
-                 isinstance(wire[1].parent, Composite):
-                if self == wire[0].parent and self == wire[1].parent:
+            elif (isinstance(wire[0].parent, Composite)
+                    and isinstance(wire[1].parent, Composite)):
+                if (self == wire[0].parent and self == wire[1].parent):
                     for n in range(len(wire[0].indices)):
                         print(f'{w_label}-{i}: {wire[0].parent.name}.'
                               f'inputs[{wire[0].indices[n]}]'
                               f' --> {wire[1].parent.name}.'
                               f'outputs[{wire[1].indices[n]}]'
                               f'    (self.inputs-->self.outputs)')
-                elif self == wire[0].parent and self != self == wire[1].parent:
+                elif (self == wire[0].parent and self !=  wire[1].parent):
                     for n in range(len(wire[0].indices)):
                         print(f'{w_label}-{i}: {wire[0].parent.name}.'
                               f'inputs[{wire[0].indices[n]}]'
                               f' --> {wire[1].parent.name}.'
                               f'inputs[{wire[1].indices[n]}]'
                               f'    (self.inputs-->)')
-                elif self != wire[0].parent and self == wire[1].parent:
+                elif (self != wire[0].parent and self == wire[1].parent):
                     for n in range(len(wire[0].indices)):
                         print(f'{w_label}-{i}: {wire[0].parent.name}.'
                               f'outputs[{wire[0].indices[n]}]'
                               f' --> {wire[1].parent.name}.'
                               f'outputs[{wire[1].indices[n]}]'
                               f'    (-->self.outputs)')
-                elif self != wire[0].parent and self != wire[1].parent:
+                elif self not in (wire[0].parent, wire[1].parent):
                     for n in range(len(wire[0].indices)):
                         print(f'{w_label}-{i}: {wire[0].parent.name}.'
                               f'outputs[{wire[0].indices[n]}]'
