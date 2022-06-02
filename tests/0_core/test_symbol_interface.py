@@ -80,3 +80,19 @@ class TestVectorSpaceMappings:
         x1_f = x1(x_f)
         assert float(x0_f) == 2
         assert float(x1_f) == 3
+
+
+class TestNumpyFunctionWrapping:
+
+    def test_cos_of_matmal(self):
+        # bug SYS-67
+        x = Variable('x', shape=(3,))
+        x_1 = x[1]
+
+        expression = np.cos(x_1)
+
+        assert expression.symbols() == {x}
+        result = expression.call({x: [0, 0, 0]})
+        assert result == 1
+
+
