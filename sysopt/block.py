@@ -6,6 +6,8 @@ from sysopt.types import (Signature, Metadata, Time, States, Parameters,
                           Inputs, Algebraics, Numeric)
 
 from sysopt.symbolic.symbols import SignalReference, restriction_map
+from sysopt.exceptions import DanglingInputError, InvalidWire, UnconnectedInputError
+
 
 Pin = NewType('Pin', Union['Port', 'Channel'])
 Connection = NewType('Connection', Tuple[Pin, Pin])
@@ -324,10 +326,6 @@ class ConnectionList(list):
         self.append((src, dest))
 
 
-class InvalidWire(ValueError):
-    pass
-
-
 class Composite(ComponentBase):  # noqa
     """Block that consists of a sub-blocks and connections.
 
@@ -407,3 +405,41 @@ class Composite(ComponentBase):  # noqa
                 return result
 
         return None
+        
+
+def validate_inputs(composite: Composite):
+    external_inputs = {channel for channel in composite.inputs}
+    external_outputs = {channel for channel in composite.outputs}
+    internal_inputs = {
+        channel for component in composite.components
+        for channel in component.inputs
+    }
+
+    for src, dest in composite.wires:
+
+        if isinstance(src, Port):
+            def src_filter(channel):
+                return channel.port == src
+        else:
+            def src_filter(channel):
+                return channel == src
+
+        if isinstance(dest, Port):
+            def dest_filter(channel):
+                return channel.port == dest
+        else:
+            def dest_filter(channel):
+                return channel == dest
+
+        external_inputs = set(filter(src_filter, external_inputs))
+        internal_inputs = set(filter(dest_filter, internal_inputs))
+        external_outputs = set(filter(dest_filter, external_outputs))
+
+    if external_inputs:
+        raise DanglingInputError(
+            str(composite), {str(channel) for channel in external_inputs}
+        )
+    if internal_inputs:
+        raise UnconnectedInputError(
+            str(composite), {str(channel) for channel in internal_inputs}
+        )
