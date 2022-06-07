@@ -147,7 +147,7 @@ class SolverContext:
         integrator = self.get_integrator()
         args = self._parameter_map(params)
         _, q = integrator(t, args)
-        print(q)
+
         return q[index]
 
     def evaluate(self, problem: 'Problem',

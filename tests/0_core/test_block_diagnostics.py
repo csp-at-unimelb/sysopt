@@ -1,5 +1,5 @@
 import pytest
-from sysopt.block import validate_inputs, Composite
+from sysopt.block import check_wiring_or_raise, Composite
 from sysopt.exceptions import UnconnectedInputError
 from sysopt.blocks.common import Gain, Oscillator
 
@@ -12,7 +12,7 @@ def test_invalid_wiring():
     model.components = [osc, gain]
 
     with pytest.raises(UnconnectedInputError):
-        validate_inputs(model)
+        check_wiring_or_raise(model)
 
 
 def test_valid_wiring():
@@ -25,7 +25,7 @@ def test_valid_wiring():
         (osc.outputs, gain.inputs),
         (gain.outputs, model.outputs)
     ]
-    validate_inputs(model)
+    check_wiring_or_raise(model)
 
 
 

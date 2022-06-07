@@ -2,7 +2,7 @@ import pytest
 
 from sysopt.types import *
 from sysopt.block import Block, Composite
-
+from sysopt.exceptions import UnconnectedInputError
 from sysopt.blocks.block_operations import (
     create_functions_from_block, to_graph)
 from sysopt.blocks import Gain
@@ -51,9 +51,7 @@ class BlockMock(Block):
                         parameters: Parameters) -> Numeric:
         x, = states
         z, = algebraics
-        return [
-            x, z
-        ]
+        return [x, z]
 
     def compute_residuals(self,
                           t: Time,
@@ -159,6 +157,12 @@ class MockComposite(Composite):
         self.components = [
             self.block_1, self.block_2
         ]
+        self.wires = [
+            (self.inputs[0], self.block_1.inputs[0]),
+            (self.inputs[1], self.block_2.inputs[0]),
+            (self.block_1.outputs, self.outputs[:2]),
+            (self.block_2.outputs, self.outputs[2:4])
+        ]
 
     @staticmethod
     def args():
@@ -170,15 +174,13 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
     def test_composite_functions_are_built(self):
         composite = MockComposite()
-        x0, f, g, h, _ = create_functions_from_block(composite)
-
-        assert x0.domain == 2
-        assert x0.codomain == 2
-        assert f.domain == (1, 2, 2, 2, 2)
-        assert f.domain == h.domain
+        _ = create_functions_from_block(composite)
 
     def test_compose_initial_condition_functions(self):
         composite = MockComposite()
+
+        # composite.wires.append((composite.block_2.outputs, composite.outputs))
+
         x0, f, g, h, _ = create_functions_from_block(composite)
         assert x0.domain == 2
         result = x0([1, 1])
@@ -186,7 +188,13 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
         # test composite of composite
         composite2 = Composite()
-        composite2.components = [composite, BlockMock('block')]
+        outer_block = BlockMock('block')
+        composite2.components = [composite, outer_block ]
+        composite2.wires = [
+            (composite2.inputs[0:2], composite.inputs),
+            (composite2.inputs[2], outer_block.inputs),
+            (composite.outputs, composite2.outputs)
+        ]
         x0, f, g, h, _ = create_functions_from_block(composite2)
         assert x0.domain == 3
         assert x0.codomain == 3
@@ -202,7 +210,13 @@ class TestSymbolicFunctionsFromCompositeBlock:
         assert is_symbolic(p)
         # test composite of composite
         composite2 = Composite()
-        composite2.components = [composite, BlockMock('block')]
+        block2 =BlockMock('block')
+        composite2.components = [composite, block2]
+        composite2.wires = [
+            (composite2.inputs[0:2], composite.inputs),
+            (composite2.inputs[3], block2.inputs),
+            (block2.outputs, composite2.outputs)
+        ]
         x0, f, _, h, _ = create_functions_from_block(composite2)
         q = symbolic_vector('q', 3)
         result = x0(q)
@@ -214,6 +228,7 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
         # computed from block arguments
         args = [1, (2, 1), (3, 7), (5, 5), (0, 1)]
+        assert f.domain == Domain(1, 2, 2, 2, 2)
         f_expected = [30, 7*5]
         h_expected = [-7, -48]
 
@@ -226,8 +241,14 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
         # test composite of composite
         composite2 = Composite()
-        composite2.components = [composite, BlockMock('block')]
-
+        block2 = BlockMock('block')
+        composite2.components = [composite, block2]
+        composite2.wires = [
+            (composite2.inputs[0:2], composite.inputs),
+            (composite2.inputs[2], block2.inputs),
+            (composite.outputs, composite2.outputs[0:4]),
+            (block2.outputs, composite2.outputs[4:6])
+        ]
         _, f, _, h, _ = create_functions_from_block(composite2)
 
         # computed from block arguments
