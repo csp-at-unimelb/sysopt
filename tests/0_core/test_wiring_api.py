@@ -108,7 +108,7 @@ def test_dangling_input_should_throw():
     composite = Composite(components=[gain, fltr])
     composite.wires = [
         (gain.outputs, fltr.inputs),
-        (fltr.inputs, composite.outputs)
+        (fltr.outputs, composite.outputs)
     ]
     composite.declare_inputs(['in'])
     with pytest.raises(exceptions.DanglingInputError):
@@ -116,8 +116,27 @@ def test_dangling_input_should_throw():
 
 
 def test_wrong_size_should_throw():
-    assert False
+    gain_1 = Gain(channels=1)
+    gain_2 = Gain(channels=2)
+
+    composite = Composite(components=[gain_1, gain_2])
+    with pytest.raises(exceptions.InvalidWire):
+        composite.wires = [(gain_2.outputs, gain_1.inputs)]
 
 
 def test_connecting_to_port_with_invalid_name_should_throw():
-    assert False
+    gain = Gain(channels=1)
+    fltr = LowPassFilter()
+
+    composite = Composite(components=[gain, fltr])
+    composite.declare_inputs(['in'])
+    composite.declare_outputs(['out'])
+
+    composite.wires = [
+        (composite.inputs['in'], gain.inputs),
+        (gain.outputs, fltr.inputs)
+    ]
+    with pytest.raises(exceptions.InvalidPort):
+        composite.wires.append((fltr.outputs, composite.outputs['wrong_name']))
+
+

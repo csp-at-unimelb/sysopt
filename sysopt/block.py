@@ -8,7 +8,7 @@ from sysopt.types import (Signature, Metadata, Time, States, Parameters,
 from sysopt.symbolic.symbols import SignalReference, restriction_map
 from sysopt.exceptions import (
     DanglingInputError, InvalidWire, UnconnectedInputError,
-    InvalidComponentError, UnconnectedOutputError
+    InvalidComponentError, UnconnectedOutputError, InvalidPort
 )
 
 
@@ -26,7 +26,7 @@ class Port:
     """
 
     def __init__(self, port_type, parent: 'Block', size: int = 0):
-        self._parent = weakref.ref(parent)
+        self._block = weakref.ref(parent)
         self.port_type = port_type
         self._channels = []
         self.size = size
@@ -52,9 +52,13 @@ class Port:
             ]
 
     @property
+    def block(self):
+        return self._block()
+
+    @property
     def parent(self):
         """The block that this port is from."""
-        return self._parent()
+        return self._block()
 
     def __len__(self):
         return self.size
@@ -82,6 +86,9 @@ class Port:
             if idx >= 0:
                 return Channel(self, [idx])
         raise ValueError(f'Can\'t get a lazy ref for [{self.parent} {item}]')
+
+    def __cmp__(self, other):
+        return id(self) == id(other)
 
     def __iter__(self):
         return iter(self._channels)
@@ -112,6 +119,10 @@ class Channel:
         return f'{self.__class__.__name__}' \
                f'(port={repr(self.port)}, ' \
                f'indices={repr(self.indices)})'
+
+    @property
+    def block(self) -> 'ComponentBase':
+        return self.port.block
 
     @property
     def port_type(self):
@@ -149,11 +160,10 @@ class ComponentBase:
         return None
 
     @parent.setter
-    def parent(self, value):
+    def parent(self, value: 'Composite'):
         if value is None:
             self._parent = None
         else:
-            assert isinstance(value,  Composite)
             self._parent = weakref.ref(value)
 
     def trunk(self):
@@ -168,7 +178,7 @@ class ComponentBase:
         return '/'.join([node.name for node in self.trunk()])
 
     def __repr__(self):
-        return f'{self.name}({self.__class__})'
+        return f'{self.__class__.__name__}(name={self.name})'
 
     def compute_dynamics(self,
                          t: Time,
@@ -363,11 +373,10 @@ class ConnectionList(list):
               f'Error occurs in Composite {self._parent()} '
               f'when connecting blocks {src.parent} to {dest.parent}.')
         elif src.size != dest.size:
-            raise ConnectionError(
-              f'Cannot connect {src} to {dest}, '
-              f'incompatible dimensions. '
-              f'Error occurs in Composite {self._parent()} '
-              f'when connecting blocks {src.parent} to {dest.parent}.')
+            raise InvalidWire(
+                src,
+                dest,
+                f'Cannot connect sizes: {src.size} to {dest.size}')
         super().append((src, dest))
 
 
@@ -451,59 +460,22 @@ class Composite(ComponentBase):  # noqa
 
     def find_port_by_name(self, port_type, name):
         if port_type == 'outputs':
-            return self._output_names.index(name)
+            try:
+                return self._output_names.index(name)
+            except ValueError as ex:
+                raise InvalidPort(
+                    name, 'is not a valid output port name for', self
+                ) from ex
         elif port_type == 'inputs':
-            return self._input_names.index(name)
-
+            try:
+                return self._input_names.index(name)
+            except ValueError as ex:
+                raise InvalidPort(
+                    name, 'is not a valid input port name for', self
+                ) from ex
         raise ValueError(f'Invalid port type {port_type}')
 
-#     def _clear_wires(self):
-#         self._wires.clear()
-#         self.outputs.reset()
-#         self.inputs.reset()
-#
-#
-# def connect_port_to_port(src: Port, dest: Port):
-#     parent = src.parent.parent
-#     dest_parent = dest.parent.parent
-#     if not parent:
-#         raise InvalidWire(
-#             src, dest, "Source component is not inside a model."
-#         )
-#     if not dest_parent:
-#         raise InvalidWire(
-#             src, dest, "Destination component is not inside a model."
-#         )
-#     if dest_parent is not parent:
-#         raise InvalidWire(
-#             src, dest, 'Ports are inside different parent models.'
-#         )
-#     if src.size != dest.size:
-#         raise InvalidWire(
-#             src, dest, 'Ports are of different dimension: '
-#                        f'{src.size} -> {dest.size} '
-#       )
-#
-#
-#
-# def connect_channel_to_channel(src:Channel, dest:Channel):
-#
-#     pass
-#
-# def forward_input(external:Union[Port, Channel],
-#                   internal: Union[Port, Channel]):
-#
-#     if isinstance(internal, Port):
-#
-#
-#
-# def forward_output(parent:Composite,
-#                    internal: Union[Port, Channel],
-#                    external: Union[Port, Channel]):
-#
-
-
-def check_wiring_or_raise(composite: Composite):
+def _find_unconnected_io(composite):
     external_inputs = {channel for channel in composite.inputs}
     external_outputs = {channel for channel in composite.outputs}
     internal_inputs = {
@@ -512,34 +484,43 @@ def check_wiring_or_raise(composite: Composite):
     }
 
     for src, dest in composite.wires:
-
-        if isinstance(src, Port):
+        if isinstance(src, Channel):
             def src_filter(channel):
-                return channel.port == src
+                return channel.port is not src.port or not (
+                    set(channel.indices).issubset(set(src.indices))
+                )
         else:
             def src_filter(channel):
-                return channel == src
+                return channel.port is not src
 
-        if isinstance(dest, Port):
+        if isinstance(dest, Channel):
             def dest_filter(channel):
-                return channel.port == dest
+                return channel.port is not dest.port or not (
+                    set(channel.indices).issubset(set(dest.indices))
+                )
         else:
             def dest_filter(channel):
-                return channel == dest
+                return channel.port is not dest
 
         external_inputs = set(filter(src_filter, external_inputs))
         internal_inputs = set(filter(dest_filter, internal_inputs))
         external_outputs = set(filter(dest_filter, external_outputs))
 
+    return external_inputs, external_outputs, internal_inputs
 
+
+def check_wiring_or_raise(composite: Composite):
+    external_inputs, external_outputs, internal_inputs = _find_unconnected_io(
+        composite
+    )
     if external_inputs:
         raise DanglingInputError(
-            str(composite), {str(channel) for channel in external_inputs}
-        )
+            composite, {str(channel) for channel in external_inputs})
+
     if internal_inputs:
         raise UnconnectedInputError(
-            str(composite), {str(channel) for channel in internal_inputs}
-        )
+            str(composite), {str(channel) for channel in internal_inputs})
+
     if not composite.outputs:
         raise InvalidComponentError(composite, "has no defined outputs")
 

@@ -210,11 +210,11 @@ class TestSymbolicFunctionsFromCompositeBlock:
         assert is_symbolic(p)
         # test composite of composite
         composite2 = Composite()
-        block2 =BlockMock('block')
+        block2 = BlockMock('block')
         composite2.components = [composite, block2]
         composite2.wires = [
             (composite2.inputs[0:2], composite.inputs),
-            (composite2.inputs[3], block2.inputs),
+            (composite2.inputs[2], block2.inputs),
             (block2.outputs, composite2.outputs)
         ]
         x0, f, _, h, _ = create_functions_from_block(composite2)
@@ -276,7 +276,14 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
         # test composite of composite
         composite2 = Composite()
-        composite2.components = [composite, BlockMock('block')]
+        block2 = BlockMock('block')
+        composite2.components = [composite, block2]
+        composite2.wires = [
+            (composite2.inputs[0:2], composite.inputs),
+            (composite2.inputs[2], block2.inputs),
+            (composite.outputs, composite2.outputs[0:4]),
+            (block2.outputs, composite2.outputs[4:6])
+        ]
         _, f, _, _, _ = create_functions_from_block(composite2)
 
         args = [1,
@@ -312,11 +319,11 @@ class TestSymbolicFunctionsFromCompositeBlock:
 
     def test_numerical_evaluation_of_block_functions_with_wires(self):
         composite = MockComposite()
-        composite.wires = [
-            (composite.block_1.outputs[0], composite.block_2.inputs),
-            (composite.inputs, composite.block_1.inputs),
-            (composite.block_2.outputs, composite.outputs)
-        ]
+        # composite.wires = [
+        #     (composite.block_1.outputs[0], composite.block_2.inputs),
+        #     (composite.inputs, composite.block_1.inputs),
+        #     (composite.block_2.outputs, composite.outputs)
+        # ]
         x0, f, g, h, _ = create_functions_from_block(composite)
 
         result = x0([1, 1])
