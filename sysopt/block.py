@@ -1,5 +1,6 @@
 """Base classes for block-based modelling."""
 from typing import Iterable, Optional, Union, NewType, Tuple, List
+from functools import partial
 import weakref
 from dataclasses import asdict
 from sysopt.types import (Signature, Metadata, Time, States, Parameters,
@@ -429,6 +430,8 @@ class Composite(ComponentBase):  # noqa
     def wires(self, value):
         if isinstance(value, list):
             self._wires.clear()
+            self.inputs.size = 0
+            self.outputs.size = 0
             for pair in value:
                 self._wires.append(pair)
         elif value is self._wires:
@@ -475,36 +478,37 @@ class Composite(ComponentBase):  # noqa
                 ) from ex
         raise ValueError(f'Invalid port type {port_type}')
 
+
 def _find_unconnected_io(composite):
-    external_inputs = {channel for channel in composite.inputs}
-    external_outputs = {channel for channel in composite.outputs}
+    external_inputs = set(composite.inputs)
+    external_outputs = set(composite.outputs)
     internal_inputs = {
         channel for component in composite.components
         for channel in component.inputs
     }
 
-    for src, dest in composite.wires:
+    def src_filter(src, channel):
         if isinstance(src, Channel):
-            def src_filter(channel):
-                return channel.port is not src.port or not (
-                    set(channel.indices).issubset(set(src.indices))
-                )
+            return channel.port is not src.port or not (
+                set(channel.indices).issubset(set(src.indices))
+            )
         else:
-            def src_filter(channel):
-                return channel.port is not src
+            return channel.port is not src
 
+    def dest_filter(dest, channel):
         if isinstance(dest, Channel):
-            def dest_filter(channel):
-                return channel.port is not dest.port or not (
-                    set(channel.indices).issubset(set(dest.indices))
-                )
+            return channel.port is not dest.port or not (
+                set(channel.indices).issubset(set(dest.indices))
+        )
         else:
-            def dest_filter(channel):
-                return channel.port is not dest
+            return channel.port is not dest
+    for source, destin in composite.wires:
 
-        external_inputs = set(filter(src_filter, external_inputs))
-        internal_inputs = set(filter(dest_filter, internal_inputs))
-        external_outputs = set(filter(dest_filter, external_outputs))
+        f_1 = partial(src_filter, source)
+        f_2= partial(dest_filter, destin)
+        external_inputs = set(filter(f_1, external_inputs))
+        internal_inputs = set(filter(f_2, internal_inputs))
+        external_outputs = set(filter(f_2, external_outputs))
 
     return external_inputs, external_outputs, internal_inputs
 
@@ -522,7 +526,7 @@ def check_wiring_or_raise(composite: Composite):
             str(composite), {str(channel) for channel in internal_inputs})
 
     if not composite.outputs:
-        raise InvalidComponentError(composite, "has no defined outputs")
+        raise InvalidComponentError(composite, 'has no defined outputs')
 
     if external_outputs:
         raise UnconnectedOutputError(composite, external_outputs)

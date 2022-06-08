@@ -26,7 +26,11 @@ def find_param_index_by_name(block, name: str):
         return block.parameters.index(name)
     except ValueError:
         pass
-    raise ValueError(f'Could not find parameter {name} in block {block}.')
+    try:
+        return block.parameters.index(f'{str(block)}/{name}')
+    except ValueError:
+        pass
+    raise ValueError(f'Could not find parameter \'{name}\' in block {block}.')
 
 
 class Matrix(np.ndarray):
@@ -347,8 +351,6 @@ class Algebraic(metaclass=ABCMeta):
     def __array_function__(self, func, types, args, kwargs):
         if func not in numpy_handlers:
             return NotImplemented
-        # if not all(issubclass(t, Algebraic) for t in types):
-        #     return NotImplemented
         return numpy_handlers[func](*args, **kwargs)
 
     @abstractmethod

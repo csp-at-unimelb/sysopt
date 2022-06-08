@@ -169,6 +169,25 @@ class MockComposite(Composite):
         return [1 if count == 0 else (i, j) for count, (i, j) in enumerate(
             zip(*BlockMock.args))]
 
+class MockCompositeWired(Composite):
+    def __init__(self):
+        super().__init__()
+        self.block_1 = BlockMock('block_1')
+        self.block_2 = BlockMock('block_2')
+        self.components = [
+            self.block_1, self.block_2
+        ]
+        self.wires = [
+            (self.inputs[0], self.block_1.inputs[0]),
+            (self.block_1.outputs[0], self.block_2.inputs[0]),
+            (self.block_2.outputs, self.outputs[:2])
+        ]
+
+    @staticmethod
+    def args():
+        return [1 if count == 0 else (i, j) for count, (i, j) in enumerate(
+            zip(*BlockMock.args))]
+
 
 class TestSymbolicFunctionsFromCompositeBlock:
 
@@ -298,12 +317,8 @@ class TestSymbolicFunctionsFromCompositeBlock:
         assert len(f_result) == 3
 
     def test_dimensions_of_composite_block_functions_with_wires(self):
-        composite = MockComposite()
-        composite.wires = [
-            (composite.block_1.outputs[0], composite.block_2.inputs),
-            (composite.inputs, composite.block_1.inputs),
-            (composite.block_2.outputs, composite.outputs)
-        ]
+        composite = MockCompositeWired()
+
         _, f, g, h, _ = create_functions_from_block(composite)
         expected_domain = (1, 2, 3, 1, 2)
         assert f.domain == g.domain == h.domain == expected_domain
@@ -318,12 +333,8 @@ class TestSymbolicFunctionsFromCompositeBlock:
         assert h.codomain == 3
 
     def test_numerical_evaluation_of_block_functions_with_wires(self):
-        composite = MockComposite()
-        # composite.wires = [
-        #     (composite.block_1.outputs[0], composite.block_2.inputs),
-        #     (composite.inputs, composite.block_1.inputs),
-        #     (composite.block_2.outputs, composite.outputs)
-        # ]
+        composite = MockCompositeWired()
+
         x0, f, g, h, _ = create_functions_from_block(composite)
 
         result = x0([1, 1])
@@ -341,12 +352,8 @@ class TestSymbolicFunctionsFromCompositeBlock:
         assert g_result == g_expected
 
     def test_tables_from_composite(self):
-        composite = MockComposite()
-        composite.wires = [
-            (composite.block_1.outputs[0], composite.block_2.inputs),
-            (composite.inputs, composite.block_1.inputs),
-            (composite.block_2.outputs, composite.outputs)
-        ]
+        composite = MockCompositeWired()
+
         x0, f, g, h, tables = create_functions_from_block(composite)
 
         expected_names = {

@@ -5,6 +5,7 @@ from sysopt import Composite
 from sysopt.block import check_wiring_or_raise
 from sysopt import exceptions
 
+
 def test_wiring_port_to_port_succeeds():
     gain = Gain(channels=1)
     osc = Oscillator()
