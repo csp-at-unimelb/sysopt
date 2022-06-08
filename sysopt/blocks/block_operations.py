@@ -1,21 +1,24 @@
 """Interface for Symbolic Functions and AutoDiff."""
 
 import copy
+import dataclasses
 from dataclasses import dataclass, asdict
-from typing import Callable, Union, Iterable
-
+from typing import Callable, Union, Iterable, List, Dict
+from collections import deque, namedtuple
 
 from sysopt.types import Domain
 from sysopt.block import Block, Composite, check_wiring_or_raise
 from sysopt.helpers import flatten, strip_nones
 from sysopt.symbolic.symbols import (
     as_vector, sparse_matrix, as_function, symbolic_vector,
-    get_time_variable
+    get_time_variable,concatenate, Function
 )
 from sysopt.symbolic.function_ops import (
     FunctionOp, Concatenate, project, compose,
 )
+from sysopt import exceptions
 
+Arguments = namedtuple('Arguments', ['t', 'x', 'z', 'u', 'p'])
 
 @dataclass
 class TableEntry:
@@ -29,8 +32,10 @@ class TableEntry:
     def name(self):
         return f'{self.block}/{self.local_name}'
 
+    def __str__(self):
+        f'\"{self.name}\", {self.global_index} -> {self.local_index})\n'
     def __repr__(self):
-        return f'\"{self.name}\", ({self.global_index}, {self.local_index})\n'
+        return f'{self.global_index} -> ({self.name}, {self.local_index})\n'
 
 
 def projection_from_entries(entries, global_dim, local_dim):
@@ -374,6 +379,7 @@ def create_functions_from_block(block: Union[Block, Composite]):
     x0 = coproduct(domain.parameters, *x0_list) if x0_list else None
     f = coproduct(domain, *f_list) if f_list else None
     g = coproduct(domain, *g_list) if g_list else None
+    out_table = create_leaf_tables(tree_to_list(block))
 
     if not block.wires:
         return x0, f, g, h, out_table
@@ -487,3 +493,97 @@ def get_projections_for_block(tables, block):
         )
 
     return projectors
+
+
+def tree_to_list(block: Union[Composite, Block]):
+    fifo = deque()
+    fifo.append(block)
+    result = []
+    while fifo:
+        item = fifo.popleft()
+        result.append(item)
+        try:
+            for component in item.components:
+                fifo.append(component)
+        except AttributeError:
+            pass
+    return result
+
+def create_leaf_tables(block_list: List[Union[Composite, Block]]):
+
+    tables = create_tables_from_blocks(
+        *filter(lambda b: isinstance(b, Block), block_list)
+    )
+
+    return tables
+
+
+
+def symbolically_evaluate_initial_conditions(block:Block,
+                                             arguments:Arguments):
+    try:
+        x0 = block.initial_state(arguments.p)
+    except NotImplementedError:
+        raise exceptions.FunctionError(
+            block, block.initial_state, 'function is not implemented!')
+    except Exception as ex:
+        raise exceptions.FunctionError(
+            block, block.initial_state, ex.args
+        ) from ex
+    x0 = concatenate(*x0)
+    expected_shape = (block.signature.states,)
+    if x0.shape != expected_shape:
+        raise exceptions.FunctionError(
+            block, block.initial_state,
+            f'Expected shape {expected_shape} but ' \
+            f'the function returned {x0.shape}'
+        )
+    return Function.from_graph(x0, list(arguments.p.symbols()))
+
+def symbolically_evaluate(block: Block,
+                          func: Callable,
+                          dimension: int,
+                          arguments: Arguments):
+
+    try:
+        f = func(*arguments)
+    except Exception as ex:
+        raise exceptions.FunctionError(
+            block, func, ex.args
+        )
+    f = concatenate(*f)
+    if f.shape != (dimension, ):
+        raise exceptions.FunctionError(
+            block,func,
+            f'Expected shape {(dimension, )} but ' \
+            f'the function returned a vector of shape {f.shape}'
+        )
+    return Function.from_graph(
+        f, [a for arg in arguments for a in arg.symbols()]
+    )
+
+def wrap_block_functions(tables: Dict, block: Block, arguments: Arguments):
+    proj = get_projections_for_block(tables, block)
+    proj_x = proj['states']
+    proj_z = proj['constraints']
+    proj_y = proj['outputs']
+    local_args = Arguments(
+        t=arguments.t,
+        x=proj_x @ arguments.x,
+        z=proj_z@ arguments.z,
+        u=proj['inputs'] @ arguments.u,
+        p=proj['parameters'] @ arguments.p
+    )
+    x0 = symbolic_evaluate_initial_conditions(block, arguments)
+
+    f = proj_x.T @ symbolically_evaluate(
+        block, block.compute_dynamics, block.signature.states
+    )
+    g = proj_y @ symbolically_evaluate(
+        block, block.compute_outputs, block.signature.outputs
+    )
+    h = symbolically_evaluate(
+        block, block.compute_residuals, block.signature.constraints
+    )
+    return x0, f, g, h
+

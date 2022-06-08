@@ -38,3 +38,8 @@ class UnconnectedOutputError(ValueError):
 
 class InvalidPort(ValueError):
     pass
+
+
+class FunctionError(ValueError):
+    def __init__(self, block, function, error):
+        pass

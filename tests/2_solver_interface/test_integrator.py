@@ -16,7 +16,7 @@ from sysopt.types import *
 from sysopt.block import Block
 from sysopt.solver import SolverContext
 from sysopt.blocks.block_operations import create_functions_from_block
-from sysopt.solver.symbol_database import FlattenedSystem
+from sysopt.solver.canonical_transform import FlattenedSystem
 
 class LinearScalarEquation(Block):
     r"""Linear ODE of the form
