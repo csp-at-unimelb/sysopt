@@ -505,7 +505,7 @@ def _find_unconnected_io(composite):
     for source, destin in composite.wires:
 
         f_1 = partial(src_filter, source)
-        f_2= partial(dest_filter, destin)
+        f_2 = partial(dest_filter, destin)
         external_inputs = set(filter(f_1, external_inputs))
         internal_inputs = set(filter(f_2, internal_inputs))
         external_outputs = set(filter(f_2, external_outputs))
