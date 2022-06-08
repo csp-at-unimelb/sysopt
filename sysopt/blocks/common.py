@@ -21,12 +21,13 @@ class Gain(Block):
         channels: Number of gain channels to provide.
 
     """
-    def __init__(self, channels):
-        sig = Signature(inputs=channels,
-                        outputs=channels,
-                        parameters=channels)
-
-        super().__init__(sig)
+    def __init__(self, channels: int):
+        super().__init__(
+            Metadata(
+                inputs=[f'input{i}' for i in range(channels)],
+                outputs=[f'output{i}' for i in range(channels)],
+                parameters=[f'coefficient{i}' for i in range(channels)]
+            ))
 
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
         return [gain * signal for signal, gain in zip(inputs, parameters)]
@@ -39,7 +40,7 @@ class Mixer(Block):
         inputs: number of input channels.
 
     """
-    def __init__(self, inputs):
+    def __init__(self, inputs: int):
         sig = Signature(
             inputs=inputs,
             outputs=1,
@@ -65,7 +66,7 @@ class ConstantSignal(Block):
         outputs: The number of output channels.
 
     """
-    def __init__(self, outputs):
+    def __init__(self, outputs: int):
         sig = Signature(outputs=outputs, parameters=outputs)
         super().__init__(sig)
 

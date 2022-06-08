@@ -53,7 +53,13 @@ class Concatenate(FunctionOp):
         self.codomain += other.codomain
 
     def __call__(self, *args):
-        result = [f(*args) for f in self.__vectors]
+        calls = [f(*args) for f in self.__vectors]
+        result = []
+        for value in calls:
+            if isinstance(value, list):
+                result += value
+            else:
+                result.append(value)
         return result
 
 

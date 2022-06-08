@@ -6,7 +6,7 @@ from typing import Callable, Union, Iterable
 
 
 from sysopt.types import Domain
-from sysopt.block import Block, Composite
+from sysopt.block import Block, Composite, check_wiring_or_raise
 from sysopt.helpers import flatten, strip_nones
 from sysopt.symbolic.symbols import (
     as_vector, sparse_matrix, as_function, symbolic_vector,
@@ -256,6 +256,7 @@ class ArgPermute(FunctionOp):
 
     def __call__(self, t, x, z, u, p):
         # This is the input vector that the internal components see
+
         u_inner = [
             z[self.constraint_to_input[i]] if i in self.constraint_to_input
             else u[self.input_to_input[i]]
@@ -345,6 +346,7 @@ def create_functions_from_block(block: Union[Block, Composite]):
     try:
         functions = {component: create_functions_from_block(component)
                      for component in block.components}
+        check_wiring_or_raise(block)
     except AttributeError:
         # block is a leaf block
         return _create_functions_from_leaf_block(block)
@@ -393,7 +395,7 @@ def create_functions_from_block(block: Union[Block, Composite]):
 
     for src, dest in in_wires:
         component_offset = domain_offsets[dest.parent].inputs
-        for input_index, component_index in zip(dest.indices, src.indices):
+        for input_index, component_index in zip(src.indices, dest.indices):
             arg_permute.permute_input(
                 original_index=component_offset + component_index,
                 new_index=input_index
