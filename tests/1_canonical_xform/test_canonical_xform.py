@@ -4,7 +4,8 @@ import pytest
 from sysopt import Metadata
 from sysopt.block import Block, Composite
 from sysopt.symbolic import ExpressionGraph, get_time_variable, symbolic_vector, Function
-from sysopt.blocks import block_operations as bo
+from sysopt.solver import canonical_transform as xform
+
 from sysopt.blocks.common import Gain, LowPassFilter, Oscillator
 from sysopt import exceptions
 from dataclasses import asdict
@@ -34,7 +35,7 @@ class MockBlockCorrect(Block):
         return states[0] + states[1]
 
     def get_symbolic_args(self):
-        return bo.Arguments(
+        return xform.Arguments(
             get_time_variable(),
             symbolic_vector('x', self.signature.states),
             symbolic_vector('z', self.signature.constraints),
@@ -61,7 +62,7 @@ class MockBlockIncorrect(Block):
         return [states[0] + states[1], 1]
 
     def get_symbolic_args(self):
-        return bo.Arguments(
+        return xform.Arguments(
             get_time_variable(),
             symbolic_vector('x', self.signature.states),
             symbolic_vector('z', self.signature.constraints),
@@ -74,14 +75,14 @@ class MockBlockIncorrect(Block):
 class TestLeafBlockXform:
     def test_correct_tables_are_generated(self):
         block = MockBlockCorrect()
-        tables = bo.create_tables_from_blocks(block)
+        tables = xform.create_tables_from_blocks(block)
         for var_type, size in asdict(block.signature).items():
             assert len(tables[var_type]) == size
 
     def test_correct_creation_and_evaluation_of_initial_coniditions(self):
         block = MockBlockCorrect()
         args = block.get_symbolic_args()
-        x0 = bo.symbolically_evaluate_initial_conditions(block, args)
+        x0 = xform.symbolically_evaluate_initial_conditions(block, args)
         assert isinstance(x0, Function)
 
         value = x0(11)
@@ -90,7 +91,7 @@ class TestLeafBlockXform:
     def test_correct_creation_an_evaluation_of_dynamics(self):
         block = MockBlockCorrect()
         args = block.get_symbolic_args()
-        f = bo.symbolically_evaluate(
+        f = xform.symbolically_evaluate(
             block, block.compute_dynamics, block.signature.states, args
         )
         assert isinstance(f, Function)
@@ -103,13 +104,13 @@ class TestLeafBlockXform:
         block = MockBlockIncorrect()
         args = block.get_symbolic_args()
         with pytest.raises(exceptions.FunctionError):
-            x0 = bo.symbolically_evaluate_initial_conditions(block, args)
+            x0 = xform.symbolically_evaluate_initial_conditions(block, args)
 
     def test_incorrect_size_outputs_should_throw(self):
         block = MockBlockIncorrect()
         args = block.get_symbolic_args()
         with pytest.raises(exceptions.FunctionError):
-            f = bo.symbolically_evaluate(
+            f = xform.symbolically_evaluate(
                 block, block.compute_outputs, block.signature.outputs, args
             )
 
@@ -117,7 +118,7 @@ class TestLeafBlockXform:
         block = MockBlockIncorrect()
         args = block.get_symbolic_args()
         with pytest.raises(exceptions.FunctionError):
-            f = bo.symbolically_evaluate(
+            f = xform.symbolically_evaluate(
                 block, block.compute_dynamics, block.signature.states, args
             )
 
@@ -140,8 +141,8 @@ class TestComposite:
 
     def test_correct_tables_are_generated(self):
         block = self.create_composite()
-        all_blocks = bo.tree_to_list(block)
-        tables = bo.create_leaf_tables(all_blocks)
+        all_blocks = xform.tree_to_list(block)
+        tables = xform.create_leaf_tables(all_blocks)
         leaves = [b for b in all_blocks if isinstance(b, Block)]
 
         for leaf in leaves:
@@ -152,9 +153,9 @@ class TestComposite:
                 ))
                 assert len(table_entries) == size
 
-    def test_initial_conditions_are_correctly_mapped(self):
-        assert False
-
-    def test_wires_add_constraints(self):
-        assert False
+    # def test_initial_conditions_are_correctly_mapped(self):
+    #     assert False
+    #
+    # def test_wires_add_constraints(self):
+    #     assert False
 
