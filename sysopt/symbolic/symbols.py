@@ -106,13 +106,24 @@ def inclusion_map(basis_map: Dict[int, int],
 
     for i, j in basis_map.items():
         matrix[j, i] = 1
-    return lambda x: ExpressionGraph(matmul, matrix, x)
+    return LinearMap(matrix)
 
 
 def basis_vector(index, dimension):
     e_i = np.zeros(shape=(dimension, ), dtype=float).view(Matrix)
     e_i[index] = 1
     return e_i
+
+class LinearMap:
+    def __init__(self, matrix):
+        self.matrix = matrix
+
+    @property
+    def T(self):
+        return LinearMap(self.matrix.T)
+
+    def __call__(self, arg):
+        return ExpressionGraph(matmul, self.matrix, arg)
 
 
 def restriction_map(indices: Union[List[int], Dict[int, int]],
@@ -132,7 +143,7 @@ def restriction_map(indices: Union[List[int], Dict[int, int]],
     for i, j in iterator:
         matrix[i, j] = 1
 
-    return lambda x: ExpressionGraph(matmul, matrix, x)
+    return LinearMap(matrix)
 
 
 __ops = defaultdict(list)
@@ -340,6 +351,12 @@ class PathInequality(Inequality):
 
 class Algebraic(metaclass=ABCMeta):
     """Base class for symbolic terms in expression graphs."""
+
+    def __len__(self):
+        if len(self.shape) == 1:
+            return self.shape[0]
+
+        raise ValueError('Cannot determine the length of a non-vector object')
 
     def __array_ufunc__(self, func, method, *args, **kwargs):
         if func not in numpy_handlers:
@@ -598,6 +615,10 @@ class ExpressionGraph(Algebraic):
         node_indices = [self.add_or_get_node(node) for node in nodes]
         self.edges[op_node] = node_indices
         self.head = op_node
+
+
+        assert self.shape
+
         return self
 
     def __iadd__(self, other):
@@ -750,9 +771,13 @@ class Variable(Algebraic):
         self._shape = shape
         self.name = name
 
+    def __str__(self):
+        shape_str = 'x'.join(str(n) for n in self.shape)
+        return f'{self.name}^({shape_str})'
+
     def __repr__(self):
         if self.name is not None:
-            return f'{self.__class__.__name__}({self.name})'
+            return f'{self.__class__.__name__}({self.name}, {self.shape})'
         else:
             return 'unnamed_variable'
 
@@ -859,7 +884,7 @@ class Function(Algebraic):
         self.arguments = arguments
 
     def __repr__(self):
-        args = ','.join(self.arguments)
+        args = ','.join(str(a) for a in self.arguments)
         return f'{str(self.function)}({args})'
 
     @property
@@ -1174,3 +1199,23 @@ def as_function(expr: Algebraic, arguments: SymbolicArray):
     else:
         return expr
     raise NotImplementedError(f'Cannot turn {type(expr)} into a function')
+
+
+def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
+    if not isinstance(graph, ExpressionGraph):
+        return ConstantFunction(graph, arguments)
+
+    shape = graph.shape
+
+    try:
+        indices = {
+            a: arguments.index(a) for a in
+            graph.symbols()
+        }
+    except AttributeError:
+        indices = {}
+
+    def func(*args):
+        filtered_args = {arg: args[i] for arg, i in indices.items()}
+        return graph.call(filtered_args)
+    return Function(shape, func, arguments)

@@ -480,7 +480,7 @@ def get_projections_for_block(tables, block):
     projectors = {}
     for attr, local_dim in asdict(block.signature).items():
         if local_dim == 0:
-            projectors[attr] = None
+            projectors[attr] = lambda x: None
             continue
         entries = sorted([
             entry for entry in tables[attr] if entry.block is block

@@ -83,7 +83,6 @@ class TestLeafBlockXform:
         block = MockBlockCorrect()
         args = block.get_symbolic_args()
         x0 = xform.symbolically_evaluate_initial_conditions(block, args)
-        assert isinstance(x0, Function)
 
         value = x0(11)
         assert value == [11, 0], 'Numerical Evaluation failed.'
@@ -94,9 +93,10 @@ class TestLeafBlockXform:
         f = xform.symbolically_evaluate(
             block, block.compute_dynamics, block.signature.states, args
         )
-        assert isinstance(f, Function)
-        numerical_args = block.get_numerical_args()
-        result = f(*numerical_args)
+
+        t,x,z,u,p = block.get_numerical_args()
+
+        result = f(x, u)
         expected_result = [5 - 1, 7 - 2]
         assert result == expected_result
 
@@ -104,7 +104,10 @@ class TestLeafBlockXform:
         block = MockBlockIncorrect()
         args = block.get_symbolic_args()
         with pytest.raises(exceptions.FunctionError):
-            x0 = xform.symbolically_evaluate_initial_conditions(block, args)
+            x0 = xform.symbolically_evaluate_initial_conditions(
+                block, args
+            )
+
 
     def test_incorrect_size_outputs_should_throw(self):
         block = MockBlockIncorrect()
@@ -139,10 +142,11 @@ class TestComposite:
         ]
         return composite
 
+
     def test_correct_tables_are_generated(self):
         block = self.create_composite()
         all_blocks = xform.tree_to_list(block)
-        tables = xform.create_leaf_tables(all_blocks)
+        tables, domain  = xform.create_tables(all_blocks)
         leaves = [b for b in all_blocks if isinstance(b, Block)]
 
         for leaf in leaves:
@@ -152,10 +156,21 @@ class TestComposite:
                     tables[var_type]
                 ))
                 assert len(table_entries) == size
+        assert len(tables['wires']) == 2
+
 
     # def test_initial_conditions_are_correctly_mapped(self):
-    #     assert False
+    #     block = self.create_composite()
+    #     tables = xform.create_tables(block)
+    #     lpf, = filter(lambda x: isinstance(x, LowPassFilter), block.components)
+    #     arguments = xform.create_symbols_from_tables(tables)
     #
-    # def test_wires_add_constraints(self):
-    #     assert False
+    #     x0, f, g, h = xform.symbolically_evaluate_block(tables, lpf, arguments)
+    #
+
+    def test_flattening(self):
+        block = self.create_composite()
+        system = xform.flatten_system(block)
+        
+        assert False
 
