@@ -121,7 +121,7 @@ class TestSymbolicFunctionsFromLeafBlock:
     def test_functions_to_expression_graph(self):
         block_1 = BlockMock("block_1")
         x0, f, g, h, _ = create_functions_from_block(block_1)
-        funcs = [f, g, h]
+        funcs = [f] # , g, h]
         values = dict(
             time=0, states=2, constraints=3, inputs=5, parameters=0
         )
@@ -129,9 +129,9 @@ class TestSymbolicFunctionsFromLeafBlock:
         for func in funcs:
             graph = to_graph(func)
             func_result = func(*values.values())
-
+            args = match_args_by_name(graph, values)
             graph_result = as_vector(
-                graph.call(match_args_by_name(graph, values))
+                graph.call(args)
             )
             assert graph_result == func_result
 

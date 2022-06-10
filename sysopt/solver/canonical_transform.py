@@ -45,6 +45,8 @@ class FlattenedSystem:
 
     @staticmethod
     def from_block(block: Block):
+        # fs = flatten_system(block)
+        #return fs
         """Creates a new flattened system from the given block"""
         domain = None
         *functions, tables = create_functions_from_block(block)
@@ -294,7 +296,10 @@ def create_constraints_from_wire_list(
                              superset_dimension=len(arguments.u))
     proj_y = restriction_map(indices=list(sources),
                              superset_dimension=outputs.shape[0])
-    vector_constraint = proj_u(arguments.u) - proj_y (outputs)
+    u_c = proj_u(arguments.u)
+    y_c = proj_y(outputs)
+
+    vector_constraint = proj_u(arguments.u) - proj_y(outputs)
 
     return vector_constraint
 
@@ -309,20 +314,44 @@ def flatten_system(root: Composite):
         symbolically_evaluate_block(tables, block, symbols)
         for block in leaves
     ])
-    initial_conditions, vector_field, output_map, constraints = [
-        sum([f for f in function_list if f is not None])
+
+    def is_not_none(item):
+        return item is not None
+
+    function_lists = [
+        list(filter(is_not_none, function_list))
         for function_list in function_lists
     ]
-    wiring_constraint = create_constraints_from_wire_list(
-        tables['wires'], symbols, output_map
+
+    initial_conditions, vector_field, output_map, constraints = [
+        sum(function_list) if function_list else None
+        for function_list in function_lists
+    ]
+    if tables['wires']:
+        wiring_constraint = create_constraints_from_wire_list(
+            tables['wires'], symbols, output_map
+        )
+        if constraints:
+            constraints = concatenate(constraints, wiring_constraint)
+        else:
+            constraints = wiring_constraint
+            print(constraints)
+    output_tables = filter(
+        lambda entry: entry.block == str(root),
+        tables['outputs']
     )
-    constraints = concatenate(constraints, wiring_constraint)
+
+    output_indices = {
+        entry.local_index: entry.global_index for entry in output_tables
+    }
+
+    proj_y = restriction_map(output_indices, output_map.shape[0])
 
     return FlattenedSystem(
-        initial_conditions=initial_conditions,
-        vector_field=vector_field,
-        output_map=output_map,
-        constraints=constraints,
+        initial_conditions=function_from_graph(initial_conditions, symbols),
+        vector_field=function_from_graph(vector_field, symbols),
+        output_map=function_from_graph(proj_y(output_map), symbols),
+        constraints=function_from_graph(constraints, symbols),
         domain=domain,
         inverse_tables=tables
     )

@@ -60,6 +60,18 @@ class Matrix(np.ndarray):
         else:
             return result
 
+def as_array(item:Union[List[Union[int, float]], int, float, np.ndarray]):
+    if isinstance(item, (Variable, Parameter)):
+        return item
+    if isinstance(item, np.ndarray):
+        return item.view(Matrix)
+    elif isinstance(item, list):
+        return concatenate(*item)
+    elif isinstance(item, (int, float)):
+        return Matrix([item])
+    raise NotImplementedError(
+        f'Don\'t know how to treat {item} as an array')
+
 
 def sparse_matrix(shape: Tuple[int, int]):
     return np.zeros(shape, dtype=float).view(Matrix)
@@ -148,7 +160,7 @@ def restriction_map(indices: Union[List[int], Dict[int, int]],
 
 __ops = defaultdict(list)
 __shape_ops = {}
-
+__op_strings = {}
 scalar_shape = (1, )
 
 
@@ -197,7 +209,7 @@ def infer_shape(op: Callable, *shapes: Tuple[int, ...]) -> Tuple[int, ...]:
     return __shape_ops[op](*shapes)
 
 
-def register_op(shape_func=infer_scalar_shape):
+def register_op(shape_func=infer_scalar_shape, string=None):
     """Decorator which register the operator as an expression graph op."""
     def wrapper(func):
         sig = signature(func)
@@ -208,10 +220,17 @@ def register_op(shape_func=infer_scalar_shape):
         idx = None if is_variable else len(sig.parameters)
         __ops[idx].append(func)
         __shape_ops[func] = shape_func
+        if string:
+            __op_strings[func] = string
         return func
 
     return wrapper
 
+def op_to_string(op):
+    try:
+        return __op_strings[op]
+    except KeyError:
+        return str(op)
 
 def wrap_as_op(func: Callable,
                arguments: Optional[int] = None,
@@ -243,43 +262,55 @@ def wrap_as_op(func: Callable,
     return wrapper
 
 
-@register_op()
+@register_op(string='pow')
 @implements(np.power)
 def power(base, exponent):
     return base ** exponent
 
 
-@register_op()
+
+@register_op(string='+')
 def add(lhs, rhs):
     return lhs + rhs
 
 
-@register_op()
+@register_op(string='-')
 def sub(lhs, rhs):
     return lhs - rhs
 
+def is_scalar(item):
+    if isinstance(item, (float, int, complex)):
+        return True
+    try:
+        return item.shape == scalar_shape
+    except AttributeError:
+        pass
+    return False
 
-@register_op(shape_func=matmul_shape)
+@register_op(shape_func=matmul_shape, string='@')
 def matmul(lhs, rhs):
+    if isinstance(lhs, (int, float)) or isinstance(rhs, (int, float)):
+        return lhs * rhs
+
     return lhs @ rhs
 
 
-@register_op()
+@register_op(string='-')
 def neg(obj):
     return -obj
 
 
-@register_op()
+@register_op(string='*')
 def mul(lhs, rhs):
     return lhs * rhs
 
 
-@register_op()
+@register_op(string='/')
 def div(lhs, rhs):
     return lhs / rhs
 
 
-@register_op(shape_func=transpose_shape)
+@register_op(shape_func=transpose_shape, string='transpose')
 def transpose(matrix):
     return matrix.T
 
@@ -348,6 +379,18 @@ class PathInequality(Inequality):
 
         return c, exp(rho * (c - g)) / (alpha * rho)
 
+def is_zero(arg, shape=scalar_shape):
+    try:
+        r = bool(arg == 0)
+        return r
+    except ValueError:
+        pass
+    try:
+        return arg.shape == shape and (arg == 0).all()
+    except AttributeError:
+        pass
+    return False
+
 
 class Algebraic(metaclass=ABCMeta):
     """Base class for symbolic terms in expression graphs."""
@@ -412,9 +455,14 @@ class Algebraic(metaclass=ABCMeta):
             yield restriction_map([i], n)(self)
 
     def __add__(self, other):
+
+        if is_zero(other, self.shape):
+            return self
         return ExpressionGraph(add, self, other)
 
     def __radd__(self, other):
+        if is_zero(other, self.shape):
+            return self
         return ExpressionGraph(add, other, self)
 
     def __neg__(self):
@@ -555,24 +603,38 @@ class ExpressionGraph(Algebraic):
         return self.call(values)
 
     def call(self, values):
+        arugments = {
+            k: v for k,v in values.items()
+        }
+        context = {}
+        sorted_nodes = self.get_topological_sorted_indices()
 
-        def recurse(node):
-            obj = self.nodes[node]
+        def eval_node(obj):
             if is_op(obj):
-                args = [recurse(child) for child in self.edges[node]]
-                return obj(*args)
+                args = [context[child] for child in self.edges[node]]
+                out = obj(*args)
+                return out
             try:
-                return obj.call(values)
+                return obj.call(arugments)
             except (AttributeError, TypeError):
                 pass
             try:
-                return values[obj]
+                return arugments[obj]
             except (KeyError, TypeError):
                 pass
-
             return obj
 
-        return recurse(self.head)
+
+        while sorted_nodes:
+            node = sorted_nodes.pop()
+            if node in context:
+                continue
+            obj = self.nodes[node]
+            context[node] = eval_node(obj)
+
+        result = context[self.head]
+
+        return result
 
     @property
     def is_symbolic(self):
@@ -615,8 +677,6 @@ class ExpressionGraph(Algebraic):
         node_indices = [self.add_or_get_node(node) for node in nodes]
         self.edges[op_node] = node_indices
         self.head = op_node
-
-
         assert self.shape
 
         return self
@@ -709,7 +769,8 @@ class ExpressionGraph(Algebraic):
         # edges point from parent to child
 
         frontier = {self.head}
-        edges = {i: l for i, l in self.edges.items() if l}
+
+        edges = {i: l.copy() for i, l in self.edges.items() if l}
         reverse_graph = defaultdict(list)
 
         for in_node, out_nodes in edges.items():
@@ -736,11 +797,14 @@ class ExpressionGraph(Algebraic):
         return True
 
     def __repr__(self):
-        assert self.is_acyclic()
+        # assert self.is_acyclic()
 
         def trunk_function(node_object, *children):
             args = ','.join(children)
-            return f'({str(node_object)}: {args})'
+
+            string = op_to_string(node_object)
+
+            return f'({string}: {args})'
 
         return recursively_apply(self, trunk_function, str)
 
@@ -902,7 +966,8 @@ class Function(Algebraic):
 
     def call(self, args_dict):
         args = [args_dict[arg] for arg in self.arguments]
-        return self.function(*args)
+        result = self.function(*args)
+        return result
 
     @staticmethod
     def from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):

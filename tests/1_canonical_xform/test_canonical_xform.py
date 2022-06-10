@@ -3,7 +3,7 @@ import pytest
 
 from sysopt import Metadata
 from sysopt.block import Block, Composite
-from sysopt.symbolic import ExpressionGraph, get_time_variable, symbolic_vector, Function
+from sysopt.symbolic import ExpressionGraph, get_time_variable, symbolic_vector, Function, Variable
 from sysopt.solver import canonical_transform as xform
 
 from sysopt.blocks.common import Gain, LowPassFilter, Oscillator
@@ -142,6 +142,29 @@ class TestComposite:
         ]
         return composite
 
+    @staticmethod
+    def get_test_data():
+        p = [
+            3,  # osc frequency
+            0,  # osc phase
+            5,  # lpf freaq
+            0.5 # gain
+        ]
+        t = 0
+        x = 2
+        z = None
+        u = [1, 1]
+
+        args = (t, x, z, u, p)
+        expected_result = (
+            0,          # x0
+            (1 - 2)/5,  # f = (u_0 - x) / lpf_freq
+            0.5,        # g = u_1 * gain
+            [0, 2 - 1]  # h = [cos(1) - u_0, x - u_1]
+        )
+
+        return args, expected_result
+
 
     def test_correct_tables_are_generated(self):
         block = self.create_composite()
@@ -159,18 +182,51 @@ class TestComposite:
         assert len(tables['wires']) == 2
 
 
-    # def test_initial_conditions_are_correctly_mapped(self):
-    #     block = self.create_composite()
-    #     tables = xform.create_tables(block)
-    #     lpf, = filter(lambda x: isinstance(x, LowPassFilter), block.components)
-    #     arguments = xform.create_symbols_from_tables(tables)
-    #
-    #     x0, f, g, h = xform.symbolically_evaluate_block(tables, lpf, arguments)
-    #
+    def test_construct_constraints_from_wires(self):
+        block = self.create_composite()
+        all_blocks = xform.tree_to_list(block)
+        tables, domain = xform.create_tables(all_blocks)
+        arguments = xform.create_symbols_from_domain(domain)
 
-    def test_flattening(self):
+        test_outputs = symbolic_vector('Outputs', 3)
+
+        vector_constraints = xform.create_constraints_from_wire_list(
+            tables['wires'], arguments, test_outputs
+        )
+        test_args = {
+            arguments.u: np.array([2, 3]),
+            test_outputs: np.array([2, 3, 4])
+        }
+        result = vector_constraints.call(test_args)
+        assert result.shape == (2,) == vector_constraints.shape
+        assert result[0] == 0
+        assert result[1] == 0
+
+    @pytest.mark.skip
+    def test_flattened_initial_conditions(self):
         block = self.create_composite()
         system = xform.flatten_system(block)
-        
-        assert False
+        args, (x0_n, f_n, g_n, h_n) = self.get_test_data()
+        x0 = system.initial_conditions(args[-1])
+        assert x0[0] == x0_n
 
+    @pytest.mark.skip
+    def test_flattened_dynamics_and_output(self):
+        block = self.create_composite()
+        system = xform.flatten_system(block)
+        args, (x0_n, f_n, g_n, h_n) = self.get_test_data()
+        f = system.vector_field(*args)
+        assert f.shape == system.vector_field.shape
+        assert f[0] == f_n
+
+        g = system.output_map(*args)
+        assert g.shape == system.output_map.shape
+        assert g[0] == g_n
+    @pytest.mark.skip
+
+    def test_flattened_constraints(self):
+        block = self.create_composite()
+        system = xform.flatten_system(block)
+        args, (x0_n, f_n, g_n, h_n) = self.get_test_data()
+
+        h = system.constraints(*args)
