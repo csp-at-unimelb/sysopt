@@ -335,7 +335,7 @@ def flatten_system(root: Composite):
             constraints = concatenate(constraints, wiring_constraint)
         else:
             constraints = wiring_constraint
-            print(constraints)
+
     output_tables = filter(
         lambda entry: entry.block == str(root),
         tables['outputs']
@@ -346,11 +346,11 @@ def flatten_system(root: Composite):
     }
 
     proj_y = restriction_map(output_indices, output_map.shape[0])
-
+    outs = proj_y(output_map)
     return FlattenedSystem(
-        initial_conditions=function_from_graph(initial_conditions, symbols),
+        initial_conditions=function_from_graph(initial_conditions, symbols.p),
         vector_field=function_from_graph(vector_field, symbols),
-        output_map=function_from_graph(proj_y(output_map), symbols),
+        output_map=function_from_graph(outs, symbols),
         constraints=function_from_graph(constraints, symbols),
         domain=domain,
         inverse_tables=tables

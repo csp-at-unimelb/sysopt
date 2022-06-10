@@ -10,6 +10,7 @@ from sysopt.blocks.common import Gain, LowPassFilter, Oscillator
 from sysopt import exceptions
 from dataclasses import asdict
 
+from tests.mocks import LinearScalarEquation
 md = Metadata(
     inputs=['u_0', 'u_1'],
     outputs=['y'],
@@ -126,6 +127,17 @@ class TestLeafBlockXform:
             )
 
 
+class TestExampleBlock:
+    def test_init(self):
+        block = LinearScalarEquation()
+        system = xform.flatten_system(block)
+        args = (0, 1, 0, 0, [2, 3])
+
+        result = system.initial_conditions(args[-1])
+
+        assert result == [3]
+
+
 class TestComposite:
 
     @staticmethod
@@ -202,7 +214,6 @@ class TestComposite:
         assert result[0] == 0
         assert result[1] == 0
 
-    @pytest.mark.skip
     def test_flattened_initial_conditions(self):
         block = self.create_composite()
         system = xform.flatten_system(block)
@@ -210,7 +221,6 @@ class TestComposite:
         x0 = system.initial_conditions(args[-1])
         assert x0[0] == x0_n
 
-    @pytest.mark.skip
     def test_flattened_dynamics_and_output(self):
         block = self.create_composite()
         system = xform.flatten_system(block)
@@ -221,9 +231,10 @@ class TestComposite:
 
         g = system.output_map(*args)
         assert g.shape == system.output_map.shape
-        assert g[0] == g_n
-    @pytest.mark.skip
 
+        assert g[0] == g_n
+
+    @pytest.mark.skip
     def test_flattened_constraints(self):
         block = self.create_composite()
         system = xform.flatten_system(block)

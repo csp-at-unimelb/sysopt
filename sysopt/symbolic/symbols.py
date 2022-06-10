@@ -112,7 +112,7 @@ def inclusion_map(basis_map: Dict[int, int],
             assert len(basis_map) == 1
             j = basis_map[0]
             e_j = basis_vector(j, codomain_dimension)
-            return lambda x: ExpressionGraph(mul, x, e_j)
+            return lambda x: ExpressionGraph(mul, e_j, x)
 
     matrix = sparse_matrix((codomain_dimension, domain_dimension))
 
@@ -634,7 +634,10 @@ class ExpressionGraph(Algebraic):
 
         result = context[self.head]
 
-        return result
+        try:
+            return result.reshape(self.shape)
+        except Exception:
+            return result
 
     @property
     def is_symbolic(self):
@@ -1270,17 +1273,5 @@ def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
     if not isinstance(graph, ExpressionGraph):
         return ConstantFunction(graph, arguments)
 
-    shape = graph.shape
-
-    try:
-        indices = {
-            a: arguments.index(a) for a in
-            graph.symbols()
-        }
-    except AttributeError:
-        indices = {}
-
-    def func(*args):
-        filtered_args = {arg: args[i] for arg, i in indices.items()}
-        return graph.call(filtered_args)
-    return Function(shape, func, arguments)
+    return Function.from_graph(graph, arguments)
+    
