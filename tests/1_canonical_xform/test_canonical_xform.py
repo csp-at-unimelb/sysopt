@@ -136,6 +136,8 @@ class TestExampleBlock:
         result = system.initial_conditions(args[-1])
 
         assert result == [3]
+        output = system.output_map(*args)
+
 
 
 class TestComposite:
@@ -234,7 +236,7 @@ class TestComposite:
 
         assert g[0] == g_n
 
-    @pytest.mark.skip
+
     def test_flattened_constraints(self):
         block = self.create_composite()
         system = xform.flatten_system(block)

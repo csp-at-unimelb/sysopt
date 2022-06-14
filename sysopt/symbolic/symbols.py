@@ -47,6 +47,14 @@ class Matrix(np.ndarray):
     def __eq__(self, other):
         if isinstance(other, (list, tuple)):
             return other == self.tolist()
+
+        if isinstance(other, (float, int, complex)):
+            if self.shape == (1,):
+                return self[0] == other
+            elif self.shape == (1,1):
+                return self[0,0] == other
+            return False
+
         try:
             if self.shape != other.shape:
                 return False
@@ -60,15 +68,22 @@ class Matrix(np.ndarray):
         else:
             return result
 
-def as_array(item:Union[List[Union[int, float]], int, float, np.ndarray]):
-    if isinstance(item, (Variable, Parameter)):
+def as_array(
+    item:Union[List[Union[int, float]], int, float, np.ndarray],
+    prototype:SymbolicAtom =None):
+    if isinstance(item, Algebraic):
         return item
     if isinstance(item, np.ndarray):
         return item.view(Matrix)
-    elif isinstance(item, list):
+    elif isinstance(item, (list, tuple)):
         return concatenate(*item)
     elif isinstance(item, (int, float)):
-        return Matrix([item])
+        m = np.array([item],dtype=float).view(Matrix)
+        return m
+    elif item is None:
+        return None
+    elif callable(item):
+        return Function(prototype.shape, item, prototype)
     raise NotImplementedError(
         f'Don\'t know how to treat {item} as an array')
 
@@ -127,11 +142,14 @@ def basis_vector(index, dimension):
     return e_i
 
 class LinearMap:
+    """Functional representation of a linear operator defined by a matrix."""
+
+
     def __init__(self, matrix):
         self.matrix = matrix
 
     @property
-    def T(self):
+    def T(self):    # pylint: disable=invalid-name
         return LinearMap(self.matrix.T)
 
     def __call__(self, arg):
@@ -529,18 +547,28 @@ def recursively_apply(graph: 'ExpressionGraph',
                       trunk_function,
                       leaf_function,
                       current_node=None):
-    if not current_node:
-        current_node = graph.head
-    node_object = graph.nodes[current_node]
-    if current_node not in graph.edges:
-        return leaf_function(node_object)
 
-    children_results = [
-        recursively_apply(graph, trunk_function, leaf_function, child)
-        for child in graph.edges[current_node]
-    ]
+    if isinstance(graph, ConstantFunction):
+        return leaf_function(graph.value)
+    if isinstance(graph, GraphWrapper):
+        return recursively_apply(graph.graph, trunk_function, leaf_function)
 
-    return trunk_function(node_object, *children_results)
+    sorted_nodes = graph.get_topological_sorted_indices()
+    trunk_indices = {i for i in sorted_nodes if i in graph.edges}
+    context = {}
+    while sorted_nodes:
+        node = sorted_nodes.pop()
+        if node in context:
+            continue
+        item = graph.nodes[node]
+        if node in trunk_indices:
+            args = [context[i] for i in graph.edges[node]]
+            context[node] = trunk_function(item, *args)
+        else:
+            context[node] = leaf_function(item)
+
+    return context[graph.head]
+
 
 
 def match_args_by_name(expr: Algebraic, arguments: Dict[str, Any]):
@@ -604,8 +632,9 @@ class ExpressionGraph(Algebraic):
 
     def call(self, values):
         arugments = {
-            k: v for k,v in values.items()
+            k: as_array(v, prototype=k) for k,v in values.items()
         }
+
         context = {}
         sorted_nodes = self.get_topological_sorted_indices()
 
@@ -613,6 +642,7 @@ class ExpressionGraph(Algebraic):
             if is_op(obj):
                 args = [context[child] for child in self.edges[node]]
                 out = obj(*args)
+
                 return out
             try:
                 return obj.call(arugments)
@@ -624,7 +654,6 @@ class ExpressionGraph(Algebraic):
                 pass
             return obj
 
-
         while sorted_nodes:
             node = sorted_nodes.pop()
             if node in context:
@@ -633,10 +662,11 @@ class ExpressionGraph(Algebraic):
             context[node] = eval_node(obj)
 
         result = context[self.head]
-
         try:
+            # mostly for numpy arrays, which we assume are
+            # the most common thing passing through here.
             return result.reshape(self.shape)
-        except Exception:
+        except (AttributeError, TypeError):
             return result
 
     @property
@@ -650,15 +680,19 @@ class ExpressionGraph(Algebraic):
 
         if isinstance(value, ExpressionGraph):
             return self.merge_and_return_subgraph_head(value)
-        try:
-            if not is_op(value):
-                return self.nodes.index(value)
-        except ValueError:
-            pass
-        # else
 
         idx = len(self.nodes)
-        self.nodes.append(value)
+        if is_op(value):
+            self.nodes.append(value)
+            return idx
+        # else - a scalar or matrix
+        try:
+            # already in the array
+            return self.nodes.index(value)
+        except ValueError:
+            pass
+
+        self.nodes.append(as_array(value))
         return idx
 
     def merge_and_return_subgraph_head(self, other):
@@ -948,7 +982,7 @@ class Function(Algebraic):
     def __init__(self, shape, function, arguments):
         self._shape = shape
         self.function = function
-        self.arguments = arguments
+        self.arguments = tuple(arguments)
 
     def __repr__(self):
         args = ','.join(str(a) for a in self.arguments)
@@ -971,19 +1005,6 @@ class Function(Algebraic):
         args = [args_dict[arg] for arg in self.arguments]
         result = self.function(*args)
         return result
-
-    @staticmethod
-    def from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
-        shape = graph.shape
-
-        indices = {
-            a: arguments.index(a) for a in graph.symbols()
-        }
-
-        def func(*args):
-            filtered_args = {arg: args[i] for arg, i in indices.items()}
-            return graph.call(filtered_args)
-        return Function(shape, func, arguments)
 
 
 class SignalReference(Algebraic):
@@ -1167,6 +1188,8 @@ def concatenate(*arguments):
     # multiply all vector constants and vector graphs by inclusion maps
 
     for arg in arguments:
+        if arg is None:
+            continue
         if isinstance(arg, (int, float, complex)):
             scalar_constants.append((length, arg))
             length += 1
@@ -1231,7 +1254,7 @@ class ConstantFunction(Algebraic):
         elif isinstance(value, (list, tuple)):
             self.value = np.array(value).view(Matrix)
         else:
-            self.value = value
+            self.value = as_array(value)
 
         self.arguments = arguments
 
@@ -1255,23 +1278,52 @@ class ConstantFunction(Algebraic):
         return self.value
 
 
-def as_function(expr: Algebraic, arguments: SymbolicArray):
+class GraphWrapper(Algebraic):
+    """Wraps an expression graph with the specified arguments."""
 
-    if isinstance(expr, list):
-        return concatenate(*expr)
+    def __init__(self, graph:ExpressionGraph, arguments:List[SymbolicAtom]):
+        self.arguments = tuple(arguments)
+        unbound_symbols = {
+            s for s in graph.symbols() if s not in arguments
+        }
+        if unbound_symbols:
+            raise ValueError('Could not create function from graph due to'
+                             f'unbound symbolic variables: {unbound_symbols}')
+        self.graph = graph
 
-    if not isinstance(expr, ExpressionGraph):
-        # coerce into an expression graph
-        zero = sparse_matrix(expr.shape)
-        return expr + zero
-    else:
-        return expr
-    raise NotImplementedError(f'Cannot turn {type(expr)} into a function')
+    def symbols(self):
+        return set(self.arguments)
 
+    @property
+    def shape(self):
+        return self.graph.shape
+
+    def call(self, args:Dict[SymbolicAtom, Any]):
+
+        symbols = self.graph.symbols()
+        inner_args = {
+            a: args[a] for a in self.arguments
+            if a in symbols
+        }
+        return self.graph.call(inner_args)
+
+    def __call__(self, *args):
+        if len(args) != len(self.arguments):
+            raise ValueError(
+                f'Invalid arguments; expected {self.arguments}, '
+                f'but recieved {args}')
+        return self.call(dict(zip(self.arguments, args)))
+
+    def __hash__(self):
+        return hash((hash(self.graph), hash(tuple(self.symbols()))))
+
+    def __repr__(self):
+        return f'{self.symbols()} ->  {self.graph}'
 
 def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
     if not isinstance(graph, ExpressionGraph):
+        if graph is None:
+            return None
         return ConstantFunction(graph, arguments)
 
-    return Function.from_graph(graph, arguments)
-    
+    return GraphWrapper(graph, arguments)

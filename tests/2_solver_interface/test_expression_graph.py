@@ -1,6 +1,6 @@
 from sysopt.symbolic import (
     Variable, is_symbolic, list_symbols, Parameter,
-    is_temporal, ExpressionGraph, lambdify, PathInequality
+    is_temporal, ExpressionGraph, PathInequality
 )
 
 from sysopt.symbolic.symbols import get_time_variable
@@ -123,7 +123,7 @@ def test_inequality_to_function():
     assert var_inequality.call({var: 1}) == 0
     assert var_inequality.call({var: 0}) > 0
 
-    f = lambdify(var_inequality.to_graph(), [var])
+    f = var_inequality.to_graph()
     assert f(2) < 0
     assert f(1) == 0
     assert f(0) > 0

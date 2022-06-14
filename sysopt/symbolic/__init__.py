@@ -2,4 +2,3 @@
 
 from sysopt.symbolic.symbols import *
 from sysopt.symbolic.scalar_ops import *
-from sysopt.backends import lambdify

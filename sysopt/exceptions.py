@@ -42,4 +42,5 @@ class InvalidPort(ValueError):
 
 class FunctionError(ValueError):
     def __init__(self, block, function, error):
-        pass
+        message = f'Failed to evaluate {function} on block {block}: {error}'
+        super().__init__(message)

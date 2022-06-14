@@ -1,55 +1,25 @@
 """Module for converting sysopt expression graphs into casadi functions."""
 
-from typing import List, Union
-from sysopt.symbolic import Algebraic, scalar_shape, is_op, is_matrix
+from typing import Dict
 
-import casadi as _casadi
+import casadi
+from sysopt.symbolic import is_matrix, recursively_apply, SymbolicAtom
 
 
-def lambdify(graph,
-             arguments: List[Union[Algebraic, List[Algebraic]]],
-             name: str = 'f'):
+def substitute(graph,
+               symbols: Dict[SymbolicAtom, casadi.SX]):
 
-    substitutions = {}
-    for i, arg in enumerate(arguments):
-        if isinstance(arg, list):
-            assert all(sub_arg.shape == scalar_shape for sub_arg in arg), \
-                'Invalid arguments, lists must be a list of scalars'
-            symbol = _casadi.SX.sym(f'x_{i}', len(arg))
-            substitutions.update(
-                {sub_arg: symbol[j] for j, sub_arg in enumerate(arg)})
-        else:
-            try:
-                n,  = arg.shape
-            except ValueError as ex:
-                n, m = arg.shape
-                if m > 1:
-                    raise ex
-            symbol = _casadi.SX.sym(f'x_{i}', n)
-            substitutions[arg] = symbol
+    def leaf_function(obj):
+        if obj in symbols:
+            return symbols[obj]
+        if is_matrix(obj):
+            return casadi.SX(obj)
+        raise NotImplementedError(f'Don\'y know how to evaluate {obj}')
 
-    def casadify(item):
-        if is_matrix(item):
-            return _casadi.SX(item)
-        if isinstance(item, (int, float, complex)):
-            return _casadi.SX(item)
-        if item in substitutions:
-            return substitutions[item]
-        raise NotImplementedError(f'Don\'t know how to handle {item}')
+    def trunk_function(op, *children):
+        return op(*children)
 
-    def recurse(node):
-        obj = graph.nodes[node]
-        if is_op(obj):
-            args = [recurse(child) for child in graph.edges[node]]
-            return obj(*args)
-        else:
-            return casadify(obj)
-    expressions = recurse(graph.head)
 
-    # pylint: disable=broad-except
-    try:
-        outputs = [_casadi.vertcat(expr) for expr in expressions]
+    expression = recursively_apply(graph, trunk_function, leaf_function)
 
-    except Exception:
-        outputs = [expressions]
-    return _casadi.Function(name,  list(substitutions.values()), outputs)
+    return expression

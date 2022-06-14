@@ -42,7 +42,7 @@ class Port:
     def channel_name(self, i: int):
         try:
             names = getattr(self.block.metadata, self.port_type)
-            return name[i]
+            return names[i]
         except AttributeError:
             return f'{self.port_type}[{i}]'
 
