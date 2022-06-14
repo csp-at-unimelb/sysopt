@@ -613,7 +613,6 @@ class ExpressionGraph(Algebraic):
 
     def _get_shape_of(self, node):
 
-
         if node in self.edges:
             op = self.nodes[node]
             shapes = [
@@ -675,7 +674,7 @@ class ExpressionGraph(Algebraic):
             # mostly for numpy arrays, which we assume are
             # the most common thing passing through here.
             return result.reshape(self.shape)
-        except (AttributeError, TypeError):
+        except (AttributeError, TypeError, NotImplementedError):
             return result
 
     @property
