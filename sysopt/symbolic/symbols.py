@@ -8,6 +8,7 @@ import numpy as np
 from typing import Union, List, Callable, Tuple, Optional, Dict, NewType, Any
 
 from sysopt.helpers import flatten
+from sysopt.exceptions import InvalidShape
 array = np.array
 epsilon = 1e-12
 
@@ -190,7 +191,7 @@ def infer_scalar_shape(*shapes: Tuple[int, ...]) -> Tuple[int, ...]:
         if this_shape == (1, ):
             this_shape = shape
         else:
-            raise AttributeError('Invalid Shape')
+            raise InvalidShape('Invalid Shape')
     return this_shape
 
 
@@ -203,7 +204,7 @@ def matmul_shape(*shapes: Tuple[int, ...]) -> Tuple[int, ...]:
             n_next, = shape
             m_next = None
         if m != n_next:
-            raise AttributeError('Invalid shape')
+            raise InvalidShape('Invalid shape')
         else:
             m = m_next
 
@@ -474,12 +475,13 @@ class Algebraic(metaclass=ABCMeta):
 
     def __add__(self, other):
 
-        if is_zero(other, self.shape):
+        if is_zero(other, self.shape) or other is None:
             return self
+
         return ExpressionGraph(add, self, other)
 
     def __radd__(self, other):
-        if is_zero(other, self.shape):
+        if is_zero(other, self.shape) or other is None:
             return self
         return ExpressionGraph(add, other, self)
 
@@ -493,9 +495,13 @@ class Algebraic(metaclass=ABCMeta):
         return ExpressionGraph(sub, other, self)
 
     def __matmul__(self, other):
+        if other is None:
+            return None
         return ExpressionGraph(matmul, self, other)
 
     def __rmatmul__(self, other):
+        if other is None:
+            return None
         return ExpressionGraph(matmul, other, self)
 
     def __mul__(self, other):
@@ -584,28 +590,30 @@ class ExpressionGraph(Algebraic):
     def __init__(self, op, *args):
         self.nodes = []
         self.edges = defaultdict(list)
-        self.head = None
-
-        if op:
-            op_node = self.add_or_get_node(op)
-            self.edges.update(
-                {op_node: [self.add_or_get_node(a) for a in args]}
-            )
-            self.head = op_node
+        self._head = None
+        op_node = self.add_or_get_node(op)
+        self.edges.update(
+            {op_node: [self.add_or_get_node(a) for a in args]}
+        )
+        self._shape = None
+        self.head = op_node
 
     @property
-    def domain(self):
-        symbols = self.symbols()
-        return [
-            n.shape[0] if len(n.shape) == 1 else n.shape
-            for n in self.nodes if n in symbols
-        ]
+    def head(self):
+        return self._head
+
+    @head.setter
+    def head(self, value):
+        self._shape = self._get_shape_of(value)
+        self._head = value
 
     @property
     def shape(self):
-        return self._get_shape_of(self.head)
+        return self._shape
 
     def _get_shape_of(self, node):
+
+
         if node in self.edges:
             op = self.nodes[node]
             shapes = [
@@ -613,6 +621,7 @@ class ExpressionGraph(Algebraic):
                 for child in self.edges[node]
             ]
             return infer_shape(op, *shapes)
+
         obj = self.nodes[node]
         try:
             return obj.shape
@@ -731,6 +740,7 @@ class ExpressionGraph(Algebraic):
         return self.push_op(div, self, other)
 
     def __imatmul__(self, other):
+        assert other is not None
         return self.push_op(matmul, self, other)
 
     def __hash__(self):

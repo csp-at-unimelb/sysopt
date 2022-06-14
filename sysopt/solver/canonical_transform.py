@@ -3,7 +3,7 @@
 import copy
 from typing import Optional, List, Union, Callable, Dict, Tuple, Iterable
 from dataclasses import dataclass, field, asdict
-from collections import namedtuple, deque
+from collections import deque
 
 from sysopt.types import Domain
 from sysopt.block import Block, Composite, Connection, Channel, Port, ComponentBase
@@ -43,9 +43,26 @@ class WireEntry:
     source_index: int
     destination_index: int
 
-Arguments = namedtuple('Arguments', ['t', 'x', 'z', 'u', 'p'])
 Tables = Dict[str, Union[List[TableEntry], List[WireEntry]]]
 
+@dataclass
+class Arguments:
+    """Container for symbolic function arguments"""
+    t: Variable
+    x: Union[Variable, ExpressionGraph]
+    z: Union[Variable, ExpressionGraph]
+    u: Union[Variable, ExpressionGraph]
+    p: Union[Variable, ExpressionGraph]
+
+    @property
+    def domain(self) -> Domain:
+        return Domain(
+            1, *[v.shape[0] if v is not None else 0
+                 for v in (self.x, self.z, self.u, self.p)]
+        )
+
+    def __iter__(self):
+        return iter((self.t, self.x, self.z, self.u, self.p))
 
 @dataclass
 class FlattenedSystem:
@@ -332,14 +349,23 @@ def symbolically_evaluate(block: Block,
     except NotImplementedError as ex:
         raise exceptions.FunctionError(
             block, func, 'function is not implemented!') from ex
-    except Exception as ex:
+    except exceptions.InvalidShape as ex:
+        domain = local_arguments.domain
+        message = 'Failed to evaluate symbolically when called with '\
+                  f'local arguments of {domain}'
         raise exceptions.FunctionError(
-            block, func, ex.args
+            block, func, message
+        ) from ex
+    except Exception as ex:
+        message = f'An execption \'{ex}\' was raised during ' \
+                  'symbolic evaluation'
+        raise exceptions.FunctionError(
+            block, func, message
         ) from ex
     f = as_array(f)
     if f.shape != (dimension, ):
         raise exceptions.FunctionError(
-            block,func,
+            block, func,
             f'Expected shape {(dimension, )} but ' \
             f'the function returned a vector of shape {f.shape}'
         )
