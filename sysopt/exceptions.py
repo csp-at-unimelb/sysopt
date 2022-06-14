@@ -38,3 +38,13 @@ class UnconnectedOutputError(ValueError):
 
 class InvalidPort(ValueError):
     pass
+
+
+class FunctionError(ValueError):
+    def __init__(self, block, function, error):
+        message = f'Failed to evaluate {function} on block {block}: {error}'
+        super().__init__(message)
+
+
+class InvalidShape(ValueError):
+    pass

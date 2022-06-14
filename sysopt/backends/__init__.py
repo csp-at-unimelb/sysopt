@@ -10,6 +10,6 @@ else:
     raise NotImplementedError(f'Backend {backend_name} is not implemented')
 
 
-lambdify = backend.lambdify
+
 InterpolatedPath = backend.InterpolatedPath
 Integrator = backend.Integrator

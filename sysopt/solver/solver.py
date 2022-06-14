@@ -14,7 +14,7 @@ from sysopt.symbolic import (
     ConstantFunction
 )
 
-from sysopt.solver.symbol_database import FlattenedSystem, Quadratures
+from sysopt.solver.canonical_transform import FlattenedSystem, Quadratures
 from sysopt.block import Block, Composite
 
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])

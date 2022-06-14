@@ -39,6 +39,13 @@ class Port:
     def __repr__(self):
         return f'Port({self.port_type}, {self.parent}, {self.size})'
 
+    def channel_name(self, i: int):
+        try:
+            names = getattr(self.block.metadata, self.port_type)
+            return names[i]
+        except AttributeError:
+            return f'{self.port_type}[{i}]'
+
     @property
     def size(self):
         return len(self._channels)
