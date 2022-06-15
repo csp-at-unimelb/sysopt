@@ -52,16 +52,16 @@ class SolverContext:
         self.resolution = path_resolution
         self.quadratures = None
         self._flat_system = None
-        self._parameter_map = None
+        self.parameter_map = None
         self._params_to_t_final = None
         self.parameters = None
 
     def __enter__(self):
         self._flat_system = FlattenedSystem.from_block(self.model)
-        self.parameters, t_map, p_map = create_parameter_map(
+        self.parameters, t_map, p_map = createparameter_map(
             self.model, self.constants, self.t_final
         )
-        self._parameter_map = p_map
+        self.parameter_map = p_map
         self._params_to_t_final = t_map
 
         return self
@@ -81,7 +81,7 @@ class SolverContext:
                 f'received {decision_variables}') from ex
 
         t_final = self._params_to_t_final(values)
-        params = self._parameter_map(values)
+        params = self.parameter_map(values)
         integrator = self.get_integrator()
         func = integrator.integrate(t_final, params)
 
@@ -147,7 +147,7 @@ class SolverContext:
 
     def evaluate_quadrature(self, index, t, params):
         integrator = self.get_integrator()
-        args = self._parameter_map(params)
+        args = self.parameter_map(params)
         _, q = integrator(t, args)
 
         return q[index]
@@ -179,7 +179,7 @@ class SolverContext:
 
         integrator = self.get_integrator(resolution)
         try:
-            p = self._parameter_map(parameters)
+            p = self.parameter_map(parameters)
         except (ValueError, TypeError) as ex:
             raise InvalidParameterException(
                 f'Failed to map parameters arguments \'{parameters}\' '
@@ -285,7 +285,7 @@ class Problem:
         return CandidateSolution(value, y, constraints)
 
 
-def create_parameter_map(model, constants, final_time):
+def createparameter_map(model, constants, final_time):
     try:
         output_idx, params = zip(*[
             (idx, Parameter(model, name))
