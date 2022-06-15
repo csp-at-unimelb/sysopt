@@ -8,7 +8,7 @@ import numpy as np
 from typing import Union, List, Callable, Tuple, Optional, Dict, NewType, Any
 
 from sysopt.helpers import flatten
-from sysopt.exceptions import InvalidShape
+from sysopt.exceptions import InvalidShape, EvaluationError
 array = np.array
 epsilon = 1e-12
 
@@ -474,14 +474,13 @@ class Algebraic(metaclass=ABCMeta):
             yield restriction_map([i], n)(self)
 
     def __add__(self, other):
-
-        if is_zero(other, self.shape) or other is None:
+        if is_zero(other, self.shape):
             return self
 
         return ExpressionGraph(add, self, other)
 
     def __radd__(self, other):
-        if is_zero(other, self.shape) or other is None:
+        if is_zero(other, self.shape):
             return self
         return ExpressionGraph(add, other, self)
 
@@ -495,13 +494,9 @@ class Algebraic(metaclass=ABCMeta):
         return ExpressionGraph(sub, other, self)
 
     def __matmul__(self, other):
-        if other is None:
-            return None
         return ExpressionGraph(matmul, self, other)
 
     def __rmatmul__(self, other):
-        if other is None:
-            return None
         return ExpressionGraph(matmul, other, self)
 
     def __mul__(self, other):
@@ -639,6 +634,11 @@ class ExpressionGraph(Algebraic):
         return self.call(values)
 
     def call(self, values):
+        invalid_args = {
+            str(k):v for k,v in values.items() if v is None
+        }
+        if invalid_args:
+            raise TypeError(f'Invalid arguments {invalid_args}')
         arugments = {
             k: as_array(v, prototype=k) for k,v in values.items()
         }
@@ -661,14 +661,17 @@ class ExpressionGraph(Algebraic):
             except (KeyError, TypeError):
                 pass
             return obj
-
+        path = []
         while sorted_nodes:
             node = sorted_nodes.pop()
+            path.append(node)
             if node in context:
                 continue
             obj = self.nodes[node]
-            context[node] = eval_node(obj)
-
+            try:
+                context[node] = eval_node(obj)
+            except Exception as ex:
+                raise EvaluationError(self, context, path, ex) from ex
         result = context[self.head]
         try:
             # mostly for numpy arrays, which we assume are
@@ -682,6 +685,8 @@ class ExpressionGraph(Algebraic):
         return self.symbols() != {}
 
     def add_or_get_node(self, value):
+        if value is None:
+            raise TypeError('unsupported operand for \'NoneType\'')
         if value is self:
             assert self.head is not None
             return self.head
@@ -739,7 +744,6 @@ class ExpressionGraph(Algebraic):
         return self.push_op(div, self, other)
 
     def __imatmul__(self, other):
-        assert other is not None
         return self.push_op(matmul, self, other)
 
     def __hash__(self):

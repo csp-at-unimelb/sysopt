@@ -96,16 +96,18 @@ class SolverContext:
             proj_indices.append(1)
         else:
             constants.append(self.t_final)
-
+        free_params = []
         for row, parameter in enumerate(self.model.parameters):
             try:
                 constants.append(self.constants[parameter])
             except KeyError:
                 constants.append(0)
                 proj_indices.append(row)
-
+                free_params.append(parameter)
         out_dimension = len(constants)
-        arguments = symbolic.Variable(shape=(len(proj_indices), ))
+        arguments = symbolic.Variable(
+            shape=(len(proj_indices), ),
+            name= f'''[{','.join(free_params)}]''')
         basis_map = dict(enumerate(proj_indices))
         projector = symbolic.inclusion_map(
             basis_map, len(proj_indices), out_dimension
@@ -178,9 +180,10 @@ class SolverContext:
         integrator = self.get_integrator(resolution)
         try:
             p = self._parameter_map(parameters)
-        except ValueError as ex:
+        except (ValueError, TypeError) as ex:
             raise InvalidParameterException(
-                f'Failed to map parameters {parameters} to {self.parameters}'
+                f'Failed to map parameters arguments \'{parameters}\' '
+                f'to {self.parameters}.'
             ) from ex
 
         if not t_final:
