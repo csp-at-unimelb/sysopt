@@ -202,7 +202,11 @@ def find_channel_in_table(table: List[TableEntry],
         return (entry.block == str(port.block)
                 and entry.local_index == local_index)
 
-    entry, = list(filter(key, table))
+    try:
+        entry, = list(filter(key, table))
+    except ValueError as ex:
+        message = f'Coulnd not find {port}[{local_index}] in table'
+        raise ValueError(message) from ex
 
     return entry.global_index
 
@@ -213,8 +217,16 @@ def internal_wire_to_table_entries(tables: Tables,
     src_port, dest_port, indices = get_ports_and_indices(wire)
     entries = []
     for src_i, dest_i in indices:
-        src_index = find_channel_in_table(tables['outputs'], src_port, src_i)
-        dest_index = find_channel_in_table(tables['inputs'], dest_port, dest_i)
+        try:
+            src_index = find_channel_in_table(
+                tables['outputs'], src_port, src_i
+            )
+            dest_index = find_channel_in_table(
+                tables['inputs'], dest_port, dest_i
+            )
+        except ValueError as ex:
+            message = f'Failed to get ports for wire {wire} : {ex.args}'
+            raise ValueError(message) from ex
         entries.append(WireEntry(
             source_port=str(src_port),
             destination_port=str(dest_port),
