@@ -52,7 +52,7 @@ class SolverContext:
         self.resolution = path_resolution
         self.quadratures = None
         self._flat_system = None
-        self._parameter_map = None
+        self.parameter_map = None
         self._params_to_t_final = None
         self.parameters = None
 
@@ -61,7 +61,7 @@ class SolverContext:
         self.parameters, t_map, p_map = create_parameter_map(
             self.model, self.constants, self.t_final
         )
-        self._parameter_map = p_map
+        self.parameter_map = p_map
         self._params_to_t_final = t_map
 
         return self
@@ -81,7 +81,7 @@ class SolverContext:
                 f'received {decision_variables}') from ex
 
         t_final = self._params_to_t_final(values)
-        params = self._parameter_map(values)
+        params = self.parameter_map(values)
         integrator = self.get_integrator()
         func = integrator.integrate(t_final, params)
 
@@ -96,16 +96,18 @@ class SolverContext:
             proj_indices.append(1)
         else:
             constants.append(self.t_final)
-
+        free_params = []
         for row, parameter in enumerate(self.model.parameters):
             try:
                 constants.append(self.constants[parameter])
             except KeyError:
                 constants.append(0)
                 proj_indices.append(row)
-
+                free_params.append(parameter)
         out_dimension = len(constants)
-        arguments = symbolic.Variable(shape=(len(proj_indices), ))
+        arguments = symbolic.Variable(
+            shape=(len(proj_indices), ),
+            name= f'''[{','.join(free_params)}]''')
         basis_map = dict(enumerate(proj_indices))
         projector = symbolic.inclusion_map(
             basis_map, len(proj_indices), out_dimension
@@ -145,7 +147,7 @@ class SolverContext:
 
     def evaluate_quadrature(self, index, t, params):
         integrator = self.get_integrator()
-        args = self._parameter_map(params)
+        args = self.parameter_map(params)
         _, q = integrator(t, args)
 
         return q[index]
@@ -177,10 +179,11 @@ class SolverContext:
 
         integrator = self.get_integrator(resolution)
         try:
-            p = self._parameter_map(parameters)
-        except ValueError as ex:
+            p = self.parameter_map(parameters)
+        except (ValueError, TypeError) as ex:
             raise InvalidParameterException(
-                f'Failed to map parameters {parameters} to {self.parameters}'
+                f'Failed to map parameters arguments \'{parameters}\' '
+                f'to {self.parameters}.'
             ) from ex
 
         if not t_final:

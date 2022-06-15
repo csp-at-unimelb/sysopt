@@ -71,7 +71,7 @@ class FlattenedSystem:
     vector_field: Optional[ExpressionGraph] = None
     output_map: Optional[ExpressionGraph] = None
     constraints: Optional[ExpressionGraph] = None
-    inverse_tables: Optional[dict] = None
+    tables: Optional[dict] = None
     domain: Domain = None
 
     @staticmethod
@@ -148,7 +148,8 @@ def merge_table(table_1: Tables, table_2: Tables) -> Tables:
         l1 = table_1[key] if key in table_1 else []
         l2 = table_2[key] if key in table_2 else []
         out_table[key] = [copy.copy(entry) for entry in l1]
-        offset = len(l1)
+        offset = global_dimension_of(l1)
+
         out_table[key] += [
             TableEntry(local_name=entry.local_name,
                        block=entry.block,
@@ -170,6 +171,10 @@ def create_tables_from_blocks(*blocks):
 
     return base
 
+def global_dimension_of(table):
+    if not table:
+        return 0
+    return 1 + max(entry.global_index for entry in table)
 
 def get_projections_for_block(tables:Tables , block: Block):
     projectors = {}
@@ -181,7 +186,9 @@ def get_projections_for_block(tables:Tables , block: Block):
             entry for entry in tables[attr] if entry.block == str(block)
         ], key=lambda entry: entry.local_index)
         projectors[attr] = projection_from_entries(
-            entries, local_dim=local_dim, global_dim=len(tables[attr])
+            entries,
+            local_dim=local_dim,
+            global_dim=global_dimension_of(tables[attr])
         )
 
     return projectors
@@ -195,7 +202,11 @@ def find_channel_in_table(table: List[TableEntry],
         return (entry.block == str(port.block)
                 and entry.local_index == local_index)
 
-    entry, = list(filter(key, table))
+    try:
+        entry, = list(filter(key, table))
+    except ValueError as ex:
+        message = f'Coulnd not find {port}[{local_index}] in table'
+        raise ValueError(message) from ex
 
     return entry.global_index
 
@@ -206,8 +217,16 @@ def internal_wire_to_table_entries(tables: Tables,
     src_port, dest_port, indices = get_ports_and_indices(wire)
     entries = []
     for src_i, dest_i in indices:
-        src_index = find_channel_in_table(tables['outputs'], src_port, src_i)
-        dest_index = find_channel_in_table(tables['inputs'], dest_port, dest_i)
+        try:
+            src_index = find_channel_in_table(
+                tables['outputs'], src_port, src_i
+            )
+            dest_index = find_channel_in_table(
+                tables['inputs'], dest_port, dest_i
+            )
+        except ValueError as ex:
+            message = f'Failed to get ports for wire {wire} : {ex.args}'
+            raise ValueError(message) from ex
         entries.append(WireEntry(
             source_port=str(src_port),
             destination_port=str(dest_port),
@@ -262,13 +281,12 @@ def create_tables(all_blocks:List[Block]) -> Tables:
     )
 
     trunks = list(filter(lambda b: isinstance(b, Composite), all_blocks))
-    domain = Domain(
-        1,
-        len(tables['states']),
-        len(tables['constraints']),
-        len(tables['inputs']),
-        len(tables['parameters'])
-    )
+    sizes = [
+        global_dimension_of(tables[name])
+        for name in ('states', 'constraints', 'inputs', 'parameters')
+    ]
+
+    domain = Domain(1, *sizes)
 
     tables['wires'] = []
     while trunks:
@@ -380,21 +398,23 @@ def symbolically_evaluate_block(tables: Dict,
     proj_x = proj['states']
     proj_z = proj['constraints']
     proj_y = proj['outputs']
+    proj_p = proj['parameters']
+    proj_u = proj['inputs']
     local_args = Arguments(
         t=arguments.t,
-        x=proj_x @ arguments.x,
-        z=proj_z @ arguments.z,
-        u=proj['inputs'] @ arguments.u,
-        p=proj['parameters'] @ arguments.p
+        x=proj_x @ arguments.x if block.signature.states else None,
+        z=proj_z @ arguments.z if block.signature.constraints else None,
+        u=proj_u @ arguments.u if block.signature.inputs else None,
+        p=proj_p @ arguments.p if block.signature.parameters else None
     )
 
     x0 = proj_x.T @ symbolically_evaluate_initial_conditions(
         block, local_args
-    ) if block.signature.states > 0 else None
+    ) if block.signature.states else None
 
     f = proj_x.T @ symbolically_evaluate(
             block, block.compute_dynamics, block.signature.states, local_args
-    )  if block.signature.states > 0 else None
+    )  if block.signature.states else None
 
     g = proj_y.T @ symbolically_evaluate(
         block, block.compute_outputs, block.signature.outputs, local_args
@@ -474,7 +494,7 @@ def flatten_system(root: Composite) -> ExpressionGraph:
         output_map=function_from_graph(outs, symbols),
         constraints=function_from_graph(constraints, symbols),
         domain=domain,
-        inverse_tables=tables
+        tables=tables
     )
 
 
