@@ -58,7 +58,7 @@ class SolverContext:
 
     def __enter__(self):
         self._flat_system = FlattenedSystem.from_block(self.model)
-        self.parameters, t_map, p_map = createparameter_map(
+        self.parameters, t_map, p_map = create_parameter_map(
             self.model, self.constants, self.t_final
         )
         self.parameter_map = p_map
@@ -285,7 +285,7 @@ class Problem:
         return CandidateSolution(value, y, constraints)
 
 
-def createparameter_map(model, constants, final_time):
+def create_parameter_map(model, constants, final_time):
     try:
         output_idx, params = zip(*[
             (idx, Parameter(model, name))
