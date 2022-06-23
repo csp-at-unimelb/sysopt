@@ -76,7 +76,7 @@ class SymbolDatabase:
             return self._signals[block]
         except KeyError:
             pass
-        n = block.signature.state
+        n = block.signature.states
         m = block.signature.constraints
         k = block.signature.inputs
         ell = block.signature.parameters
@@ -146,11 +146,27 @@ class SymbolDatabase:
         Z = flat_system.Z
         h = flat_system.h
 
-        h_ = sp.solve(h,Z)
+        repl = [(Z[i],Z[i]-h[i]) for i in range(len(Z))]
 
-        repl = [(Z[i],h_[Z[i]]) for i in range(len(Z))]
         for i in range(len(flat_system.f)):
-            flat_system.f[i] = flat_system.f[i].subs(repl)
+            j = 0
+            while not flat_system.f[i].free_symbols.isdisjoint(Z):
+                flat_system.f[i] = flat_system.f[i].subs(repl)
+                j += 1
+                if j> 10:
+                    print("Error: Hit recusive limit hit for variable substitution")
+                    print("Cause is likely because of incorrect wiring")
+
+        #  h_ = sp.solve(h,Z,quick=True,minimal=True,simplify=False)
+        #  repl = [(Z[i],h_[Z[i]]) for i in range(len(Z))]
+        #  for i in range(len(flat_system.f)):
+            #  flat_system.f[i] = flat_system.f[i].subs(repl)
+
+        self.sym_vars = set()
+        for f in flat_system.f:
+            self.sym_vars |= f.free_symbols
+        self.sym_vars |= set(flat_system.X)
+
         return flat_system
 
     def unique_sym_names(self,flat_system):
@@ -213,19 +229,23 @@ class SymbolDatabase:
         return blocks
 
     def create_signal_dicts(self):
+
         state_dict = {}
         input_dict = {}
         parameter_dict = {}
         for block, signals in self._signals.items():
-            if block.metadata.state:
-                for i,name in enumerate(block.metadata.state):
-                    state_dict[signals[0][i]] = name
+            if block.metadata.states:
+                for i,name in enumerate(block.metadata.states):
+                    if signals[0][i] in self.sym_vars:
+                        state_dict[signals[0][i]] = name
             if block.metadata.inputs:
                 for i,name in enumerate(block.metadata.inputs):
-                    input_dict[signals[2][i]] = name
+                    if signals[2][i] in self.sym_vars:
+                        input_dict[signals[2][i]] = name
             if block.metadata.parameters:
                 for i,name in enumerate(block.metadata.parameters):
-                    parameter_dict[signals[3][i]] = name
+                    if signals[3][i] in self.sym_vars:
+                        parameter_dict[signals[3][i]] = name
 
         self.sym_dict = {**state_dict, **input_dict, **parameter_dict}
 
@@ -238,6 +258,15 @@ class SymbolDatabase:
         self.state_dict_inv = {v: k for k, v in self.state_dict.items()}
         self.input_dict_inv = {v: k for k, v in self.input_dict.items()}
         self.param_dict_inv = {v: k for k, v in self.param_dict.items()}
+
+        if len(self.sym_dict) != len(self.sym_dict_inv):
+            print("WARNING: multiple identical parameters/inputs found. This will cause errors")
+            seen = set()
+            dupes = [x for x in list(self.sym_dict.values()) if x in seen or seen.add(x)]
+            print("The following values are dupliates:")
+            for d in dupes:
+                print(d)
+
 
         return 
 

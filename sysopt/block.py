@@ -156,7 +156,7 @@ class ComponentBase:
 
     def compute_dynamics(self,
                          t: Time,
-                         state: States,
+                         states: States,
                          algebraics: Algebraics,
                          inputs: Inputs,
                          parameters: Parameters):
@@ -164,7 +164,7 @@ class ComponentBase:
 
     def compute_outputs(self,
                         t: Time,
-                        state: States,
+                        states: States,
                         algebraics: Algebraics,
                         inputs: Inputs,
                         parameters: Parameters) -> Numeric:
@@ -172,7 +172,7 @@ class ComponentBase:
 
     def compute_residuals(self,
                           t: Time,
-                          state: States,
+                          states: States,
                           algebraics: Algebraics,
                           inputs: Inputs,
                           parameters: Parameters) -> Numeric:

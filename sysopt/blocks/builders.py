@@ -39,23 +39,23 @@ class FullStateOutput(Block):
 
         metadata = Metadata(
             inputs=metadata.inputs,
-            outputs=metadata.state,
-            state=metadata.state,
+            outputs=metadata.states,
+            states=metadata.states,
             parameters=metadata.parameters,
         )
 
         super().__init__(metadata)
         self._dxdt = dxdt
-        self._x0 = x0 if x0 is not None else lambda p: [0] * len(metadata.state)
+        self._x0 = x0 if x0 is not None else lambda p: [0] * len(metadata.states)
 
     def initial_state(self, parameters):
         return self._x0(parameters)
 
-    def compute_dynamics(self, t, state, algebraics, inputs, parameters):
-        return self._dxdt(t, state, inputs, parameters)
+    def compute_dynamics(self, t, states, algebraics, inputs, parameters):
+        return self._dxdt(t, states, inputs, parameters)
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
-        return state
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
+        return states
 
 
 class InputOutput(Block):
@@ -73,11 +73,11 @@ class InputOutput(Block):
     def __init__(self,
                  metadata: Union[Metadata, Signature],
                  function: StatelessFunction):
-        assert not metadata.state and not metadata.constraints,\
+        assert not metadata.states and not metadata.constraints,\
             f"{type(self)} must not have state"
 
         super().__init__(metadata)
         self._output_function = function
 
-    def compute_outputs(self, t, state, algebraics, inputs, parameters):
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
         return self._output_function(t, inputs, parameters)
