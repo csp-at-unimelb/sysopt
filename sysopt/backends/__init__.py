@@ -10,6 +10,5 @@ else:
     raise NotImplementedError(f'Backend {backend_name} is not implemented')
 
 
-
 InterpolatedPath = backend.InterpolatedPath
-Integrator = backend.Integrator
+get_integrator = backend.integrator.get_integrator

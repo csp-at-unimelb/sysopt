@@ -1,7 +1,7 @@
 """Commonly used blocks for model building."""
-
+from typing import Union, List
 from sysopt import Block, Signature, Metadata
-from numpy import cos
+from numpy import cos, power
 
 
 class Gain(Block):
@@ -53,6 +53,22 @@ class Mixer(Block):
         return sum(inputs),
 
 
+class DifferentialAmplifier(Block):
+    """Computes `(s_+ - s_-)* 10^({gain/10) + bias`."""
+    def __init__(self):
+        super().__init__(
+            Metadata(
+                inputs=['+', '-'],
+                parameters=['gain dB', 'bias'],
+                outputs=['signal'])
+        )
+
+    def compute_outputs(self, t, states, algebraics, inputs, parameters):
+        gain, bias = parameters
+        k = power(10, gain / 10)
+        return k * (inputs[0] - inputs[1]) + bias
+
+
 class ConstantSignal(Block):
     r"""Output constant on each channel.
 
@@ -66,9 +82,14 @@ class ConstantSignal(Block):
         outputs: The number of output channels.
 
     """
-    def __init__(self, outputs: int):
-        sig = Signature(outputs=outputs, parameters=outputs)
-        super().__init__(sig)
+    def __init__(self, outputs: Union[int, List[str]]):
+
+        try:
+            params = [f'output[{i}]' for i in range(outputs)]
+        except TypeError:
+            params = [str(v) for v in outputs]
+
+        super().__init__(Metadata(outputs=params, parameters=params))
 
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
         return parameters,

@@ -4,6 +4,14 @@ import casadi
 from sysopt.backends.casadi.path import InterpolatedPath
 from sysopt.backends.casadi.expression_graph import substitute
 
+
+def get_integrator(system, resolution=50, quadratures=None):
+    if system.state_transitions is None:
+        return Integrator(system, resolution, quadratures)
+    else:
+        raise NotImplementedError
+
+
 class Integrator:
     """A casadi based solve for the given system."""
     def __init__(self, system, resolution=50, quadratures=None):
@@ -119,4 +127,3 @@ def generate_dae_from(flattened_system, quadratures):
     )
 
     return solver, spec, initial_conditions, z0_func, output_map, symbols
-

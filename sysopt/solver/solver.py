@@ -7,7 +7,7 @@ from typing import Optional, Dict, List, Union, NewType
 import numpy as np
 
 from sysopt import symbolic
-from sysopt.backends import Integrator
+from sysopt.backends import get_integrator
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
     is_temporal, create_log_barrier_function, is_symbolic,
@@ -197,7 +197,7 @@ class SolverContext:
         return self._flat_system
 
     def get_integrator(self, resolution=50):
-        return Integrator(
+        return get_integrator(
             self._flat_system,
             resolution=resolution,
             quadratures=self.quadratures
