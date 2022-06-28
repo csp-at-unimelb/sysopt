@@ -6,7 +6,9 @@ from dataclasses import dataclass, field, asdict
 from collections import deque
 
 from sysopt.types import Domain
-from sysopt.block import Block, Composite, Connection, Channel, Port, ComponentBase
+from sysopt.block import (
+    Block, Composite, Connection, Channel, Port, ComponentBase, DiscreteBlock
+)
 from sysopt.symbolic import (
     Variable, ExpressionGraph, concatenate, symbolic_vector,
     get_time_variable, function_from_graph,
@@ -15,6 +17,7 @@ from sysopt.symbolic import (
 
 
 from sysopt import exceptions
+
 
 @dataclass
 class TableEntry:
@@ -34,6 +37,7 @@ class TableEntry:
     def __repr__(self):
         return f'{self.global_index} -> ({self.name}, {self.local_index})\n'
 
+
 @dataclass
 class WireEntry:
     source_port: str
@@ -43,7 +47,9 @@ class WireEntry:
     source_index: int
     destination_index: int
 
+
 Tables = Dict[str, Union[List[TableEntry], List[WireEntry]]]
+
 
 @dataclass
 class Arguments:
@@ -64,11 +70,16 @@ class Arguments:
     def __iter__(self):
         return iter((self.t, self.x, self.z, self.u, self.p))
 
+
+
 @dataclass
 class FlattenedSystem:
     """Container for flattened system functions."""
     initial_conditions: Optional[ExpressionGraph] = None
     vector_field: Optional[ExpressionGraph] = None
+    state_transitions: Optional[Tuple[int,
+                                      ExpressionGraph,
+                                      Optional[ExpressionGraph]]] = None
     output_map: Optional[ExpressionGraph] = None
     constraints: Optional[ExpressionGraph] = None
     tables: Optional[dict] = None
@@ -390,14 +401,10 @@ def symbolically_evaluate(block: Block,
 
     return f
 
-def symbolically_evaluate_block(tables: Dict,
-                                block: Block,
-                                arguments: Arguments) -> ExpressionGraph:
 
-    proj = get_projections_for_block(tables, block)
+def get_local_args_for_block(proj, block, arguments):
     proj_x = proj['states']
     proj_z = proj['constraints']
-    proj_y = proj['outputs']
     proj_p = proj['parameters']
     proj_u = proj['inputs']
     local_args = Arguments(
@@ -407,6 +414,17 @@ def symbolically_evaluate_block(tables: Dict,
         u=proj_u @ arguments.u if block.signature.inputs else None,
         p=proj_p @ arguments.p if block.signature.parameters else None
     )
+    return local_args
+
+
+def symbolically_evaluate_continuous_block(
+    tables: Dict, block: Block, arguments: Arguments
+) -> Tuple[Optional[ExpressionGraph]]:
+    proj = get_projections_for_block(tables, block)
+    proj_x = proj['states']
+    proj_z = proj['constraints']
+    proj_y = proj['outputs']
+    local_args = get_local_args_for_block(proj, block, arguments)
 
     x0 = proj_x.T @ symbolically_evaluate_initial_conditions(
         block, local_args
@@ -414,7 +432,7 @@ def symbolically_evaluate_block(tables: Dict,
 
     f = proj_x.T @ symbolically_evaluate(
             block, block.compute_dynamics, block.signature.states, local_args
-    )  if block.signature.states else None
+    ) if block.signature.states else None
 
     g = proj_y.T @ symbolically_evaluate(
         block, block.compute_outputs, block.signature.outputs, local_args
@@ -425,6 +443,36 @@ def symbolically_evaluate_block(tables: Dict,
     ) if block.signature.constraints > 0 else None
 
     return x0, f, g, h
+
+
+def symbolically_evaluate_discrete_block(
+    tables: Dict, block: DiscreteBlock, arguments: Arguments
+) -> Tuple[Optional[ExpressionGraph]]:
+
+    proj = get_projections_for_block(tables, block)
+    proj_x = proj['states']
+    proj_z = proj['constraints']
+    proj_y = proj['outputs']
+    local_args = get_local_args_for_block(proj, block, arguments)
+
+    x0 = proj_x.T @ symbolically_evaluate_initial_conditions(
+        block, local_args
+    ) if block.signature.states else None
+
+    f = proj_x.T @ (symbolically_evaluate(
+        block, block.compute_state_transition,
+        block.signature.states, local_args
+    ) - local_args.x) if block.signature.states else None
+
+    g = proj_y.T @ symbolically_evaluate(
+        block, block.compute_outputs, block.signature.outputs, local_args
+    )
+
+    h = proj_z.T @ symbolically_evaluate(
+        block, block.compute_residuals, block.signature.constraints, local_args
+    ) if block.signature.constraints > 0 else None
+
+    return (x0, f, g, h), block.frequency
 
 
 def create_constraints_from_wire_list(wires: List[WireEntry],
@@ -445,22 +493,24 @@ def create_constraints_from_wire_list(wires: List[WireEntry],
     return vector_constraint
 
 
-def flatten_system(root: Composite) -> ExpressionGraph:
+def flatten_system(root: ComponentBase) -> FlattenedSystem:
     all_blocks = tree_to_list(root)
-    leaves = filter(lambda x: not isinstance(x,Composite), all_blocks)
+
     tables, domain = create_tables(all_blocks)
     symbols = create_symbols_from_domain(domain)
+    discrete = filter(lambda x: isinstance(x, DiscreteBlock),
+                      all_blocks)
+    cts = filter(lambda x: not isinstance(x, (DiscreteBlock, Composite)),
+                 all_blocks)
 
+    # Flatten all continuous blocks
     function_lists = zip(*[
-        symbolically_evaluate_block(tables, block, symbols)
-        for block in leaves
+        symbolically_evaluate_continuous_block(tables, block, symbols)
+        for block in cts
     ])
 
-    def is_not_none(item):
-        return item is not None
-
     function_lists = [
-        list(filter(is_not_none, function_list))
+        list(filter(lambda x: x is not None, function_list))
         for function_list in function_lists
     ]
 
@@ -468,6 +518,23 @@ def flatten_system(root: Composite) -> ExpressionGraph:
         sum(function_list) if function_list else None
         for function_list in function_lists
     ]
+    state_transitions = []
+    # Flatten discrete blocks
+
+    discrete_funcs = [
+        symbolically_evaluate_discrete_block(tables, block, symbols)
+        for block in discrete
+    ]
+    for (x0, f, g, h), freq in discrete_funcs:
+
+        initial_conditions += x0
+        state_transitions.append(
+            (freq,
+             function_from_graph(f, symbols),
+             function_from_graph(h, symbols) if h else None))
+
+        output_map += g
+
     if tables['wires']:
         wiring_constraint = create_constraints_from_wire_list(
             tables['wires'], symbols, output_map
@@ -489,10 +556,12 @@ def flatten_system(root: Composite) -> ExpressionGraph:
     proj_y = restriction_map(output_indices, output_map.shape[0])
     outs = proj_y(output_map)
     return FlattenedSystem(
-        initial_conditions=function_from_graph(initial_conditions, [symbols.p]),
+        initial_conditions=function_from_graph(initial_conditions,
+                                               [symbols.p]),
         vector_field=function_from_graph(vector_field, symbols),
         output_map=function_from_graph(outs, symbols),
         constraints=function_from_graph(constraints, symbols),
+        state_transitions=state_transitions if state_transitions else None,
         domain=domain,
         tables=tables
     )

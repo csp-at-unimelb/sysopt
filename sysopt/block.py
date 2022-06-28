@@ -382,10 +382,45 @@ class ConnectionList(list):
               f'when connecting blocks {src.parent} to {dest.parent}.')
         elif src.size != dest.size:
             raise InvalidWire(
-                src,
-                dest,
-                f'Cannot connect sizes: {src.size} to {dest.size}')
+                src, dest, f'Cannot connect sizes: {src.size} to {dest.size}'
+            )
         super().append((src, dest))
+
+
+class DiscreteBlock(Block):
+    """Interface Definition for discrete time controllers."""
+
+    def __init__(self,
+                 metadata_or_signature=Union[Metadata, Signature],
+                 clock_hz=100,
+                 name=None
+                 ):
+
+        assert clock_hz > 0
+
+        self._frequency = clock_hz
+        super().__init__(metadata_or_signature, name)
+
+    @property
+    def frequency(self):
+        return self._frequency
+
+    @property
+    def dt(self):
+        return 1/self.frequency
+
+    def compute_dynamics(self,
+                         t: Time,
+                         states: States,
+                         algebraics: Algebraics,
+                         inputs: Inputs,
+                         parameters: Parameters):
+        return [0] * self.signature.states
+
+    def compute_state_transition(self,
+                                 t, states, algebraics, inputs, parameters):
+        raise NotImplementedError
+
 
 
 class Composite(ComponentBase):  # noqa

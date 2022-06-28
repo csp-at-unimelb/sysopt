@@ -334,8 +334,10 @@ def transpose(matrix):
     return matrix.T
 
 
-def slice_to_list(slce: slice):
-    return list(range(slce.stop))[slce]
+def slice_to_list(slce: slice, max_len=None):
+
+    n = slce.stop or max_len
+    return list(range(n))[slce]
 
 
 class Inequality:
@@ -458,7 +460,7 @@ class Algebraic(metaclass=ABCMeta):
     def __getitem__(self, item):
         n = self.shape[0]
         if isinstance(item, slice):
-            indices = slice_to_list(item)
+            indices = slice_to_list(item, n)
         else:
             indices = [item]
 
@@ -867,7 +869,8 @@ numpy_handlers.update(
         np.subtract: lambda a, b: ExpressionGraph(sub, a, b),
         np.divide: lambda a, b: ExpressionGraph(div, a, b),
         np.negative: lambda x: ExpressionGraph(neg, x),
-        np.transpose: lambda x: ExpressionGraph(transpose, x)
+        np.transpose: lambda x: ExpressionGraph(transpose, x),
+        np.power: lambda a, b: ExpressionGraph(power, a, b)
     }
 )
 
@@ -1199,6 +1202,8 @@ def concatenate(*arguments):
     vectors = []
     # put all scalar constants into a single vector
     # multiply all vector constants and vector graphs by inclusion maps
+    if all(isinstance(a, np.ndarray) for a in arguments):
+        return np.concatenate(arguments)
 
     for arg in arguments:
         if arg is None:
