@@ -3,7 +3,7 @@
 import casadi
 from sysopt.backends.casadi.path import InterpolatedPath
 from sysopt.backends.casadi.expression_graph import substitute
-
+from collections import defaultdict
 
 def get_integrator(system, resolution=50, quadratures=None):
     if system.state_transitions is None:
@@ -127,3 +127,41 @@ def generate_dae_from(flattened_system, quadratures):
     )
 
     return solver, spec, initial_conditions, z0_func, output_map, symbols
+
+
+def build_hybrid_scheme(system, t_final, resolution, quadratures):
+    freqs, func, constraints = zip(*system.state_transitions)
+    schedule = defaultdict(list)
+    min_step_size = t_final
+    for i, f in enumerate(freqs):
+        n_updates = f * t_final
+        min_step_size = min(1 / n_updates, min_step_size)
+        for j in range(0, n_updates):
+            schedule[j / n_updates].append(i)
+
+    schedule = reversed(sorted(list(schedule.items()), key=lambda k, _: k))
+    output_schedule = reversed(list(range(0, 1 + 1 / resolution, resolution)))
+
+    if min_step_size > 1/resolution:
+        # dominated by output updates
+        pass
+    else:
+        # dominated by state transitions
+        pass
+
+    solver, spec, initial_conditions, z0_func, output_map, symbols = generate_dae_from(
+        system, quadratures
+    )
+    func = [
+        casadi.vertcat(casadi.SX.zeros(1, 1), substitute(f, symbols))
+        if f is not None else None
+        for f in func
+    ]
+    constraints = [
+        substitute(c, symbols)
+        if c is not None else None
+        for c in constraints
+    ]
+
+    # return a function that takes parameters p
+    # and produces three matrices: t, y, q
