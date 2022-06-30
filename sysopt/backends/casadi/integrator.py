@@ -140,7 +140,6 @@ def build_hybrid_scheme(system, t_final, resolution, quadratures):
             schedule[j / n_updates].append(i)
 
     schedule = reversed(sorted(list(schedule.items()), key=lambda k, _: k))
-    output_schedule = reversed(list(range(0, 1 + 1 / resolution, resolution)))
 
     if min_step_size > 1/resolution:
         # dominated by output updates
@@ -162,6 +161,29 @@ def build_hybrid_scheme(system, t_final, resolution, quadratures):
         if c is not None else None
         for c in constraints
     ]
+
+    # Decision Variables:
+    # - start of each step in schedule
+    # - output a per schedule
+
+    next_transition, transition_n  = schedule.pop() if schedule else 1, None
+
+    # x = x0(p)
+    # z = z0(x0, p)
+
+
+    for i in range(1, resolution + 1):
+        t = i / resolution
+        while t > next_transition:
+            # x_next = x + func[i](t, x[1,:], z, p)
+            if constraints[i] is not None:
+                # z_next =
+                # 0 = constraint[i](t, x_next, z, p)
+                pass
+            next_transition, transition_n = schedule.pop() if schedule else 1, None
+            # integrate forwards
+
+        # store t, y, q
 
     # return a function that takes parameters p
     # and produces three matrices: t, y, q
