@@ -849,8 +849,6 @@ class ExpressionGraph(Algebraic):
         return True
 
     def __repr__(self):
-        # assert self.is_acyclic()
-
         def trunk_function(node_object, *children):
             args = ','.join(children)
 
