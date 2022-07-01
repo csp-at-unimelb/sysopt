@@ -870,7 +870,9 @@ numpy_handlers.update(
         np.divide: lambda a, b: ExpressionGraph(div, a, b),
         np.negative: lambda x: ExpressionGraph(neg, x),
         np.transpose: lambda x: ExpressionGraph(transpose, x),
-        np.power: lambda a, b: ExpressionGraph(power, a, b)
+        np.power: lambda a, b: ExpressionGraph(power, a, b),
+        np.deg2rad: lambda x: ExpressionGraph(mul, np.pi/180, x),
+        np.rad2deg: lambda x: ExpressionGraph(mul, 180/np.pi, x)
     }
 )
 
