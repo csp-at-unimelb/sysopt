@@ -877,7 +877,7 @@ numpy_handlers.update(
 )
 
 
-def symbolic_vector(name, length):
+def symbolic_vector(name, length=1):
     return Variable(name, shape=(length, ))
 
 
