@@ -4,6 +4,7 @@ import casadi as _casadi
 from sysopt.backends.casadi.expression_graph import substitute
 from sysopt.backends.casadi.path import InterpolatedPath
 from sysopt.backends.casadi.integrator import Integrator
+from sysopt.backends.casadi.variational_solver import get_variational_integrator
 epsilon = 1e-9
 
 

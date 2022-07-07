@@ -1,7 +1,8 @@
 """Functions and factories to create symbolic variables."""
 import weakref
 from abc import ABCMeta, abstractmethod
-from collections import defaultdict
+from collections import defaultdict, namedtuple
+from dataclasses import dataclass
 from inspect import signature
 
 import numpy as np
@@ -555,7 +556,10 @@ def recursively_apply(graph: 'ExpressionGraph',
         return leaf_function(graph.value)
     if isinstance(graph, GraphWrapper):
         return recursively_apply(graph.graph, trunk_function, leaf_function)
-
+    if isinstance(graph, (Parameter, Variable)):
+        return leaf_function(graph)
+    if isinstance(graph, (int, float, np.ndarray)):
+        return leaf_function(graph)
     sorted_nodes = graph.get_topological_sorted_indices()
     trunk_indices = {i for i in sorted_nodes if i in graph.edges}
     context = {}
@@ -1015,12 +1019,75 @@ class Function(Algebraic):
         return set(self.arguments)
 
     def __call__(self, *args):
-        return self.function(*args)
+        numeric_args = {
+            arg: value for arg, value in zip(self.arguments, args)
+            if not is_symbolic(value)
+        }
+        if len(numeric_args) == len(args):
+            return self.function(*args)
+
+        return Closure(
+            self, {k: v for k, v in zip(self.arguments, args)}
+        )
 
     def call(self, args_dict):
         args = [args_dict[arg] for arg in self.arguments]
-        result = self.function(*args)
+        result = self(*args)
         return result
+
+
+class Closure(Function):
+    def __init__(self,
+                 function: Function,
+                 evaluated_args: dict[SymbolicArray, Any]):
+
+        # Evaluated args keys are the function arguments, values are
+
+        free_args = []
+        self.call_map = {} # maps exposed arguments to inner function args.
+        for arg in function.arguments:
+            if arg not in evaluated_args:
+                self.call_map[arg] = arg
+                free_args.append(arg)
+            elif is_symbolic(evaluated_args[arg]):
+                self.call_map[evaluated_args[arg]] = arg
+                free_args.append(evaluated_args[arg])
+
+        super().__init__(function.shape, function.function, free_args)
+        self.evaluated_arguments = evaluated_args
+        self.function_args = function.arguments
+
+    def __repr__(self):
+        args = ','.join(str(a) for a in self.arguments)
+        return f'{str(self.function)}({args})'
+
+    def __hash__(self):
+        return hash((id(self.function), self.arguments))
+
+    def __call__(self, *args):
+        arg_dict = {
+            arg: value for arg, value in zip(self.arguments, args)
+        }
+        arg_dict.update(self.evaluated_arguments)
+
+        return super().__call__(
+            *[arg_dict[k] for k in self.function_args]
+        )
+
+    def call(self, arg_dict):
+
+        inner_args = self.evaluated_arguments.copy()
+        inner_args.update({
+            self.call_map[k]: v for k, v in arg_dict.items()
+        })
+
+        try:
+            args = [inner_args[argument] for argument in self.function_args]
+        except KeyError as ex:
+            message = f'Missing arguments in call to {self}'
+            raise KeyError(message) from ex
+
+        return super().__call__(*args)
 
 
 class SignalReference(Algebraic):
@@ -1104,6 +1171,8 @@ def list_symbols(arg):
 def is_symbolic(arg):
     if isinstance(arg, list):
         return any(is_symbolic(a) for a in arg)
+    if isinstance(arg,  Algebraic):
+        return len(arg.symbols()) > 0
     try:
         return arg.is_symbolic
     except AttributeError:
@@ -1338,6 +1407,7 @@ class GraphWrapper(Algebraic):
     def __repr__(self):
         return f'{self.symbols()} ->  {self.graph}'
 
+
 def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
     if not isinstance(graph, ExpressionGraph):
         if graph is None:
@@ -1345,3 +1415,23 @@ def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
         return ConstantFunction(graph, arguments)
 
     return GraphWrapper(graph, arguments)
+
+
+Bounds = namedtuple('Bounds', ['upper', 'lower'])
+
+
+@dataclass
+class SolverOptions:
+    control_frequency: int = 10     # hertz
+
+
+@dataclass
+class MinimumPathProblem:
+    state: Tuple[Variable, Bounds]
+    control: Tuple[Variable, Bounds]
+    parameters: Optional[List[Variable]]
+    vector_field: ExpressionGraph
+    initial_state: Union[Matrix, np.ndarray, list, ExpressionGraph]
+    running_cost: Optional[ExpressionGraph]
+    terminal_cost: Optional[ExpressionGraph]
+    constraints: Optional[List[ExpressionGraph]]
