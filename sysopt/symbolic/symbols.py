@@ -1039,7 +1039,7 @@ class Closure(Function):
 
     def __init__(self,
                  function: Function,
-                 evaluated_args: dict[SymbolicArray, Any]):
+                 evaluated_args: Dict[SymbolicArray, Any]):
 
         # Evaluated args keys are the function arguments, values are
 
