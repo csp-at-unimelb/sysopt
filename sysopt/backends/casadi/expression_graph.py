@@ -3,9 +3,7 @@
 from typing import Dict
 
 import casadi
-from sysopt.symbolic import (
-    is_matrix, recursively_apply, SymbolicAtom, ExpressionGraph, GraphWrapper
-)
+from sysopt.symbolic import is_matrix, recursively_apply, SymbolicAtom
 
 
 def substitute(graph,

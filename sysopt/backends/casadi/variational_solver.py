@@ -1,7 +1,8 @@
+"""Optimisation Routines for Variational Problems"""
+
 import casadi
 import numpy as np
 
-from dataclasses import dataclass
 from collections import namedtuple
 from operator import mul
 from functools import reduce
@@ -9,8 +10,6 @@ from functools import reduce
 from sysopt.backends.casadi.expression_graph import substitute
 from sysopt.symbolic.symbols import MinimumPathProblem, SolverOptions
 from sysopt.backends.casadi.path import InterpolatedPath
-
-
 
 
 Problem = namedtuple(
@@ -55,7 +54,7 @@ def _get_solver(t_final: float,
                 options: SolverOptions):
 
     # Direct Collocation method
-    times, C_colloc, D_cont, B_quad = generate_collocation_matrixes(
+    times, colloc_coeff, diff_coeff, quad_coeff = generate_collocation_matrixes(
         options.degree
     )
 
@@ -106,35 +105,35 @@ def _get_solver(t_final: float,
     x_0 = x0(*params)
     decision_vars.append((x_0, x, x_0))
     decision_vars.append((u_lower, u, u_upper))
-    dv_ic = [x_0, u_0]
+    decision_vars_guess = [x_0, u_0]
 
     constraints.append((g_lower, g(x, u, *params), g_upper))
 
     for k in range(steps):
         collocation_points = []
         du = casadi.MX.sym(f'dU_{k}', dim_u)
-        dv_ic.append([0] * dim_u)
+        decision_vars_guess.append([0] * dim_u)
         decision_vars.append((du_lower, du, du_upper))
         for j in range(options.degree):
             x_jk = casadi.MX.sym(f'X_{j},{k}', dim_x)
             decision_vars.append((x_lower, x_jk, x_upper))
-            dv_ic.append(x_0)
+            decision_vars_guess.append(x_0)
             collocation_points.append(x_jk)
 
-        x_next = D_cont[0] * x
+        x_next = diff_coeff[0] * x
         for j in range(1, options.degree + 1):
             # Todo: Check if this indexing is right as C[:, 0] is never used
-            dx = C_colloc[0, j] * x
+            dx = colloc_coeff[0, j] * x
             dx += sum(
                 c_ij * x_ij
-                for c_ij, x_ij in zip(C_colloc[1:, j], collocation_points)
+                for c_ij, x_ij in zip(colloc_coeff[1:, j], collocation_points)
             )
             u_k = u + du * times[j - 1] * dt
             f_inter, q_inter = f(collocation_points[j - 1], u_k, *params)
             constraints.append(([0] * dim_x, dt * f_inter - dx, [0] * dim_x))
 
-            x_next = x_next + D_cont[j] * collocation_points[j - 1]
-            cost += B_quad[j] * q_inter * dt
+            x_next = x_next + diff_coeff[j] * collocation_points[j - 1]
+            cost += quad_coeff[j] * q_inter * dt
 
         u_next = u + dt * du
 
@@ -142,8 +141,8 @@ def _get_solver(t_final: float,
         u = casadi.MX.sym(f'U_{k + 1}', dim_u)
         decision_vars.append((x_lower, x, x_upper))
         decision_vars.append((u_lower, u, u_upper))
-        dv_ic.append(x_0)
-        dv_ic.append(u_0)
+        decision_vars_guess.append(x_0)
+        decision_vars_guess.append(u_0)
         constraints.append(
             ([0] * dim_x, x - x_next, [0] * dim_x)
         )
@@ -176,12 +175,12 @@ def _get_solver(t_final: float,
     }
     nlp_options = {}
     npl_solver = casadi.nlpsol('solver', 'ipopt', nlp_spec, nlp_options)
-    X0 = casadi.vertcat(*dv_ic)
+    x_initial = casadi.vertcat(*decision_vars_guess)
     param_to_args = casadi.Function(
         'nlp_args',
         params,
-        [X0, casadi.vertcat(*params),  x_min, x_max, c_min, c_max,
-         casadi.MX.zeros(X0.shape), casadi.MX.zeros(c_max.shape)],
+        [x_initial, casadi.vertcat(*params),  x_min, x_max, c_min, c_max,
+         casadi.MX.zeros(x_initial.shape), casadi.MX.zeros(c_max.shape)],
         [str(p) for p in params],
         ['x0', 'p', 'lbx', 'ubx', 'lbg', 'ubg', 'lam_x0', 'lam_g']
     )
@@ -196,6 +195,7 @@ def _get_solver(t_final: float,
 
 
 class VariationalIntegrator:
+    """Function wrapper for an optimisation problem sovler."""
     def __init__(self, t_final, problem, options):
         prob = casadify_problem(problem)
         self._param_map, self._solver, self._post_processing = _get_solver(
@@ -206,9 +206,9 @@ class VariationalIntegrator:
 
         solver_args = self._param_map(parameters)
         solution, *_ = self._solver(*solver_args)
-        t, X = self._post_processing(solution)
+        t, x = self._post_processing(solution)
 
-        return InterpolatedPath('x', t.T, X)
+        return InterpolatedPath('x', t.T, x)
 
 
 def get_variational_integrator(problem: MinimumPathProblem,

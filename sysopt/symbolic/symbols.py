@@ -1026,9 +1026,7 @@ class Function(Algebraic):
         if len(numeric_args) == len(args):
             return self.function(*args)
 
-        return Closure(
-            self, {k: v for k, v in zip(self.arguments, args)}
-        )
+        return Closure(self, dict(zip(self.arguments, args)))
 
     def call(self, args_dict):
         args = [args_dict[arg] for arg in self.arguments]
@@ -1037,6 +1035,8 @@ class Function(Algebraic):
 
 
 class Closure(Function):
+    """Symbolic partial call of a function."""
+
     def __init__(self,
                  function: Function,
                  evaluated_args: dict[SymbolicArray, Any]):
@@ -1065,20 +1065,18 @@ class Closure(Function):
         return hash((id(self.function), self.arguments))
 
     def __call__(self, *args):
-        arg_dict = {
-            arg: value for arg, value in zip(self.arguments, args)
-        }
+        arg_dict = dict(zip(self.arguments, args))
         arg_dict.update(self.evaluated_arguments)
 
         return super().__call__(
             *[arg_dict[k] for k in self.function_args]
         )
 
-    def call(self, arg_dict):
+    def call(self, args_dict):
 
         inner_args = self.evaluated_arguments.copy()
         inner_args.update({
-            self.call_map[k]: v for k, v in arg_dict.items()
+            self.call_map[k]: v for k, v in args_dict.items()
         })
 
         try:
@@ -1422,12 +1420,14 @@ Bounds = namedtuple('Bounds', ['upper', 'lower'])
 
 @dataclass
 class SolverOptions:
+    """Configuration Options for Optimisation base solver."""
     control_hertz: int = 10     # hertz
     degree: int = 3             # Collocation polynomial degree
-    verbose: bool = False
+
 
 @dataclass
 class MinimumPathProblem:
+    """Optimal Path Problem Specification"""
     state: Tuple[Variable, Bounds]
     control: Tuple[Variable, Bounds]
     parameters: Optional[List[Variable]]

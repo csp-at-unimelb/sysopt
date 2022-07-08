@@ -1,4 +1,8 @@
+"""Module for Optimisation-Based Controllers."""
+
 from typing import List, Union
+
+from functools import lru_cache
 
 from sysopt import Block, Metadata
 from sysopt.backends import get_variational_solver
@@ -21,6 +25,13 @@ def get_names_of_symbolic_atoms(
 
 
 class PathPlanner(Block):
+    """System Component for Optimial Path Planning.
+
+    Args:
+        problem: Description of path planning problem
+        name: component name.
+
+    """
     def __init__(self, problem: MinimumPathProblem, name=None):
 
         if problem.parameters:
@@ -30,13 +41,17 @@ class PathPlanner(Block):
             param_names = ['T']
 
         metadata = Metadata(
-            outputs=get_names_of_symbolic_atoms([problem.state[0],
-                                                 problem.control[0]]),
+            outputs=get_names_of_symbolic_atoms(
+                [problem.state[0], problem.control[0]]
+            ),
             parameters=param_names
         )
         super().__init__(metadata, name)
         self._problem = problem
-        solver = get_variational_solver(self._problem)
+
+        @lru_cache(1)
+        def solver(t_final):
+            return get_variational_solver(self._problem)(t_final)
 
         def func(t, p):
             soln = solver(p[0])(p[1:])
