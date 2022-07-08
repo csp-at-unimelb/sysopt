@@ -7,14 +7,10 @@ from operator import mul
 from functools import reduce
 
 from sysopt.backends.casadi.expression_graph import substitute
-from sysopt.symbolic.symbols import MinimumPathProblem
+from sysopt.symbolic.symbols import MinimumPathProblem, SolverOptions
 from sysopt.backends.casadi.path import InterpolatedPath
 
 
-@dataclass
-class SovlerOptions:
-    control_frequency: float = 20  # updates per second
-    degree: int = 3
 
 
 Problem = namedtuple(
@@ -24,8 +20,7 @@ Problem = namedtuple(
 )
 
 
-default_options = SovlerOptions()
-
+default_options = SolverOptions()
 
 def generate_collocation_matrixes(degree):
     collocation_times = np.append(
@@ -57,7 +52,7 @@ def generate_collocation_matrixes(degree):
 
 def _get_solver(t_final: float,
                 problem: Problem,
-                options: SovlerOptions):
+                options: SolverOptions):
 
     # Direct Collocation method
     times, C_colloc, D_cont, B_quad = generate_collocation_matrixes(
@@ -70,15 +65,22 @@ def _get_solver(t_final: float,
         [problem.state[0], problem.control[0]] + problem.parameters,
         [problem.vector_field, problem.running_cost]
     )
+
     g = casadi.Function(
         'g',
         [problem.state[0], problem.control[0]] + problem.parameters,
         [casadi.vertcat(*problem.constraints)]
     )
 
+    phi = casadi.Function(
+        'phi',
+        [problem.state[0], problem.control[0]] + problem.parameters,
+        [problem.terminal_cost]
+    )
+
     g_lower = [0]*len(problem.constraints)
     g_upper = [np.inf]*len(problem.constraints)
-    dt = 1 / options.control_frequency
+    dt = 1 / options.control_hertz
     steps = int(np.ceil(t_final / dt))
 
     decision_vars = []      # tuple (lb < x < ub)
@@ -133,7 +135,9 @@ def _get_solver(t_final: float,
 
             x_next = x_next + D_cont[j] * collocation_points[j - 1]
             cost += B_quad[j] * q_inter * dt
+
         u_next = u + dt * du
+
         x = casadi.MX.sym(f'X_{k + 1}', dim_x)
         u = casadi.MX.sym(f'U_{k + 1}', dim_u)
         decision_vars.append((x_lower, x, x_upper))
@@ -148,7 +152,9 @@ def _get_solver(t_final: float,
         ))
 
         x_out.append(casadi.vertcat(x, u))
-        constraints.append((g_lower, g(x_next, u, *params), g_upper))
+        constraints.append((g_lower, g(x, u, *params), g_upper))
+
+    cost += phi(x, u, *params)
 
     x_min, x_array, x_max = zip(*decision_vars)
     c_min, c_array, c_max = zip(*constraints)
@@ -168,7 +174,8 @@ def _get_solver(t_final: float,
         'g': c_array,
         'p': casadi.vertcat(*params)
     }
-    npl_solver = casadi.nlpsol('solver', 'ipopt', nlp_spec)
+    nlp_options = {}
+    npl_solver = casadi.nlpsol('solver', 'ipopt', nlp_spec, nlp_options)
     X0 = casadi.vertcat(*dv_ic)
     param_to_args = casadi.Function(
         'nlp_args',
@@ -228,11 +235,27 @@ def casadify_problem(problem: MinimumPathProblem):
     non_negative_constraints = [
         substitute(c.to_graph(), substitutions)
         for c in problem.constraints
-    ]
+    ] if problem.constraints else []
+
+    try:
+        x_bounds = problem.state[1]
+    except IndexError:
+        x_bounds = (
+            [-np.inf] * len(problem.state[0]),
+            [np.inf] * len(problem.state[0])
+        )
+
+    try:
+        u_bounds = problem.control[1]
+    except IndexError:
+        u_bounds = (
+            [-np.inf] * len(problem.control[0]),
+            [np.inf] * len(problem.control[0])
+        )
 
     return Problem(
-        state=(substitutions[problem.state[0]], problem.state[1]),
-        control=(substitutions[problem.control[0]], problem.control[1]),
+        state=(substitutions[problem.state[0]], x_bounds),
+        control=(substitutions[problem.control[0]], u_bounds),
         parameters=[substitutions[p] for p in parameters],
         initial_state=substitute(problem.initial_state, substitutions),
         vector_field=substitute(problem.vector_field, substitutions),

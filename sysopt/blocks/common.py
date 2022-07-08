@@ -82,14 +82,16 @@ class ConstantSignal(Block):
         outputs: The number of output channels.
 
     """
-    def __init__(self, outputs: Union[int, List[str]]):
+    def __init__(self, outputs: Union[int, List[str]], name=None):
 
         try:
             params = [f'output[{i}]' for i in range(outputs)]
         except TypeError:
             params = [str(v) for v in outputs]
 
-        super().__init__(Metadata(outputs=params, parameters=params))
+        super().__init__(
+            Metadata(outputs=params, parameters=params), name=name
+        )
 
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
         return parameters,
@@ -98,12 +100,12 @@ class ConstantSignal(Block):
 class Oscillator(Block):
     """Cosine oscillator with the given frequency and phase."""
 
-    def __init__(self):
+    def __init__(self, name=None):
         metadata = Metadata(
             parameters=['frequency', 'phase'],
             outputs=['signal']
         )
-        super().__init__(metadata)
+        super().__init__(metadata, name)
 
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
         freq, phase = parameters

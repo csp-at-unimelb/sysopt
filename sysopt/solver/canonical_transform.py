@@ -216,7 +216,12 @@ def find_channel_in_table(table: List[TableEntry],
     try:
         entry, = list(filter(key, table))
     except ValueError as ex:
-        message = f'Coulnd not find {port}[{local_index}] in table'
+        if len(list(filter(key, table))) == 0:
+            message = f'Coulnd not find {port.block}' \
+                      f'[{local_index}] in table\n'
+        else:
+            message = f'Multiple entries for {port.block}' \
+                      f'[{local_index}] in table: {table}\n'
         raise ValueError(message) from ex
 
     return entry.global_index
@@ -287,6 +292,9 @@ def forwarded_output_to_table_entry(tables: Tables,
 
 
 def create_tables(all_blocks:List[Block]) -> Tables:
+    if isinstance(all_blocks, Composite):
+        return create_tables(tree_to_list(all_blocks))
+
     tables = create_tables_from_blocks(
         *filter(lambda b: not isinstance(b, Composite), all_blocks)
     )
@@ -302,6 +310,7 @@ def create_tables(all_blocks:List[Block]) -> Tables:
     tables['wires'] = []
     while trunks:
         next_block: Composite = trunks.pop()
+        print(next_block)
         for wire in next_block.wires:
             if is_internal(wire):
                 tables['wires'] += internal_wire_to_table_entries(tables, wire)

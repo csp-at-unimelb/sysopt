@@ -1,6 +1,6 @@
 from sysopt.symbolic.symbols import symbolic_vector
 import numpy as np
-from sysopt.blocks.optimial_planner import PathPlanner
+from sysopt.blocks.optimal_controllers import PathPlanner
 from sysopt.symbolic.symbols import (
     MinimumPathProblem, Variable, Algebraic
 )
@@ -17,11 +17,6 @@ def test_setup_path_planner():
     running_cost = u.T @ u
     terminal_cost = x.T @ x
 
-    constraints = [
-        u <= 1,
-        u >= -1
-    ]
-
     x_max = np.array([np.inf, np.inf])
     x_min = np.array([-np.inf, -np.inf])
 
@@ -30,7 +25,6 @@ def test_setup_path_planner():
         control=(u, (-1, 1)),
         terminal_cost=terminal_cost,
         running_cost=running_cost,
-        constraints=constraints,
         initial_state=x0,
         vector_field=dx,
         parameters=x0

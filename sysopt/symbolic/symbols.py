@@ -1422,8 +1422,9 @@ Bounds = namedtuple('Bounds', ['upper', 'lower'])
 
 @dataclass
 class SolverOptions:
-    control_frequency: int = 10     # hertz
-
+    control_hertz: int = 10     # hertz
+    degree: int = 3             # Collocation polynomial degree
+    verbose: bool = False
 
 @dataclass
 class MinimumPathProblem:
@@ -1434,4 +1435,14 @@ class MinimumPathProblem:
     initial_state: Union[Matrix, np.ndarray, list, ExpressionGraph]
     running_cost: Optional[ExpressionGraph]
     terminal_cost: Optional[ExpressionGraph]
-    constraints: Optional[List[ExpressionGraph]]
+    constraints: Optional[List[ExpressionGraph]] = None
+
+    def __post_init__(self):
+        if isinstance(self.state, (Variable, Parameter)):
+            bounds = Bounds([-np.inf]*len(self.state),
+                            [np.inf]*len(self.state))
+            self.state = (self.state, bounds)
+        if isinstance(self.control, (Variable, Parameter)):
+            bounds = Bounds([-np.inf] * len(self.control),
+                            [np.inf] * len(self.control))
+            self.control = (self.control, bounds)
