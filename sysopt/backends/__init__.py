@@ -12,3 +12,4 @@ else:
 
 InterpolatedPath = backend.InterpolatedPath
 get_integrator = backend.integrator.get_integrator
+get_variational_solver = backend.get_variational_integrator

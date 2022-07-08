@@ -10,16 +10,13 @@ def substitute(graph,
                symbols: Dict[SymbolicAtom, casadi.SX]):
 
     def leaf_function(obj):
+        if is_matrix(obj) or isinstance(obj, (int, float, complex)):
+            return casadi.SX(obj)
         if obj in symbols:
             return symbols[obj]
-        if is_matrix(obj):
-            return casadi.SX(obj)
         raise NotImplementedError(f'Don\'y know how to evaluate {obj}')
 
     def trunk_function(op, *children):
         return op(*children)
 
-
-    expression = recursively_apply(graph, trunk_function, leaf_function)
-
-    return expression
+    return recursively_apply(graph, trunk_function, leaf_function)
