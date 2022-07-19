@@ -565,7 +565,8 @@ def recursively_apply(graph: 'ExpressionGraph',
                       leaf_function=None,
                       current_node=None):
     if leaf_function is None:
-        leaf_function = lambda x: x
+        def leaf_function(*args):
+            return args
 
     if isinstance(graph, ConstantFunction):
         return leaf_function(graph.value)
