@@ -8,8 +8,9 @@ from sysopt import Block, Metadata
 from sysopt.backends import get_variational_solver
 from sysopt.symbolic import Function
 from sysopt.symbolic.symbols import (
-    SymbolicArray, MinimumPathProblem, Variable
+    SymbolicArray, Variable
 )
+from sysopt.symbolic.problem_data import  MinimumPathProblem, SolverOptions
 
 
 from sysopt.helpers import flatten
@@ -32,7 +33,10 @@ class PathPlanner(Block):
         name: component name.
 
     """
-    def __init__(self, problem: MinimumPathProblem, name=None):
+    def __init__(self,
+                 problem: MinimumPathProblem,
+                 solver_options: SolverOptions = None,
+                 name=None):
 
         if problem.parameters:
             param_names = ['T'] + get_names_of_symbolic_atoms(
@@ -48,10 +52,12 @@ class PathPlanner(Block):
         )
         super().__init__(metadata, name)
         self._problem = problem
+        self._solver_options = solver_options or SolverOptions()
 
         @lru_cache(1)
         def solver(t_final):
-            return get_variational_solver(self._problem)(t_final)
+            return get_variational_solver(self._problem,
+                                          self._solver_options)(t_final)
 
         def func(t, p):
             soln = solver(p[0])(p[1:])

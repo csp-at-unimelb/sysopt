@@ -70,9 +70,11 @@ class Matrix(np.ndarray):
         else:
             return result
 
+
 def as_array(
-    item:Union[List[Union[int, float]], int, float, np.ndarray],
-    prototype:SymbolicAtom =None):
+    item: Union[List[Union[int, float]], int, float, np.ndarray],
+    prototype: SymbolicAtom =None):
+
     if isinstance(item, Algebraic):
         return item
     if isinstance(item, np.ndarray):
@@ -86,6 +88,14 @@ def as_array(
         return None
     elif callable(item):
         return Function(prototype.shape, item, prototype)
+
+    try:
+        from sysopt.backends import as_array
+        return as_array(item)
+
+    except TypeError:
+        pass
+
     raise NotImplementedError(
         f'Don\'t know how to treat {item} as an array')
 
@@ -246,11 +256,13 @@ def register_op(shape_func=infer_scalar_shape, string=None):
 
     return wrapper
 
+
 def op_to_string(op):
     try:
         return __op_strings[op]
     except KeyError:
         return str(op)
+
 
 def wrap_as_op(func: Callable,
                arguments: Optional[int] = None,
@@ -549,8 +561,10 @@ def is_op(value):
 
 def recursively_apply(graph: 'ExpressionGraph',
                       trunk_function,
-                      leaf_function,
+                      leaf_function=None,
                       current_node=None):
+    if leaf_function is None:
+        leaf_function = lambda x: x
 
     if isinstance(graph, ConstantFunction):
         return leaf_function(graph.value)
@@ -575,7 +589,6 @@ def recursively_apply(graph: 'ExpressionGraph',
             context[node] = leaf_function(item)
 
     return context[graph.head]
-
 
 
 def match_args_by_name(expr: Algebraic, arguments: Dict[str, Any]):
@@ -999,10 +1012,16 @@ def evaluate_signal(signal, t):
 class Function(Algebraic):
     """Wrapper for function calls."""
 
-    def __init__(self, shape, function, arguments):
+    def __init__(self,
+                 shape,
+                 function,
+                 arguments,
+                 jacobian=None,
+                 ):
         self._shape = shape
         self.function = function
         self.arguments = tuple(arguments)
+        self._jacobian = jacobian
 
     def __repr__(self):
         args = ','.join(str(a) for a in self.arguments)
@@ -1032,6 +1051,12 @@ class Function(Algebraic):
         args = [args_dict[arg] for arg in self.arguments]
         result = self(*args)
         return result
+
+    def jacobian(self, *args):
+        assert len(args) == len(self.arguments)
+        if self._jacobian is not None:
+            return self._jacobian(*args)
+        raise NotImplementedError
 
 
 class Closure(Function):
@@ -1131,6 +1156,12 @@ class SignalReference(Algebraic):
     def __hash__(self):
         return hash(self.port)
 
+    def __eq__(self, other):
+        try:
+            return self.port is other.port
+        except AttributeError:
+            return False
+
     def __cmp__(self, other):
         try:
             return self.port is other.port
@@ -1215,6 +1246,24 @@ def _is_subtree_constant(graph, node):
         _is_subtree_constant(graph, child) for child in graph.edges[node]
     )
 
+def replace_signal(graph: ExpressionGraph, port, time, subs):
+
+    def leaf_function(obj):
+        return obj
+
+    def trunk_func(obj, *args):
+        if obj == evaluate_signal:
+            signal_ref, eval_time = args
+            # todo: should not be comparing by string (SYS-80)
+            if str(signal_ref.port) == str(port) and eval_time == time:
+                return subs
+
+        return ExpressionGraph(obj, *args)
+
+    return recursively_apply(graph, trunk_func, leaf_function)
+
+
+
 
 def is_temporal(symbol):
     if isinstance(symbol, PathInequality):
@@ -1240,6 +1289,7 @@ class Quadrature(Algebraic):
     def __init__(self, integrand, context):
         self.integrand = integrand
         self._context = weakref.ref(context)
+        self._index = None
         self.index = context.add_quadrature(integrand)
 
     def __repr__(self):
@@ -1300,15 +1350,19 @@ def concatenate(*arguments):
     return result
 
 
-def extract_quadratures(graph: ExpressionGraph) \
-        -> Tuple[ExpressionGraph, Dict[Variable, ExpressionGraph]]:
+def extract_quadratures(graph: Union[ExpressionGraph, Quadrature]) \
+        -> Tuple[Algebraic, Variable, ExpressionGraph]:
 
     quadratures = {}
+
+    if isinstance(graph, Quadrature):
+        q = Variable('q', shape=graph.integrand.shape)
+        return 0, q, graph.integrand
 
     def recurse(node_idx):
         node = graph.nodes[node_idx]
         if isinstance(node, Quadrature):
-            q = Variable('q')
+            q = Variable('q', shape=node.integrand.shape)
             quadratures[q] = node.integrand
             return q
         elif node_idx not in graph.edges:
@@ -1320,15 +1374,27 @@ def extract_quadratures(graph: ExpressionGraph) \
             )
 
     out_graph = recurse(graph.head)
+    if len(quadratures) == 0:
+        return graph, None, None
 
-    return out_graph, quadratures
+    if len(quadratures) == 1:
+        q, integrand = list(quadratures.items())[0]
+        return out_graph, q, integrand
 
+    dot_q = concatenate(*quadratures.values())
+    vector_q = Variable('q', shape=dot_q.shape)
+    offset = 0
+    for q in quadratures:
+        try:
+            n, = q.shape
+        except ValueError:
+            n, m = q.shape
+            assert m == 1
 
-def create_log_barrier_function(constraint, stiffness):
-    # TODO: fix me
-    # pylint: disable=import-outside-toplevel
-    from sysopt.symbolic.scalar_ops import log
-    return - stiffness * log(stiffness * constraint + 1)
+        quadratures[q] = vector_q[offset: offset + n]
+        offset += n
+    out_graph = out_graph.call(quadratures)
+    return out_graph, vector_q, dot_q
 
 
 class ConstantFunction(Algebraic):
@@ -1366,7 +1432,7 @@ class ConstantFunction(Algebraic):
 class GraphWrapper(Algebraic):
     """Wraps an expression graph with the specified arguments."""
 
-    def __init__(self, graph:ExpressionGraph, arguments:List[SymbolicAtom]):
+    def __init__(self, graph: ExpressionGraph, arguments: List[SymbolicAtom]):
         self.arguments = tuple(arguments)
         unbound_symbols = {
             s for s in graph.symbols() if s not in arguments
@@ -1375,6 +1441,7 @@ class GraphWrapper(Algebraic):
             raise ValueError('Could not create function from graph due to'
                              f'unbound symbolic variables: {unbound_symbols}')
         self.graph = graph
+        self.__impl = None
 
     def symbols(self):
         return set(self.arguments)
@@ -1383,7 +1450,7 @@ class GraphWrapper(Algebraic):
     def shape(self):
         return self.graph.shape
 
-    def call(self, args:Dict[SymbolicAtom, Any]):
+    def call(self, args: Dict[SymbolicAtom, Any]):
 
         symbols = self.graph.symbols()
         inner_args = {
@@ -1405,6 +1472,16 @@ class GraphWrapper(Algebraic):
     def __repr__(self):
         return f'{self.symbols()} ->  {self.graph}'
 
+    @property
+    def _impl(self):
+        if self.__impl is None:
+            from sysopt.backends import to_function
+            self.__impl = to_function(self)
+        return self.__impl
+
+    def pushforward(self, *args):
+        return self._impl.pushforward(*args)
+
 
 def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
     if not isinstance(graph, ExpressionGraph):
@@ -1415,34 +1492,4 @@ def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
     return GraphWrapper(graph, arguments)
 
 
-Bounds = namedtuple('Bounds', ['upper', 'lower'])
 
-
-@dataclass
-class SolverOptions:
-    """Configuration Options for Optimisation base solver."""
-    control_hertz: int = 10     # hertz
-    degree: int = 3             # Collocation polynomial degree
-
-
-@dataclass
-class MinimumPathProblem:
-    """Optimal Path Problem Specification"""
-    state: Tuple[Variable, Bounds]
-    control: Tuple[Variable, Bounds]
-    parameters: Optional[List[Variable]]
-    vector_field: ExpressionGraph
-    initial_state: Union[Matrix, np.ndarray, list, ExpressionGraph]
-    running_cost: Optional[ExpressionGraph]
-    terminal_cost: Optional[ExpressionGraph]
-    constraints: Optional[List[ExpressionGraph]] = None
-
-    def __post_init__(self):
-        if isinstance(self.state, (Variable, Parameter)):
-            bounds = Bounds([-np.inf]*len(self.state),
-                            [np.inf]*len(self.state))
-            self.state = (self.state, bounds)
-        if isinstance(self.control, (Variable, Parameter)):
-            bounds = Bounds([-np.inf] * len(self.control),
-                            [np.inf] * len(self.control))
-            self.control = (self.control, bounds)

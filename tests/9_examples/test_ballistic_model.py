@@ -198,7 +198,7 @@ def evaluate():
     model = BallisticModel()
     x, y, dx, dy, u = model.outputs
 
-    t_f = Variable()
+    t_f = Variable('final time')
     p = Parameter(model.controller, 'cutoff time')
     x_goal = 1
 
@@ -278,8 +278,7 @@ def parameter_sweep():
     model = BallisticModel()
     x, y, dx, dy, u = model.outputs
 
-    t_f = Variable()
-
+    t_f = Variable(name='final time')
     p = Parameter(model.controller, 'cutoff time')
     x_goal = 1
 

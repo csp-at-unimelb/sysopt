@@ -16,7 +16,6 @@ from sysopt.types import *
 from sysopt.block import Block
 from sysopt.solver import SolverContext
 
-from sysopt.solver.canonical_transform import FlattenedSystem
 
 class LinearScalarEquation(Block):
     r"""Linear ODE of the form
@@ -104,8 +103,8 @@ class TestSymbolicIntegrator:
             param_p = [1.1, 1]
             dparams = [0.1, 0]
             result = (f(t, param_p) - f(t, params))
-
             expected = block.pushforward(t, params, dparams)
+
             assert abs(result[0][0] - expected) < 1e-2
 
     def test_autodiff(self):
@@ -117,7 +116,7 @@ class TestSymbolicIntegrator:
             params = [1, 1]
             dparams = [0.1, 0]
 
-            result = f.pushforward(t, params, dparams)
+            _, result = f.pushforward(t, params, dparams)
 
             expected = block.pushforward(t, params, dparams)
             assert abs(result[0][0] - expected) < 1e-2

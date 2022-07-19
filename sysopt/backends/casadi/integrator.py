@@ -44,9 +44,17 @@ class Integrator:
         y = self.g(tf, x, z, p_sym)
         dp_sym = casadi.MX.sym('dp', len(dp))
         dy_symbol = casadi.jtimes(y, p_sym, dp_sym)
-        dy = casadi.Function('dY', [t_sym, p_sym, dp_sym], [dy_symbol])
 
-        return dy(t, p, dp)
+        if not self.quadratures:
+            dy = casadi.Function('dY', [t_sym, p_sym, dp_sym], [y, dy_symbol])
+            return dy(t, p, dp)
+        else:
+            q = soln['qf']
+            dq_symbol = casadi.jtimes(q, p_sym, dp_sym)
+            dq = casadi.Function('dQ', [t_sym, p_sym, dp_sym],
+                                 [y, q, dy_symbol, dq_symbol])
+            result = dq(t, p, dp)
+            return result
 
     def integrate(self, t, p):
         x0 = self.x0(p)

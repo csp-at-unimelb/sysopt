@@ -1,9 +1,8 @@
 from sysopt.symbolic.symbols import symbolic_vector
 import numpy as np
 from sysopt.blocks.optimal_controllers import PathPlanner
-from sysopt.symbolic.symbols import (
-    MinimumPathProblem, Variable, Algebraic
-)
+from sysopt.symbolic.symbols import Variable, Algebraic
+from sysopt.symbolic.problem_data import MinimumPathProblem
 
 
 def test_setup_path_planner():
