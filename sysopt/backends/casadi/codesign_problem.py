@@ -1,6 +1,8 @@
+#pylint: skip-file
+
 import casadi
 from sysopt.backends.casadi.function import compiles, to_function
-from sysopt.backends.casadi.expression_graph import CasadiFunctionWrapper
+from sysopt.backends.casadi.expression_graph import CasadiGraphWrapper
 from sysopt.symbolic.problem_data import ConstrainedFunctional
 
 

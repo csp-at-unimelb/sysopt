@@ -1,3 +1,5 @@
+"""Data structures for describing optimisation or integration problems."""
+
 from collections import namedtuple
 from dataclasses import dataclass, field
 from typing import Optional, List, Tuple, Union
@@ -81,8 +83,7 @@ class ConstrainedFunctional:
     """List of equality or inequality constraints"""
 
     regularisers: List[Variable] = field(default_factory=list)
-    """List of regularisation variables s.t. $rho-> 0$ is the 'true' 
-    function, which may not be smooth"""
+    """List of regularisers for non-smooth functions"""
 
 
 @dataclass
@@ -103,7 +104,7 @@ class MinimumPathProblem:
     running_cost: Optional[ExpressionGraph]
     terminal_cost: Optional[ExpressionGraph]
     constraints: Optional[List[ExpressionGraph]] = None
-    
+
     def __post_init__(self):
         if isinstance(self.state, (Variable, Parameter)):
             bounds = Bounds([-np.inf]*len(self.state),

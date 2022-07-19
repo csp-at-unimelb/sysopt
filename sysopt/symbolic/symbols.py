@@ -1,8 +1,7 @@
 """Functions and factories to create symbolic variables."""
 import weakref
 from abc import ABCMeta, abstractmethod
-from collections import defaultdict, namedtuple
-from dataclasses import dataclass
+from collections import defaultdict
 from inspect import signature
 
 import numpy as np
@@ -82,7 +81,7 @@ def as_array(
     elif isinstance(item, (list, tuple)):
         return concatenate(*item)
     elif isinstance(item, (int, float)):
-        m = np.array([item],dtype=float).view(Matrix)
+        m = np.array([item], dtype=float).view(Matrix)
         return m
     elif item is None:
         return None
@@ -90,8 +89,10 @@ def as_array(
         return Function(prototype.shape, item, prototype)
 
     try:
-        from sysopt.backends import as_array
-        return as_array(item)
+        # pylint: disable=import-outside-toplevel
+        from sysopt.backends import as_array as backend_array
+
+        return backend_array(item)
 
     except TypeError:
         pass
@@ -1246,12 +1247,14 @@ def _is_subtree_constant(graph, node):
         _is_subtree_constant(graph, child) for child in graph.edges[node]
     )
 
+
 def replace_signal(graph: ExpressionGraph, port, time, subs):
 
     def leaf_function(obj):
         return obj
 
     def trunk_func(obj, *args):
+        # pylint: disable=comparison-with-callable
         if obj == evaluate_signal:
             signal_ref, eval_time = args
             # todo: should not be comparing by string (SYS-80)
@@ -1475,6 +1478,7 @@ class GraphWrapper(Algebraic):
     @property
     def _impl(self):
         if self.__impl is None:
+            # pylint: disable=import-outside-toplevel
             from sysopt.backends import to_function
             self.__impl = to_function(self)
         return self.__impl

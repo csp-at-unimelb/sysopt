@@ -27,10 +27,13 @@ def substitute(graph: ExpressionGraph,
 
 @compiles(GraphWrapper)
 def compile_expression_graph(obj: GraphWrapper):
-    return CasadiFunctionWrapper(obj.graph, obj.arguments)
+    return CasadiGraphWrapper(obj.graph, obj.arguments)
 
 
-class CasadiFunctionWrapper(Algebraic):
+class CasadiGraphWrapper(Algebraic):
+    """Casadi function wrapper for a function compled from an
+    expression graph."""
+
     def __init__(self,
                  graph: ExpressionGraph,
                  arguments: List[SymbolicAtom],

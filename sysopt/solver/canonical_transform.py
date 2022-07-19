@@ -2,7 +2,7 @@
 # pylint: disable=invalid-name
 import copy
 from typing import Optional, List, Union, Callable, Dict, Tuple, Iterable
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from collections import deque
 
 from sysopt.types import Domain

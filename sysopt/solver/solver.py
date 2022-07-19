@@ -1,6 +1,5 @@
 """Methods and objects for solving system optimisation problems."""
 
-import dataclasses
 import weakref
 from typing import Optional, Dict, List, Union, NewType
 
@@ -245,7 +244,6 @@ class Problem:
         terminal_cost = symbolic.replace_signal(terminal_cost,
                                                 y, context.t_final, y_final)
 
-
         t_f = self.context.t_final if is_symbolic(self.context.t_final)\
             else self.context.t
 
@@ -280,7 +278,7 @@ class Problem:
 
     def __call__(self, args):
         """Evaluate the problem with the given arguments."""
-        f = self.get_implementation()
+        _ = self.get_implementation()
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
 
@@ -295,7 +293,7 @@ class Problem:
     def jacobian(self, args):
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
-        f = self.get_implementation()
+        _ = self.get_implementation()
         # create a functional object
         # with
         # - vector field
