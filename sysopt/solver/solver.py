@@ -1,34 +1,25 @@
 """Methods and objects for solving system optimisation problems."""
 
-import dataclasses
 import weakref
 from typing import Optional, Dict, List, Union, NewType
 
 import numpy as np
 
 from sysopt import symbolic
-from sysopt.backends import get_integrator
+from sysopt.backends import get_integrator, to_function
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
-    is_temporal, create_log_barrier_function, is_symbolic,
-    ConstantFunction
+    is_symbolic, ConstantFunction, GraphWrapper
 )
-
-from sysopt.solver.canonical_transform import FlattenedSystem, Quadratures
+from sysopt.solver.canonical_transform import flatten_system
+from sysopt.symbolic.problem_data import Quadratures, ConstrainedFunctional, FlattenedSystem
 from sysopt.block import Block, Composite
 
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
 
+
 class InvalidParameterException(Exception):
     pass
-
-
-@dataclasses.dataclass
-class CandidateSolution:
-    """A candidate solution to a constrained optimisation problem. """
-    cost: float
-    trajectory: object
-    constraints: Optional[List[float]] = None
 
 
 class SolverContext:
@@ -48,7 +39,7 @@ class SolverContext:
         self.start = 0
         self.t_final = t_final
         self.t = get_time_variable()
-        self.constants = constants
+        self.constants = constants if constants else {}
         self.resolution = path_resolution
         self.quadratures = None
         self._flat_system = None
@@ -57,8 +48,8 @@ class SolverContext:
         self.parameters = None
 
     def __enter__(self):
-        self._flat_system = FlattenedSystem.from_block(self.model)
-        self.parameters, t_map, p_map = create_parameter_map(
+        self._flat_system = flatten_system(self.model)
+        _, self.parameters, t_map, p_map = create_parameter_map(
             self.model, self.constants, self.t_final
         )
         self.parameter_map = p_map
@@ -107,7 +98,7 @@ class SolverContext:
         out_dimension = len(constants)
         arguments = symbolic.Variable(
             shape=(len(proj_indices), ),
-            name= f'''[{','.join(free_params)}]''')
+            name=f'''[{','.join(free_params)}]''')
         basis_map = dict(enumerate(proj_indices))
         projector = symbolic.inclusion_map(
             basis_map, len(proj_indices), out_dimension
@@ -116,7 +107,7 @@ class SolverContext:
         pi_args = projector(arguments)
 
         graph = pi_args + const_vector
-        return symbolic.lambdify(graph, [arguments], 'params')
+        return symbolic.function_from_graph(graph, [arguments])
 
     def get_symbolic_integrator(self):
         integrator = self.get_integrator()
@@ -152,26 +143,6 @@ class SolverContext:
 
         return q[index]
 
-    def evaluate(self, problem: 'Problem',
-                 decision_variables: Dict[DecisionVariable, float]):
-        y, _ = self.prepare_path(decision_variables)
-
-        t = get_time_variable()
-        y_vars = self.model.outputs(t)
-        arguments = {y_vars: y}
-        arguments.update(decision_variables)
-
-        value = problem.cost.call(arguments)
-        constraints = []
-        for constraint in problem.constraints:
-            if is_temporal(constraint):
-                raise NotImplementedError
-            else:
-                g = constraint.to_graph()
-                constraints.append(g.call(arguments))
-
-        return CandidateSolution(value, y, constraints)
-
     def solve(self, problem):
         raise NotImplementedError
 
@@ -193,7 +164,7 @@ class SolverContext:
         return soln
 
     @property
-    def flattened_system(self):
+    def flattened_system(self) -> FlattenedSystem:
         return self._flat_system
 
     def get_integrator(self, resolution=50):
@@ -216,7 +187,7 @@ def lambdify_terminal_constraint(problem: 'Problem',
     terminal_values = problem.context.model.outputs(t_f)
     args = [terminal_values, problem.arguments]
 
-    return symbolic.lambdify(constraint.to_graph(), args)
+    return symbolic.function_from_graph(constraint.to_graph(), args)
 
 
 class Problem:
@@ -236,11 +207,19 @@ class Problem:
                  arguments: List[Variable],
                  cost: ExpressionGraph,
                  constraints: Optional[List[ExpressionGraph]]):
-        self._cost = cost
+        # cost function is split into the form
+        # J(T) = f(y_T, p) + q(T, p)
+        # where f is the terminal form
+        # and q is the quadrature; such that \dot{q} = g(y,t,p)
+        # q(0) = 0 so that q = \int_0^T g\df{t}
+
         self._context = weakref.ref(context)
         self.arguments = arguments
         self.constraints = constraints if constraints else []
         self._regularisers = []
+        self._impl = None
+        self._terminal_cost = None
+        self._cost = cost
 
     @property
     def context(self):
@@ -250,39 +229,89 @@ class Problem:
     def cost(self):
         return self._cost
 
+    def get_implementation(self):
+        context = self.context
+        param_args, parameters, t_final, param_map = create_parameter_map(
+            self.context.model, self.context.constants, self.context.t_final,
+        )
+
+        terminal_cost, q, dot_q = symbolic.extract_quadratures(self.cost)
+
+        y = self.context.model.outputs(context.t)
+        y_final = symbolic.symbolic_vector('y_T',
+            self.context.flattened_system.output_map.shape[0]
+        )
+        terminal_cost = symbolic.replace_signal(terminal_cost,
+                                                y, context.t_final, y_final)
+
+        t_f = self.context.t_final if is_symbolic(self.context.t_final)\
+            else self.context.t
+
+        if q is not None:
+            cost_args = [
+                t_f,
+                y_final,
+                q,
+                param_args
+            ]
+        else:
+            cost_args = [
+                t_f,
+                y_final,
+                param_args
+            ]
+
+        cost_fn = symbolic.function_from_graph(
+            terminal_cost, cost_args)
+
+        spec = ConstrainedFunctional(
+            final_time=t_final,
+            parameter_map=param_map,
+            system=self.context.flattened_system,
+            quadratures=dot_q,
+            value=cost_fn,
+            parameters=[str(p) for p in parameters],
+            constraints=self.constraints
+        )
+        self._terminal_cost = cost_fn
+        return to_function(spec)
+
     def __call__(self, args):
         """Evaluate the problem with the given arguments."""
+        _ = self.get_implementation()
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
-        arg_dict = dict(zip(self.arguments, args))
-        return self.call(arg_dict)
 
-    def call(self, args):
+        integrator = self.context.get_integrator()
 
-        y, _ = self.context.prepare_path(args)
+        t = self.context.t_final
+        y, q = integrator(t, args)
+        cost = self._terminal_cost(t, y, q, args)
 
-        t = get_time_variable()
-        y_vars = self.context.model.outputs(t)
-        arguments = {y_vars: y}
-        arguments.update(args)
-        cost_term, cost_quad = symbolic.extract_quadratures(self.cost)
-        rho = Variable('rho')
-        assert not cost_quad, 'Not implemented'
-        constraints = []
-        for constraint in self.constraints:
-            if is_temporal(constraint):
-                raise NotImplementedError
-            else:
-                g = constraint.to_graph()
-                constraints.append(g.call(arguments))
-                barrier = create_log_barrier_function(g, rho)
-                cost_term += barrier
+        return cost
 
-        if constraints:
-            arguments.update({rho: 0.001})
-
-        value = cost_term.call(arguments)
-        return CandidateSolution(value, y, constraints)
+    def jacobian(self, args):
+        assert len(args) == len(self.arguments), \
+            f'Invalid arguments: expected {self.arguments}, received {args}'
+        _ = self.get_implementation()
+        # create a functional object
+        # with
+        # - vector field
+        # - constraints
+        # - initial conditions
+        # -
+        integrator = self.context.get_integrator()
+        n = len(self.arguments)
+        t = self.context.t_final
+        jac = np.zeros((n, 1), dtype=float)
+        for i in range(n):
+            basis = np.array([0 if i != j else 1 for j in range(n)])
+            y, q, dy, dq = integrator.pushforward(
+                t, args, basis)
+            _, dcost = self._terminal_cost.pushforward(t, y, q, args,
+                                                       0, dy, dq, basis)
+            jac[i] = dcost
+        return jac
 
 
 def create_parameter_map(model, constants, final_time):
@@ -311,7 +340,7 @@ def create_parameter_map(model, constants, final_time):
         params.insert(0, final_time)
         args = symbolic.symbolic_vector('parameter vector', len(params))
         pi = symbolic.inclusion_map({0: 0}, len(params), 1)
-        t_func = pi(args)
+        t_func = GraphWrapper(pi(args), [args])
         offset = 1
     else:
         args = symbolic.symbolic_vector('parameter vector', len(params))
@@ -326,7 +355,8 @@ def create_parameter_map(model, constants, final_time):
             len(params),
             len(model.parameters)
         )
-        p_func = inject(args) + param_constants
+
+        p_func = GraphWrapper(inject(args) + param_constants, [args])
     else:
         p_func = ConstantFunction(param_constants, args)
-    return params, t_func, p_func
+    return args, params, t_func, p_func

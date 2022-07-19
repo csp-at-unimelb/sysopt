@@ -98,6 +98,14 @@ class Port:
     def __cmp__(self, other):
         return id(self) == id(other)
 
+    def __eq__(self, other):
+        try:
+            return (self.block == other.block
+                    and self.port_type == other.port_type)
+        except AttributeError:
+            pass
+        return self is other
+
     def __iter__(self):
         return iter(self._channels)
 
@@ -187,6 +195,9 @@ class ComponentBase:
 
     def __repr__(self):
         return f'{self.__class__.__name__}(name={self.name})'
+
+    def __eq__(self, other):
+        return id(self) == id(other)
 
     def compute_dynamics(self,
                          t: Time,

@@ -8,7 +8,7 @@ from operator import mul
 from functools import reduce
 
 from sysopt.backends.casadi.expression_graph import substitute
-from sysopt.symbolic.symbols import MinimumPathProblem, SolverOptions
+from sysopt.symbolic.problem_data import MinimumPathProblem, SolverOptions
 from sysopt.backends.casadi.path import InterpolatedPath
 
 
@@ -20,6 +20,7 @@ Problem = namedtuple(
 
 
 default_options = SolverOptions()
+
 
 def generate_collocation_matrixes(degree):
     collocation_times = np.append(

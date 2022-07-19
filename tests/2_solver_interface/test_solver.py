@@ -119,7 +119,7 @@ class TestParameterMap:
         expected_params = [Parameter(model, p) for p in model.parameters]
 
         t_final = 10
-        params, t_map, p_map = create_parameter_map(model, {}, t_final)
+        _, params, t_map, p_map = create_parameter_map(model, {}, t_final)
         assert len(params) == len(expected_params)
         results = list(zip(expected_params, params))
 
@@ -137,7 +137,7 @@ class TestParameterMap:
         constants = {p: random.random() for p in model.parameters}
 
         t_final = Variable('t_final')
-        params, t_map, p_map = create_parameter_map(model, constants, t_final)
+        _, params, t_map, p_map = create_parameter_map(model, constants, t_final)
 
         assert params == [t_final]
         t_test = random.random()
@@ -149,7 +149,7 @@ class TestParameterMap:
     def test_mixed_map(self):
         model, constants, *_ = build_example()
         t_final = Variable('t_final')
-        params, t_map, p_map = create_parameter_map(model, constants, t_final)
+        _, params, t_map, p_map = create_parameter_map(model, constants, t_final)
 
         assert params[0] == t_final
         values = [0, 1]

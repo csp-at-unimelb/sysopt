@@ -2,7 +2,7 @@
 # pylint: disable=invalid-name
 import copy
 from typing import Optional, List, Union, Callable, Dict, Tuple, Iterable
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from collections import deque
 
 from sysopt.types import Domain
@@ -14,6 +14,7 @@ from sysopt.symbolic import (
     get_time_variable, function_from_graph,
     restriction_map, as_array, sparse_matrix, Matrix
 )
+from sysopt.symbolic.problem_data import FlattenedSystem
 
 
 from sysopt import exceptions
@@ -72,33 +73,6 @@ class Arguments:
 
 
 
-@dataclass
-class FlattenedSystem:
-    """Container for flattened system functions."""
-    initial_conditions: Optional[ExpressionGraph] = None
-    vector_field: Optional[ExpressionGraph] = None
-    state_transitions: Optional[Tuple[int,
-                                      ExpressionGraph,
-                                      Optional[ExpressionGraph]]] = None
-    output_map: Optional[ExpressionGraph] = None
-    constraints: Optional[ExpressionGraph] = None
-    tables: Optional[dict] = None
-    domain: Domain = None
-
-    @staticmethod
-    def from_block(block: Block):
-        fs = flatten_system(block)
-        return fs
-
-
-@dataclass
-class Quadratures:
-    """Container for quadratures associated with a given system."""
-    output_variable: Variable
-    vector_quadrature: ExpressionGraph
-    regularisers: List[Variable] = field(default_factory=list)
-
-
 def is_internal(wire: Connection) -> bool:
     src, dest = wire
     return src.block.parent == dest.block.parent
@@ -133,7 +107,6 @@ def inclusion_from_entries(entries:List[TableEntry],
                            local_dim: int) -> Matrix:
     proj = projection_from_entries(entries, global_dim, local_dim)
     return proj.T
-
 
 
 def create_tables_from_block(block: Block) -> Tables:
@@ -310,7 +283,6 @@ def create_tables(all_blocks:List[Block]) -> Tables:
     tables['wires'] = []
     while trunks:
         next_block: Composite = trunks.pop()
-        print(next_block)
         for wire in next_block.wires:
             if is_internal(wire):
                 tables['wires'] += internal_wire_to_table_entries(tables, wire)

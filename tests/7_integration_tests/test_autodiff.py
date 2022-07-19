@@ -31,7 +31,7 @@ def test_autodiff():
         t = 2
         p = [0.5, 3]
         dp = [0.1, -2]
-        result = f.pushforward(t, p, dp)
+        _, result = f.pushforward(t, p, dp)
 
     expected = expected_result()
     assert abs(result - expected) < 1e-6

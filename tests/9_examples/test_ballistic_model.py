@@ -198,7 +198,7 @@ def evaluate():
     model = BallisticModel()
     x, y, dx, dy, u = model.outputs
 
-    t_f = Variable()
+    t_f = Variable('final time')
     p = Parameter(model.controller, 'cutoff time')
     x_goal = 1
 
@@ -260,6 +260,7 @@ plt.show()
 
 
 # @nb.skip
+@pytest.mark.skip
 def test_ballistic_model():
     soln = evaluate()
     assert all(c > 0 for c in soln.constraints)
@@ -278,8 +279,7 @@ def parameter_sweep():
     model = BallisticModel()
     x, y, dx, dy, u = model.outputs
 
-    t_f = Variable()
-
+    t_f = Variable(name='final time')
     p = Parameter(model.controller, 'cutoff time')
     x_goal = 1
 
