@@ -12,7 +12,7 @@ epsilon = 1e-9
 
 
 def sparse_matrix(shape):
-    return _casadi.SX(*shape)
+    return _casadi.MX(*shape)
 
 
 def list_symbols(expr) -> set:

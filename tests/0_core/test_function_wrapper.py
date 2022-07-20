@@ -13,7 +13,7 @@ def dfdx(x, y):
 def test_function_wrapper_numeric():
     F = Function(
         function=f,
-        jacobians=dfdx,
+        jacobian=dfdx,
         shape=(2,),
         arguments=[symbolic_vector('x'), symbolic_vector('y')]
     )
@@ -33,7 +33,7 @@ def test_function_wrapper_closures():
     arguments = [symbolic_vector('x'), symbolic_vector('y')]
     F = Function(
         function=f,
-        jacobians=dfdx,
+        jacobian=dfdx,
         shape=(2,),
         arguments=arguments
     )

@@ -78,6 +78,6 @@ class CasadiImplementation(Algebraic):
 
 @implements(ConstantFunction)
 def to_constant(func: ConstantFunction):
-    return lambda x: casadi.SX(func.value)
+    return lambda x: casadi.MX(func.value)
 
 

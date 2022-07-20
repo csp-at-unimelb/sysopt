@@ -10,11 +10,11 @@ from .compiler import implements, get_implementation
 
 
 def substitute(graph: ExpressionGraph,
-               symbols: Dict[SymbolicAtom, casadi.SX]):
+               symbols: Dict[SymbolicAtom, casadi.MX]):
     
     def leaf_function(obj):
         if is_matrix(obj) or isinstance(obj, (int, float, complex)):
-            return casadi.SX(obj)
+            return casadi.MX(obj)
         if obj in symbols:
             return symbols[obj]
         if isinstance(obj, (Function, Compose)):
@@ -46,7 +46,7 @@ class CasadiGraphWrapper(Algebraic):
                  name: str = 'f'):
         self._shape = graph.shape
         self._symbols = {
-            a: casadi.SX.sym(str(a), *a.shape) for a in arguments
+            a: casadi.MX.sym(str(a), *a.shape) for a in arguments
         }
 
         f_impl = substitute(graph, self._symbols)

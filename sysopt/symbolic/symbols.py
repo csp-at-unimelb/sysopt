@@ -1019,12 +1019,12 @@ class Function(Algebraic):
                  shape,
                  function,
                  arguments,
-                 jacobians=None,
+                 jacobian=None,
                  ):
         self._shape = shape
         self.function = function
         self.arguments = tuple(arguments)
-        self._jacobians = jacobians
+        self.jacobian = jacobian
 
     def __repr__(self):
         args = ','.join(str(a) for a in self.arguments)
@@ -1035,7 +1035,7 @@ class Function(Algebraic):
         return self._shape
 
     def __hash__(self):
-        return hash((id(self.function), id(self._jacobians), self.arguments))
+        return hash((id(self.function), id(self.jacobian), self.arguments))
 
     def symbols(self):
         return set(self.arguments)
@@ -1052,12 +1052,6 @@ class Function(Algebraic):
         args = [args_dict[arg] for arg in self.arguments]
         result = self(*args)
         return result
-
-    def jacobian(self, *args):
-        assert len(args) == len(self.arguments)
-        if self._jacobians is not None:
-            return self._jacobians(*args)
-        raise NotImplementedError
 
 
 class Compose(Algebraic):

@@ -7,11 +7,11 @@ from sysopt.symbolic.problem_data import ConstrainedFunctional
 
 
 def build_function(problem: ConstrainedFunctional):
-    p = casadi.vertcat(*[casadi.SX.sym(p_i) for p_i in problem.parameters])
+    p = casadi.vertcat(*[casadi.MX.sym(p_i) for p_i in problem.parameters])
 
     value = get_implementation(problem.value)
     if isinstance(problem.final_time, float):
-        t_f = casadi.SX(problem.final_time)
+        t_f = casadi.MX(problem.final_time)
     else:
         t_f = get_implementation(problem.final_time)(p)
 
