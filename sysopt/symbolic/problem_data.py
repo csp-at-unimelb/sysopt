@@ -8,7 +8,7 @@ import numpy as np
 
 from sysopt.types import Domain
 from sysopt.symbolic.symbols import (
-    Matrix, Variable, ExpressionGraph, Parameter
+    Matrix, Variable, ExpressionGraph, Parameter,ConstantFunction
 )
 
 
@@ -73,10 +73,10 @@ class ConstrainedFunctional:
     """Mapping from the free parameters to the system parameters"""
 
     quadratures: ExpressionGraph
-    """Vector-valued quadratures that are sovled along side y(t);
+    """Vector-valued quadratures that are solved along side y(t);
     ie so that p-> (y(t;p), q(t;p))"""
 
-    final_time: Union[ExpressionGraph, float]
+    final_time: Union[ExpressionGraph, ConstantFunction]
     """Terminal time, (interpreted as a function of p)"""
 
     constraints: List[ExpressionGraph] = field(default_factory=list)

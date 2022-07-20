@@ -5,6 +5,7 @@ from collections import defaultdict
 from inspect import signature
 
 import numpy as np
+import ordered_set
 from typing import Union, List, Callable, Tuple, Optional, Dict, NewType, Any
 
 from sysopt.helpers import flatten
@@ -91,14 +92,14 @@ def as_array(
     try:
         # pylint: disable=import-outside-toplevel
         from sysopt.backends import as_array as backend_array
-
         return backend_array(item)
 
-    except TypeError:
+    except TypeError as ex:
+        print(ex)
         pass
 
     raise NotImplementedError(
-        f'Don\'t know how to treat {item} as an array')
+        f'Don\'t know how to treat {item} of type {type(item)} as an array')
 
 
 def sparse_matrix(shape: Tuple[int, int]):
@@ -904,7 +905,7 @@ class Variable(Algebraic):
     __array_ufunc__ = None
 
     def __init__(self, name=None, shape=scalar_shape):
-        self._shape = shape
+        self._shape = (shape, ) if isinstance(shape, int) else shape
         self.name = name
 
     def __str__(self):
@@ -1018,12 +1019,12 @@ class Function(Algebraic):
                  shape,
                  function,
                  arguments,
-                 jacobian=None,
+                 jacobians=None,
                  ):
         self._shape = shape
         self.function = function
         self.arguments = tuple(arguments)
-        self._jacobian = jacobian
+        self._jacobians = jacobians
 
     def __repr__(self):
         args = ','.join(str(a) for a in self.arguments)
@@ -1034,20 +1035,18 @@ class Function(Algebraic):
         return self._shape
 
     def __hash__(self):
-        return hash((id(self.function), self.arguments))
+        return hash((id(self.function), id(self._jacobians), self.arguments))
 
     def symbols(self):
         return set(self.arguments)
 
     def __call__(self, *args):
-        numeric_args = {
-            arg: value for arg, value in zip(self.arguments, args)
-            if not is_symbolic(value)
-        }
-        if len(numeric_args) == len(args):
-            return self.function(*args)
-
-        return Closure(self, dict(zip(self.arguments, args)))
+        assert len(args) == len(self.arguments)
+        if any(is_symbolic(arg) for arg in args):
+            return Compose(self,
+                           {k: arg for k, arg in zip(self.arguments, args)}
+                           )
+        return self.function(*args)
 
     def call(self, args_dict):
         args = [args_dict[arg] for arg in self.arguments]
@@ -1056,64 +1055,108 @@ class Function(Algebraic):
 
     def jacobian(self, *args):
         assert len(args) == len(self.arguments)
-        if self._jacobian is not None:
-            return self._jacobian(*args)
+        if self._jacobians is not None:
+            return self._jacobians(*args)
         raise NotImplementedError
 
 
-class Closure(Function):
-    """Symbolic partial call of a function."""
+class Compose(Algebraic):
+    def __init__(self, function: Function, arguments: Dict[SymbolicAtom, Any]):
+        self.function = function
+        self.arg_map = arguments
+        self.arguments = ordered_set.OrderedSet()
 
-    def __init__(self,
-                 function: Function,
-                 evaluated_args: Dict[SymbolicArray, Any]):
+        for arg in arguments.values():
+            try:
+                self.arguments.update(arg.symbols())
+            except AttributeError:
+                pass
 
-        # Evaluated args keys are the function arguments, values are
+    def symbols(self):
+        return self.arguments
 
-        free_args = []
-        self.call_map = {} # maps exposed arguments to inner function args.
-        for arg in function.arguments:
-            if arg not in evaluated_args:
-                self.call_map[arg] = arg
-                free_args.append(arg)
-            elif is_symbolic(evaluated_args[arg]):
-                self.call_map[evaluated_args[arg]] = arg
-                free_args.append(evaluated_args[arg])
-
-        super().__init__(function.shape, function.function, free_args)
-        self.evaluated_arguments = evaluated_args
-        self.function_args = function.arguments
-
-    def __repr__(self):
-        args = ','.join(str(a) for a in self.arguments)
-        return f'{str(self.function)}({args})'
+    @property
+    def shape(self):
+        return self.function.shape
 
     def __hash__(self):
-        return hash((id(self.function), self.arguments))
+        return id(self)
+
+    def __repr__(self):
+        return f'Closure {self.function}({self.arg_map})'
 
     def __call__(self, *args):
-        arg_dict = dict(zip(self.arguments, args))
-        arg_dict.update(self.evaluated_arguments)
+        assert len(args) == len(self.arguments)
+        return self.call(dict(zip(self.arguments, args)))
 
-        return super().__call__(
-            *[arg_dict[k] for k in self.function_args]
-        )
+    def call(self, arg_dict: Dict[SymbolicArray, Any]):
+        call_args = {}
+        for inner_arg in self.function.arguments:
+            arg = self.arg_map[inner_arg]
+            if not is_symbolic(arg):
+                call_args[inner_arg] = arg
+            elif isinstance(arg, ExpressionGraph):
+                call_args[inner_arg] = arg.call(arg_dict)
+            else:
+                call_args[inner_arg] = arg_dict[arg]
+        return self.function.call(call_args)
 
-    def call(self, args_dict):
-
-        inner_args = self.evaluated_arguments.copy()
-        inner_args.update({
-            self.call_map[k]: v for k, v in args_dict.items()
-        })
-
-        try:
-            args = [inner_args[argument] for argument in self.function_args]
-        except KeyError as ex:
-            message = f'Missing arguments in call to {self}'
-            raise KeyError(message) from ex
-
-        return super().__call__(*args)
-
+#
+# class Closure(Function):
+#     """Symbolic partial call of a function."""
+#
+#     def __init__(self,
+#                  function: Function,
+#                  evaluated_args: Dict[SymbolicArray, Any]):
+#
+#         # Evaluated args keys are the function arguments, values are
+#
+#         free_args = []
+#         self.call_map = {}  # maps exposed arguments to inner function args.
+#         for arg in function.arguments:
+#             if arg not in evaluated_args:
+#                 self.call_map[arg] = arg
+#                 free_args.append(arg)
+#             elif is_symbolic(evaluated_args[arg]):
+#                 self.call_map[evaluated_args[arg]] = arg
+#                 free_args.append(evaluated_args[arg])
+#
+#         super().__init__(function.shape, function.function, free_args)
+#         self.evaluated_arguments = evaluated_args
+#         self.function_args = function.arguments
+#
+#     def __repr__(self):
+#         args = ','.join(str(a) for a in self.arguments)
+#         return f'{str(self.function)}({args})'
+#
+#     def __hash__(self):
+#         return hash((id(self.function), self.arguments))
+#
+#     def __call__(self, *args):
+#         arg_dict = dict(zip(self.arguments, args))
+#         arg_dict.update(self.evaluated_arguments)
+#
+#         return super().__call__(
+#             *[arg_dict[k] for k in self.function_args]
+#         )
+#
+#     def call(self, args_dict):
+#
+#         inner_args = self.evaluated_arguments.copy()
+#         inner_args.update({
+#             self.call_map[k]: v for k, v in args_dict.items()
+#         })
+#         print(inner_args)
+#         try:
+#             args = [inner_args[argument] for argument in self.function_args]
+#         except KeyError as ex:
+#             message = f'Missing arguments in call to {self}'
+#             raise KeyError(message) from ex
+#
+#         result = Function.__call__(self, *args)
+#
+#         return result
+#
 
 class SignalReference(Algebraic):
     """Symbolic variable stresenting a time varying signal.
@@ -1265,8 +1308,6 @@ def replace_signal(graph: ExpressionGraph, port, time, subs):
         return ExpressionGraph(obj, *args)
 
     return recursively_apply(graph, trunk_func, leaf_function)
-
-
 
 
 def is_temporal(symbol):
@@ -1480,8 +1521,8 @@ class GraphWrapper(Algebraic):
     def _impl(self):
         if self.__impl is None:
             # pylint: disable=import-outside-toplevel
-            from sysopt.backends import to_function
-            self.__impl = to_function(self)
+            from sysopt.backends import get_implementation
+            self.__impl = get_implementation(self)
         return self.__impl
 
     def pushforward(self, *args):

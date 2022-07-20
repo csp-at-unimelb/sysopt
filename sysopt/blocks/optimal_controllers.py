@@ -64,7 +64,7 @@ class PathPlanner(Block):
             return soln(t)
 
         self._solver = Function(
-            arguments=[Variable('t'), Variable('p', self.metadata.parameters)],
+            arguments=[Variable('t'), Variable('p', self.signature.parameters)],
             function=func,
             shape=problem.state[0].shape
         )

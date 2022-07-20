@@ -6,7 +6,7 @@ from typing import Optional, Dict, List, Union, NewType
 import numpy as np
 
 from sysopt import symbolic
-from sysopt.backends import get_integrator, to_function
+from sysopt.backends import get_integrator, get_implementation
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
     is_symbolic, ConstantFunction, GraphWrapper
@@ -274,7 +274,7 @@ class Problem:
             constraints=self.constraints
         )
         self._terminal_cost = cost_fn
-        return to_function(spec)
+        return get_implementation(spec)
 
     def __call__(self, args):
         """Evaluate the problem with the given arguments."""
