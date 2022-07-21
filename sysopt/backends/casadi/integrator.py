@@ -86,16 +86,16 @@ class Integrator:
 
 def generate_dae_from(flattened_system, quadratures):
     symbols = {
-        s: casadi.SX.sym(f'{s.name}', len(s))
+        s: casadi.MX.sym(f'{s.name}', len(s))
         for s in flattened_system.output_map.arguments
     }
 
     t, x, z, u, p = symbols.values()
     zu = casadi.vertcat(z, u)
-    t_final = casadi.SX.sym('T', 1, 1)
+    t_final = casadi.MX.sym('T', 1, 1)
 
     f_impl = t_final * casadi.vertcat(
-        casadi.SX.ones(1, 1),
+        casadi.MX.ones(1, 1),
         substitute(flattened_system.vector_field, symbols)
     )
 
@@ -107,7 +107,7 @@ def generate_dae_from(flattened_system, quadratures):
 
     x0 = substitute(flattened_system.initial_conditions, symbols)
 
-    x0_impl = casadi.vertcat(casadi.SX.zeros(1, 1), x0)
+    x0_impl = casadi.vertcat(casadi.MX.zeros(1, 1), x0)
     initial_conditions = casadi.Function('x0', [p], [x0_impl])
 
     if flattened_system.constraints is not None:

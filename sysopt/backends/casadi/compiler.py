@@ -1,6 +1,5 @@
 """Casadi Function Factories."""
 from typing import Dict, NewType, Callable, Any
-
 import casadi
 from sysopt.symbolic.symbols import Algebraic, ConstantFunction
 
@@ -11,7 +10,7 @@ Factory = NewType('Factory', Callable[[Any], Algebraic])
 __function_factories: Dict[str, Factory] = {}
 
 
-def compiles(cls):
+def implements(cls):
     """Decorator that registers the decorated function as the 'compiler'
 
     Args:
@@ -24,7 +23,7 @@ def compiles(cls):
     return wrapper
 
 
-def to_function(obj):
+def get_implementation(obj):
     cls = str(obj.__class__)
 
     try:
@@ -37,6 +36,8 @@ def to_function(obj):
     return factory(obj)
 
 
-@compiles(ConstantFunction)
+@implements(ConstantFunction)
 def to_constant(func: ConstantFunction):
-    return lambda x: casadi.SX(func.value)
+    return lambda x: casadi.MX(func.value)
+
+

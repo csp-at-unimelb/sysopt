@@ -4,20 +4,26 @@ from typing import Dict, List
 
 import casadi
 from sysopt.symbolic import is_matrix, recursively_apply, \
-    SymbolicAtom, ExpressionGraph, Algebraic, GraphWrapper
+    SymbolicAtom, ExpressionGraph, Algebraic, GraphWrapper, Function, Compose
 
-from .function import compiles
+from .compiler import implements, get_implementation
 
 
 def substitute(graph: ExpressionGraph,
-               symbols: Dict[SymbolicAtom, casadi.SX]):
+               symbols: Dict[SymbolicAtom, casadi.MX]):
 
     def leaf_function(obj):
         if is_matrix(obj) or isinstance(obj, (int, float, complex)):
-            return casadi.SX(obj)
+            return casadi.MX(obj)
         if obj in symbols:
             return symbols[obj]
-        raise NotImplementedError(f'Don\'y know how to evaluate {obj}')
+        if isinstance(obj, (Function, Compose)):
+            arguments = {a: symbols[a] for a in obj.arguments}
+            impl = get_implementation(obj)
+            return impl.call(arguments)
+
+        raise NotImplementedError(f'Don\'y know how to evaluate {obj} of'
+                                  f'type {type(obj)}')
 
     def trunk_function(op, *children):
         return op(*children)
@@ -25,7 +31,7 @@ def substitute(graph: ExpressionGraph,
     return recursively_apply(graph, trunk_function, leaf_function)
 
 
-@compiles(GraphWrapper)
+@implements(GraphWrapper)
 def compile_expression_graph(obj: GraphWrapper):
     return CasadiGraphWrapper(obj.graph, obj.arguments)
 
@@ -40,7 +46,7 @@ class CasadiGraphWrapper(Algebraic):
                  name: str = 'f'):
         self._shape = graph.shape
         self._symbols = {
-            a: casadi.SX.sym(str(a), *a.shape) for a in arguments
+            a: casadi.MX.sym(str(a), *a.shape) for a in arguments
         }
 
         f_impl = substitute(graph, self._symbols)

@@ -230,7 +230,7 @@ def casadify_problem(problem: MinimumPathProblem):
         parameters = [problem.parameters]
     all_symbols = set([problem.state[0], problem.control[0]] + parameters)
     substitutions = {
-        v: casadi.SX.sym(f'{v.name}', len(v))
+        v: casadi.MX.sym(f'{v.name}', len(v))
         for v in all_symbols
     }
     non_negative_constraints = [
