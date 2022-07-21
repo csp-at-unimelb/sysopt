@@ -3,9 +3,9 @@ import sympy as sp
 from sysopt.types import *
 from sysopt.block import Block
 from sysopt.solver.solver import Problem, SolverContext, get_time_variable
-
-
-
+from sysopt.block import Composite
+from sysopt.blocks import FullStateOutput, ConstantSignal
+from sysopt.symbolic import Variable, PiecewiseConstantSignal
 
 class LinearScalarEquation(Block):
     r"""Linear ODE of the form
@@ -130,3 +130,51 @@ def test_codesign_problem_1():
 
         grad_known = Problem1.tangent_space(p0, t=1)
         assert (jac - grad_known < 1e-4).all()
+
+
+def test_codesign_problem_with_path_variable():
+    model = Composite(name='Test Model')
+    # build a LQR model
+    #
+    plant_metadata = Metadata(
+        inputs=['u'],
+        outputs=['x_0', 'x_1']
+    )
+    A = np.array([[0, 1],
+                  [-1, 0]], dtype=float)
+    B = np.array([])
+
+    def f(x, u, _):
+        return A @ x + B @ u
+
+    def x0(_):
+        return np.array([0, 1])
+
+    plant = FullStateOutput(
+        dxdt=f,
+        metadata=plant_metadata,
+        x0=x0,
+        name='plant'
+    )
+    control = ConstantSignal(['u'])
+    model.components = [plant, control]
+    model.declare_outputs(['x_0', 'x_1', 'u'])
+    model.wires = [
+        (control.outputs, plant.inputs),
+        (control.outputs[0], model.outputs[2]),
+        (plant.outputs[0], model.outputs[0]),
+        (plant.outputs[1], model.outputs[1])
+    ]
+
+    u = PiecewiseConstantSignal('u', frequency=10)
+    t_final = Variable('t_f')
+    with SolverContext(model, t_final=t_final) as context:
+        y = model.outputs(t_final)
+        constraint = [
+            y[0:2].T @ y[0:2] < 1e-9
+        ]
+        problem = context.problem(
+            [t_final, u],
+            cost=t_final,
+            subject_to=constraint
+        )

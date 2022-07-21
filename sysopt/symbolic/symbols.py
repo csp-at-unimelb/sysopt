@@ -1502,4 +1502,3 @@ def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
     return GraphWrapper(graph, arguments)
 
 
-
