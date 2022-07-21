@@ -39,6 +39,7 @@ class FullStateOutput(Block):
         assert not metadata.constraints, \
             f"{type(self)} must have no constraints"
 
+        assert metadata.states, f"Error: no states have been defined!"
         metadata.outputs = metadata.states
 
         super().__init__(metadata, name=name)
