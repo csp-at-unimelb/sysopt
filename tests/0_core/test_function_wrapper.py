@@ -9,6 +9,8 @@ def f(x, y):
 def dfdx(x, y):
     return (1, 1), (2 * x, 2*y)
 
+def dF(x, y, dx, dy):
+    return dx + dy, 2 * (x +y)
 
 def test_function_wrapper_numeric():
     F = Function(
@@ -64,3 +66,16 @@ def test_function_wrapper_closures():
 
     six, ten = two_Fx.call({X: Xn})
     assert (six, ten) == expected_result
+
+
+def test_forwards_derivatives():
+    arguments = [symbolic_vector('x'), symbolic_vector('y')]
+    F = Function(
+        function=f,
+        forwards=dF,
+        shape=(2,),
+        arguments=arguments
+    )
+
+    assert F.forwards is not None
+    assert F.forwards(0, 1, 2, 3) == dF(0,1,2,3)
