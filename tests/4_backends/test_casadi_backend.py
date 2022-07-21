@@ -11,7 +11,9 @@ def f(x, y):
 
 
 def dfdx(x, y):
-    return (1, 1), (2 * x, 2*y)
+    d_dx = (1, 2*x)
+    d_dy = (1, 2*y)
+    return d_dx,d_dy
 
 
 class TestForeignFunction:
@@ -49,8 +51,34 @@ class TestForeignFunction:
 
         x = MX.sym('x', 2)
         J = casadi.Function('J', [x], [casadi.jacobian(F(x), x)])
-        result = J([1, 2])
-        assert result[0, 0] == 1  # df_0/dx_0
-        assert result[0, 1] == 1  # df_0/dx_1
-        assert result[1, 0] == 2  # df_1/dx_0
-        assert result[1, 1] == 4  # df_1/dx_1
+        result = J([1, 2]).full()
+        expected_result = np.array(dfdx(1, 2)).T
+        assert (np.abs(result - expected_result) < 1e-4).all()
+
+    def test_nonsquare_jacobian(self):
+        def f_3(x, y, z):
+            return x + y, z**2
+
+        def jac_f_3(x, y, z):
+            dfdx = np.zeros(shape=(2, 3), dtype=float)
+            dfdx[0, 0] = 1
+            dfdx[0, 1] = 1
+            dfdx[1, 2] = z
+
+            return dfdx[:, 0:1], dfdx[:, 1:2], dfdx[:, 2: 3]
+
+        f_spec = Function(
+            function=f_3,
+            jacobian=jac_f_3,
+            arguments=[symbolic_vector('x'), symbolic_vector('y'), symbolic_vector('z')],
+            shape=(2,)
+        )
+        F = get_implementation(f_spec)
+
+        x = MX.sym('x', 3)
+        F_sym = F(x[0], x[1], x[2])
+        jac_F = casadi.Function('J', [x], [casadi.jacobian(F_sym, x)])
+        result = jac_F([1, 2, 3])
+        expected_result = np.hstack(jac_f_3(1, 2, 3))
+
+        assert (np.abs(result - expected_result) < 1e-4).all()

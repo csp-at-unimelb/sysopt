@@ -7,6 +7,7 @@ from sysopt.backends.casadi.compiler import implements
 from sysopt.backends.casadi.expression_graph import substitute
 
 __all__ = []
+__functions = []
 
 
 class CasadiJacobian(casadi.Callback):
@@ -20,11 +21,13 @@ class CasadiJacobian(casadi.Callback):
         self.func = func
         n = 0
         self.arg_offsets = [0]
+        self.arg_lengths = []
         for arg in f_arguments:
             n += len(arg)
+            self.arg_lengths.append(len(arg))
             self.arg_offsets.append(n)
         m, = f_shape
-        self._shape = (n, m)
+        self._shape = (m, n)
 
         self.construct(name, opts)
 
@@ -35,23 +38,31 @@ class CasadiJacobian(casadi.Callback):
         return 1
 
     def get_sparsity_in(self, idx):
-        return casadi.Sparsity.dense(self._shape[idx], 1)
+        if idx == 0:
+            return casadi.Sparsity.dense(self._shape[1], 1)
+        else:
+            return casadi.Sparsity.dense(self._shape[0], 1)
 
     def get_sparsity_out(self, idx):
         return casadi.Sparsity.dense(*self._shape)
 
     def eval(self, arg):
-        x_vec = arg[0]
+
+        x_vec = arg[0].full()
+
         x_arguments = [
-            x_vec[i:i_next]
+            x_vec[i:i_next] if i_next > i + 1 else x_vec[i]
             for i, i_next in zip(self.arg_offsets[:-1], self.arg_offsets[1:])
         ]
 
         result = self.func(*x_arguments)
+
         assert len(result) == len(x_arguments),\
             'Jacobian must return a matrix for each vector arguments'
-        results = [casadi.DM(r).T for r in result]
-        jacobian = casadi.vertcat(*results)
+        results = [casadi.DM(r).reshape((self._shape[0], cols))
+                   for r, cols in zip(result, self.arg_lengths)]
+
+        jacobian = casadi.horzcat(*results)
         return [jacobian]
 
 
@@ -82,7 +93,7 @@ class CasadiFFI(casadi.Callback):
 
     def get_jacobian(self, name, *args, **kwargs):
         self._jacobian_impl = CasadiJacobian(
-            name, self._jacobian, self._arguments, self._shape
+            name, self._jacobian, self.arguments, self._shape
         )
         return self._jacobian_impl
 
@@ -99,9 +110,9 @@ class CasadiFFI(casadi.Callback):
         return casadi.Sparsity.dense(self._outs, 1)
 
     def eval(self, args):
-        arg = args[0]
+        arg = args[0].full()
         inner_args = [
-            arg[i: i_next]
+            arg[i: i_next] if i_next > i + 1 else arg[i]
             for i, i_next in zip(self._offsets[:-1], self._offsets[1:])
         ]
 
@@ -119,6 +130,7 @@ def wrap_function(func: Function):
     shape = func.shape
     args = func.arguments
 
+    __functions.append(impl)
     return CasadiForeignFunction(impl, args, shape)
 
 
