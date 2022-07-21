@@ -206,7 +206,7 @@ class CasadiForeignFunction(Algebraic):
 
     def call(self, arg_dict):
         args = [arg_dict[a] for a in self.arguments]
-        return self.__call__(*args)
+        return self(*args)
 
 
 @implements(Compose)
