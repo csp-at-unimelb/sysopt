@@ -11,7 +11,7 @@ from .compiler import implements, get_implementation
 
 def substitute(graph: ExpressionGraph,
                symbols: Dict[SymbolicAtom, casadi.MX]):
-    
+
     def leaf_function(obj):
         if is_matrix(obj) or isinstance(obj, (int, float, complex)):
             return casadi.MX(obj)

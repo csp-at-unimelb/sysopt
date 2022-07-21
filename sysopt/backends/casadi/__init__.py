@@ -5,8 +5,8 @@ from sysopt.backends.casadi.expression_graph import substitute
 from sysopt.backends.casadi.path import InterpolatedPath
 from sysopt.backends.casadi.integrator import Integrator
 from sysopt.backends.casadi.variational_solver import get_variational_integrator
-import sysopt.backends.casadi.codesign_problem 
-import sysopt.backends.casadi.foreign_function 
+import sysopt.backends.casadi.codesign_problem
+import sysopt.backends.casadi.foreign_function
 
 epsilon = 1e-9
 

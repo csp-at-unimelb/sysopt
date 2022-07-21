@@ -52,6 +52,6 @@ class InvalidShape(ValueError):
 
 class EvaluationError(ValueError):
     def __init__(self, graph, context, path, exception):
-        message = f'''{exception} was raised during the evalution of an 
+        message = f'''{exception} was raised during the evalution of an
         expression graph.\n Evaluation order: {path} with context {context}'''
         super().__init__(message)

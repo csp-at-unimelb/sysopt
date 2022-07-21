@@ -1,8 +1,7 @@
 """Casadi Function Factories."""
-from typing import Dict, NewType, Callable, Any, List
-from ordered_set import OrderedSet
+from typing import Dict, NewType, Callable, Any
 import casadi
-from sysopt.symbolic.symbols import Algebraic, ConstantFunction, SymbolicArray
+from sysopt.symbolic.symbols import Algebraic, ConstantFunction
 
 
 Factory = NewType('Factory', Callable[[Any], Algebraic])
@@ -35,45 +34,6 @@ def get_implementation(obj):
         raise NotImplementedError(msg) from ex
 
     return factory(obj)
-
-
-class CasadiImplementation(Algebraic):
-    def __init__(self, func, shape, arguments: List[SymbolicArray]):
-        self.func = func
-        self._shape = shape
-        self.arguments = arguments
-
-    def __hash__(self):
-        return id(self)
-
-    def __repr__(self):
-        return repr(self.func)
-
-    @property
-    def shape(self):
-        return self._shape
-
-    def symbols(self):
-        return OrderedSet(self.arguments)
-
-    def __call__(self, *args):
-        result = self.func(*args)
-        try:
-            return result.full()
-        except AttributeError:
-            return result
-
-    def pushforward(self, *args):
-        n = len(self.symbols())
-        assert len(args) == 2 * n, f'expected {2 * n} arguments, ' \
-                                   f'got {len(args)}'
-        x, dx = args[:n], args[n:]
-        out_sparsity = casadi.DM.ones(*self.shape)
-        jac = self.func.jacobian()(*x, out_sparsity)
-        dx = casadi.vertcat(*dx)
-        result = jac @ dx
-
-        return self.func(*x), result
 
 
 @implements(ConstantFunction)

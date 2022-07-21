@@ -1,6 +1,7 @@
-import casadi
-from typing import List, Tuple
+"""Casadi Implementation of foreign function interfaces."""
 
+import casadi
+from typing import List, Tuple, Callable, Optional
 
 from sysopt.symbolic.symbols import Function, Algebraic, Compose, SymbolicArray
 from sysopt.backends.casadi.compiler import implements
@@ -11,9 +12,22 @@ __functions = []
 
 
 class CasadiJacobian(casadi.Callback):
+    """Wrapper for numerical jacobians
+
+    Args:
+        name:   Name of the jacobian
+        func:   Function to compute the jacobians with respect to each input
+        f_arguments: Arguments for the original function
+        f_shape: output shape of the original function (must be `(n,)`
+                where `n` is the dimension of the codomain
+        opts: Casadi-specific options
+
+    """
+    # pylint: disable=dangerous-default-value
+    # as per casadi reference implementations
     def __init__(self,
-                 name,
-                 func,
+                 name: str,
+                 func: Callable,
                  f_arguments: List[SymbolicArray],
                  f_shape: Tuple[int],
                  opts={}):
@@ -49,7 +63,6 @@ class CasadiJacobian(casadi.Callback):
     def eval(self, arg):
 
         x_vec = arg[0].full()
-
         x_arguments = [
             x_vec[i:i_next] if i_next > i + 1 else x_vec[i]
             for i, i_next in zip(self.arg_offsets[:-1], self.arg_offsets[1:])
@@ -67,12 +80,27 @@ class CasadiJacobian(casadi.Callback):
 
 
 class CasadiFFI(casadi.Callback):
-    def __init__(self, function, arguments, shape, jacobian=None,
-                 references=None,
-                 name='f',
+    """ Wrapper for a differentiable foreign function.
+
+    Args:
+        function: The function to wrap.
+        arguments: List of symbolic arguments of the correct dimension.
+        shape: Output shape of the function.
+        jacobian: Function to compute the jacobian with respect to each
+            input variable.
+        name: Name of the function
+        opts: Casadi specific options.
+
+    """
+    # pylint: disable=dangerous-default-value
+    def __init__(self,
+                 function: Callable,
+                 arguments: List[SymbolicArray],
+                 shape: Tuple[int],
+                 jacobian: Optional[Callable] = None,
+                 name: str = 'f',
                  opts={}):
         casadi.Callback.__init__(self)
-        self.references = references or None
         self.func = function
         self._offsets = [0]
         self.arguments = arguments
@@ -135,12 +163,24 @@ def wrap_function(func: Function):
 
 
 class CasadiForeignFunction(Algebraic):
-    def __init__(self, impl, arguments, shape, name='f', refs=None):
+    """Expression-graph compatible wrapper for a casadi-implemented functions.
+    Args:
+        impl: Casadi function implementation
+        arguments: List of vector arguments to this function.
+        shape: Output dimension of the form `(d,)`
+        name: Name of this function.
+
+    """
+
+    def __init__(self,
+                 impl: casadi.Function,
+                 arguments: List[SymbolicArray],
+                 shape: Tuple[int],
+                 name: str = 'f'):
         self.arguments = arguments
         self._shape = shape
         self.impl = impl
         self.name = name
-        self.refs = refs or []
 
     def symbols(self):
         return set(self.arguments)
@@ -185,13 +225,12 @@ def compose_implementation(composition: Compose):
 
     f_of_g = f(*args)
     x = casadi.vertcat(*list(outer_args.values()))
-    impl = casadi.Function('composition',[x], [f_of_g])
+    impl = casadi.Function('composition', [x], [f_of_g])
 
     return CasadiForeignFunction(
         impl=impl,
         arguments=composition.arguments,
-        shape=composition.function.shape,
-        refs=[f, f_of_g]
+        shape=composition.function.shape
     )
 
 

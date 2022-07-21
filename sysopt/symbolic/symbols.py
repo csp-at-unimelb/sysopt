@@ -1043,9 +1043,8 @@ class Function(Algebraic):
     def __call__(self, *args):
         assert len(args) == len(self.arguments)
         if any(is_symbolic(arg) for arg in args):
-            return Compose(self,
-                           {k: arg for k, arg in zip(self.arguments, args)}
-                           )
+            return Compose(self, dict(zip(self.arguments, args)))
+
         return self.function(*args)
 
     def call(self, args_dict):
@@ -1055,6 +1054,16 @@ class Function(Algebraic):
 
 
 class Compose(Algebraic):
+    """Composition of a function with other functions/graphs
+
+    Args:
+        function: The function to be called symbolically
+        arguments: dictionary of symbolic call where the keys identify
+            the arguments of the function, and the values identify the
+            assigned (possibly symbolic) values.
+
+    """
+
     def __init__(self, function: Function, arguments: Dict[SymbolicAtom, Any]):
         self.function = function
         self.arg_map = arguments
@@ -1095,62 +1104,6 @@ class Compose(Algebraic):
                 call_args[inner_arg] = arg_dict[arg]
         return self.function.call(call_args)
 
-#
-# class Closure(Function):
-#     """Symbolic partial call of a function."""
-#
-#     def __init__(self,
-#                  function: Function,
-#                  evaluated_args: Dict[SymbolicArray, Any]):
-#
-#         # Evaluated args keys are the function arguments, values are
-#
-#         free_args = []
-#         self.call_map = {}  # maps exposed arguments to inner function args.
-#         for arg in function.arguments:
-#             if arg not in evaluated_args:
-#                 self.call_map[arg] = arg
-#                 free_args.append(arg)
-#             elif is_symbolic(evaluated_args[arg]):
-#                 self.call_map[evaluated_args[arg]] = arg
-#                 free_args.append(evaluated_args[arg])
-#
-#         super().__init__(function.shape, function.function, free_args)
-#         self.evaluated_arguments = evaluated_args
-#         self.function_args = function.arguments
-#
-#     def __repr__(self):
-#         args = ','.join(str(a) for a in self.arguments)
-#         return f'{str(self.function)}({args})'
-#
-#     def __hash__(self):
-#         return hash((id(self.function), self.arguments))
-#
-#     def __call__(self, *args):
-#         arg_dict = dict(zip(self.arguments, args))
-#         arg_dict.update(self.evaluated_arguments)
-#
-#         return super().__call__(
-#             *[arg_dict[k] for k in self.function_args]
-#         )
-#
-#     def call(self, args_dict):
-#
-#         inner_args = self.evaluated_arguments.copy()
-#         inner_args.update({
-#             self.call_map[k]: v for k, v in args_dict.items()
-#         })
-#         print(inner_args)
-#         try:
-#             args = [inner_args[argument] for argument in self.function_args]
-#         except KeyError as ex:
-#             message = f'Missing arguments in call to {self}'
-#             raise KeyError(message) from ex
-#
-#         result = Function.__call__(self, *args)
-#
-#         return result
-#
 
 class SignalReference(Algebraic):
     """Symbolic variable stresenting a time varying signal.
