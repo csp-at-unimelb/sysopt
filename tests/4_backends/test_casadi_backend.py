@@ -82,3 +82,47 @@ class TestForeignFunction:
         expected_result = np.hstack(jac_f_3(1, 2, 3))
 
         assert (np.abs(result - expected_result) < 1e-4).all()
+
+    def test_forwards_derivative(self):
+        def f_3(x, y, z):
+            return x + y, z**2
+
+        def df_3(x, y, z, dx, dy, dz):
+            dfdx = np.zeros(shape=(2, 3), dtype=float)
+            dfdx[0, 0] = 1
+            dfdx[0, 1] = 1
+            dfdx[1, 2] = z
+            dX = np.array([dx, dy, dz]).reshape((3, 1))
+            return dfdx @ dX
+
+        f_spec = Function(
+            function=f_3,
+            forwards=df_3,
+            arguments=[symbolic_vector('x'), symbolic_vector('y'), symbolic_vector('z')],
+            shape=(2,)
+        )
+        assert f_spec.forwards is not None
+
+        def jac_f_3(x, y, z):
+            dfdx = np.zeros(shape=(2, 3), dtype=float)
+            dfdx[0, 0] = 1
+            dfdx[0, 1] = 1
+            dfdx[1, 2] = z
+
+            return dfdx[:, 0:1], dfdx[:, 1:2], dfdx[:, 2: 3]
+
+        F = get_implementation(f_spec)
+
+        x = MX.sym('x', 3)
+        F_sym = F(x[0], x[1], x[2])
+        jac_F = casadi.Function('J', [x], [casadi.jacobian(F_sym, x)])
+        result = jac_F([1, 2, 3])
+        test_result = np.hstack(
+            [df_3(1, 2, 3, 1, 0, 0),
+            df_3(1, 2, 3,  0, 1, 0),
+            df_3(1, 2, 3, 0,  0, 1)])
+
+        expected_result = np.hstack(jac_f_3(1, 2, 3))
+        assert (np.abs(test_result - expected_result) < 1e-4).all()
+
+        assert (np.abs(result - expected_result) < 1e-4).all()

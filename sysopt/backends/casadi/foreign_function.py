@@ -79,6 +79,75 @@ class CasadiJacobian(casadi.Callback):
         return [jacobian]
 
 
+class CasadiForwards(casadi.Callback):
+    """Wrapper for numerical computation of forwards derivatives.
+
+    Args:
+        name: name of the function
+        func: Computes the variation, with inputs being a vector of arguments
+            and a vector of corresponding rates.
+        f_arguments: Symbolic arguments of the original function
+        f_shape: Output shape of the original function.
+        opts: Casadi-specific options.
+
+    """
+
+    # pylint: disable=dangerous-default-value
+    # as per casadi reference implementations
+    def __init__(self,
+                 name: str,
+                 func: Callable,
+                 f_arguments: List[SymbolicArray],
+                 f_shape: Tuple[int],
+                 opts={}):
+        casadi.Callback.__init__(self)
+        self.func = func
+        n = 0
+        self.arg_offsets = [0]
+        self.arg_lengths = []
+        for arg in f_arguments:
+            n += len(arg)
+            self.arg_lengths.append(len(arg))
+            self.arg_offsets.append(n)
+        m, = f_shape
+        self._inshape = (n ,1)
+        self._outshape = (m, 1)
+
+        self.construct(name, opts)
+
+    def get_n_in(self):
+        return 3
+
+    def get_n_out(self):
+        return 1
+
+    def get_sparsity_in(self, i):
+        if i == 0:
+            return casadi.Sparsity.dense(self._inshape)
+        elif i == 1:
+            return casadi.Sparsity(self._outshape)
+        else:
+            return casadi.Sparsity.dense(self._inshape)
+
+    def get_sparsity_out(self, i):
+        return casadi.Sparsity.dense(self._outshape)
+
+    def eval(self, args):
+
+        x_vec = args[0].full()
+        dx_vec = args[2].full()
+        x_arguments = [
+            x_vec[i:i_next] if i_next > i + 1 else x_vec[i]
+            for i, i_next in zip(self.arg_offsets[:-1], self.arg_offsets[1:])
+        ]
+        dx_arguments = [dx_vec[i:i_next] if i_next > i + 1 else dx_vec[i]
+            for i, i_next in zip(self.arg_offsets[:-1], self.arg_offsets[1:])
+        ]
+        result = self.func(*x_arguments, *dx_arguments)
+
+        return [casadi.reshape(casadi.DM(result), self._outshape)]
+
+
 class CasadiFFI(casadi.Callback):
     """ Wrapper for a differentiable foreign function.
 
@@ -98,6 +167,7 @@ class CasadiFFI(casadi.Callback):
                  arguments: List[SymbolicArray],
                  shape: Tuple[int],
                  jacobian: Optional[Callable] = None,
+                 forwards: Optional[Callable] = None,
                  name: str = 'f',
                  opts={}):
         casadi.Callback.__init__(self)
@@ -108,12 +178,22 @@ class CasadiFFI(casadi.Callback):
         for arg in arguments:
             self._offsets.append(self._offsets[-1] + len(arg))
 
-        self._jacobian = None
+        self._jacobian = jacobian
+        self._forwards = forwards
         self._outs = shape[0]
         self._jacobian_impl = None
-        if jacobian is not None:
-            self._jacobian = jacobian
+        self._forwards_impl = None
+
         self.construct(name, opts)
+
+    def has_forward(self, nfwd):
+        return (nfwd == 1) and self._forwards is not None
+
+    def get_forward(self, nfwds, name,iname, oname, opts):
+        self._forwards_impl = CasadiForwards(
+            name, self._forwards, self.arguments, self._shape
+        )
+        return self._forwards_impl
 
     def has_jacobian(self):
         result = self._jacobian is not None
@@ -153,7 +233,9 @@ class CasadiFFI(casadi.Callback):
 def wrap_function(func: Function):
 
     impl = CasadiFFI(
-        func.function, func.arguments, func.shape, jacobian=func.jacobian
+        func.function, func.arguments, func.shape,
+        jacobian=func.jacobian,
+        forwards=func.forwards
     )
     shape = func.shape
     args = func.arguments

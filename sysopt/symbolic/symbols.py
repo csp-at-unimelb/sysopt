@@ -1013,18 +1013,35 @@ def evaluate_signal(signal, t):
 
 
 class Function(Algebraic):
-    """Wrapper for function calls."""
+    """Wrapper for function calls.
+
+    Args:
+        shape: Output shape of the function (only supports values of `(d,)`
+            where `d` is the output range.
+        function: The means of evaluating this function
+        arguments: The arguments to for this function
+
+    Keyword Args:
+        jacobian: Function that takes `arguments` and produces a list
+            of jacobians with respect to the given arguments
+        forwards: Function that takes the `arguments` and rates of change
+            for each argument, and produces the corresponding rate of change
+            of the function.
+
+    """
 
     def __init__(self,
-                 shape,
-                 function,
-                 arguments,
-                 jacobian=None,
+                 shape: Tuple[int],
+                 function: Callable,
+                 arguments: List[SymbolicArray],
+                 jacobian: Optional[Callable] = None,
+                 forwards: Optional[Callable] = None,
                  ):
         self._shape = shape
         self.function = function
         self.arguments = tuple(arguments)
         self.jacobian = jacobian
+        self.forwards = forwards
 
     def __repr__(self):
         args = ','.join(str(a) for a in self.arguments)
