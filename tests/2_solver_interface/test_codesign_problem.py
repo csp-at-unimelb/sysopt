@@ -7,6 +7,7 @@ from sysopt.block import Composite
 from sysopt.blocks import FullStateOutput, ConstantSignal
 from sysopt.symbolic import Variable, PiecewiseConstantSignal
 
+
 class LinearScalarEquation(Block):
     r"""Linear ODE of the form
 
@@ -138,13 +139,13 @@ def test_codesign_problem_with_path_variable():
     #
     plant_metadata = Metadata(
         inputs=['u'],
-        outputs=['x_0', 'x_1']
+        states=['x_0', 'x_1']
     )
     A = np.array([[0, 1],
                   [-1, 0]], dtype=float)
-    B = np.array([])
+    B = np.array([[1], [0]], dtype=float)
 
-    def f(x, u, _):
+    def f(t, x, u, _):
         return A @ x + B @ u
 
     def x0(_):
@@ -171,10 +172,31 @@ def test_codesign_problem_with_path_variable():
     with SolverContext(model, t_final=t_final) as context:
         y = model.outputs(t_final)
         constraint = [
-            y[0:2].T @ y[0:2] < 1e-9
+            y[0:2].T @ y[0:2] < 1e-9,
+            u <= 1,
+            u >= -1
         ]
         problem = context.problem(
             [t_final, u],
             cost=t_final,
             subject_to=constraint
         )
+        spec = problem.get_spec()
+        assert u in spec.parameters
+        assert t_final in spec.parameters
+        p, = spec.parameter_map.symbols()
+        t = get_time_variable()
+        expected_symbols = {
+            p, get_time_variable(),
+            model.outputs(t)
+        }
+        q, = spec.value.symbols() - expected_symbols
+        expected_symbols.add(q)
+        assert spec.parameters[u] == [-1, 1]
+
+        assert len(spec.point_constraints) == 1
+        constraint, = spec.point_constraints
+        assert constraint.symbols() == expected_symbols
+        y_f_test = np.array([1, 1, 0])
+        result = constraint(0, y_f_test, None, np.array([1, 1]))
+        assert result < -1.9, "Result should be near -2, with satisfaction >=0"

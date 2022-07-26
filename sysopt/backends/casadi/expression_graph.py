@@ -36,6 +36,18 @@ def compile_expression_graph(obj: GraphWrapper):
     return CasadiGraphWrapper(obj.graph, obj.arguments)
 
 
+def to_function(obj: GraphWrapper, name='f'):
+    symbols = {
+        s: casadi.MX.sym(str(s), *s.shape) for s in obj.arguments
+    }
+    impl = substitute(obj.graph, symbols)
+    return casadi.Function(
+        name,
+        list(symbols.values()),
+        [impl]
+    )
+
+
 class CasadiGraphWrapper(Algebraic):
     """Casadi function wrapper for a function compled from an
     expression graph."""

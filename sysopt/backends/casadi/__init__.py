@@ -8,6 +8,7 @@ from sysopt.backends.casadi.variational_solver import get_variational_integrator
 import sysopt.backends.casadi.codesign_problem
 import sysopt.backends.casadi.foreign_function
 
+
 epsilon = 1e-9
 
 

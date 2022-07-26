@@ -14,3 +14,4 @@ class PiecewiseConstantSignal(Variable):
         super().__init__(name, shape)
         self.frequency = frequency
 
+

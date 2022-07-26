@@ -72,14 +72,13 @@ class Arguments:
         return iter((self.t, self.x, self.z, self.u, self.p))
 
 
-
 def is_internal(wire: Connection) -> bool:
     src, dest = wire
     return src.block.parent == dest.block.parent
 
 
-def get_ports_and_indices(wire: Connection) \
-    -> Iterable[Tuple[Channel, Channel]]:
+def get_ports_and_indices(wire: Connection) -> \
+       Iterable[Tuple[Channel, Channel]]:
 
     src, dest = wire
 
@@ -91,7 +90,7 @@ def get_ports_and_indices(wire: Connection) \
 
 
 def projection_from_entries(entries: List[TableEntry],
-                            global_dim:int,
+                            global_dim: int,
                             local_dim: int) -> Matrix:
     shape = (local_dim, global_dim)
     m = sparse_matrix(shape)
@@ -102,7 +101,7 @@ def projection_from_entries(entries: List[TableEntry],
     return m
 
 
-def inclusion_from_entries(entries:List[TableEntry],
+def inclusion_from_entries(entries: List[TableEntry],
                            global_dim: int,
                            local_dim: int) -> Matrix:
     proj = projection_from_entries(entries, global_dim, local_dim)
@@ -155,12 +154,14 @@ def create_tables_from_blocks(*blocks):
 
     return base
 
+
 def global_dimension_of(table):
     if not table:
         return 0
     return 1 + max(entry.global_index for entry in table)
 
-def get_projections_for_block(tables:Tables , block: Block):
+
+def get_projections_for_block(tables: Tables, block: Block):
     projectors = {}
     for attr, local_dim in asdict(block.signature).items():
         if local_dim == 0:
@@ -182,9 +183,9 @@ def find_channel_in_table(table: List[TableEntry],
                           port: Port,
                           local_index: int) -> int:
 
-    def key(entry: TableEntry):
-        return (entry.block == str(port.block)
-                and entry.local_index == local_index)
+    def key(table_entry: TableEntry):
+        return (table_entry.block == str(port.block)
+                and table_entry.local_index == local_index)
 
     try:
         entry, = list(filter(key, table))
@@ -264,7 +265,7 @@ def forwarded_output_to_table_entry(tables: Tables,
     return entries
 
 
-def create_tables(all_blocks:List[Block]) -> Tables:
+def create_tables(all_blocks: List[Block]) -> Tables:
     if isinstance(all_blocks, Composite):
         return create_tables(tree_to_list(all_blocks))
 
@@ -295,6 +296,7 @@ def create_tables(all_blocks:List[Block]) -> Tables:
 
     return tables, domain
 
+
 def tree_to_list(block: Union[Composite, Block]) -> List[ComponentBase]:
     fifo = deque()
     fifo.append(block)
@@ -308,7 +310,6 @@ def tree_to_list(block: Union[Composite, Block]) -> List[ComponentBase]:
         except AttributeError:
             pass
     return result
-
 
 
 def create_symbols_from_domain(domain) -> Arguments:
@@ -349,6 +350,7 @@ def symbolically_evaluate_initial_conditions(block:Block,
         )
     return x0
 
+
 def symbolically_evaluate(block: Block,
                           func: Callable,
                           dimension: int,
@@ -376,7 +378,7 @@ def symbolically_evaluate(block: Block,
     if f.shape != (dimension, ):
         raise exceptions.FunctionError(
             block, func,
-            f'Expected shape {(dimension, )} but ' \
+            f'Expected shape {(dimension, )} but '
             f'the function returned a vector of shape {f.shape}'
         )
 

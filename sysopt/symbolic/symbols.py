@@ -1,4 +1,5 @@
 """Functions and factories to create symbolic variables."""
+import abc
 import weakref
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
@@ -414,6 +415,7 @@ class PathInequality(Inequality):
         from sysopt.symbolic.scalar_ops import exp
 
         return c, exp(rho * (c - g)) / (alpha * rho)
+
 
 def is_zero(arg, shape=scalar_shape):
     try:
@@ -1268,6 +1270,8 @@ def replace_signal(graph: ExpressionGraph, port, time, subs):
             # todo: should not be comparing by string (SYS-80)
             if str(signal_ref.port) == str(port) and eval_time == time:
                 return subs
+            else:
+                print(f'{eval_time}, {time}')
 
         return ExpressionGraph(obj, *args)
 
@@ -1275,6 +1279,7 @@ def replace_signal(graph: ExpressionGraph, port, time, subs):
 
 
 def is_temporal(symbol):
+
     if isinstance(symbol, PathInequality):
         return True
     if isinstance(symbol, ExpressionGraph):
@@ -1363,6 +1368,8 @@ def extract_quadratures(graph: Union[ExpressionGraph, Quadrature]) \
         -> Tuple[Algebraic, Variable, ExpressionGraph]:
 
     quadratures = {}
+    if isinstance(graph, (Variable, Parameter)):
+        return graph, None, None
 
     if isinstance(graph, Quadrature):
         q = Variable('q', shape=graph.integrand.shape)
@@ -1502,3 +1509,17 @@ def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
     return GraphWrapper(graph, arguments)
 
 
+def substitute(graph: ExpressionGraph, symbols: Dict[SymbolicAtom, Any]):
+
+    def on_leaf_node(node):
+        try:
+            return symbols[node]
+        except KeyError:
+            return node
+
+    def on_trunk_node(op, *args):
+        return ExpressionGraph(op, *args)
+
+    return recursively_apply(graph,
+                             trunk_function=on_trunk_node,
+                             leaf_function=on_leaf_node)

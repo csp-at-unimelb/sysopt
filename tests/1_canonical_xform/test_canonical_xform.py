@@ -183,7 +183,7 @@ class TestComposite:
     def test_correct_tables_are_generated(self):
         block = self.create_composite()
         all_blocks = xform.tree_to_list(block)
-        tables, domain  = xform.create_tables(all_blocks)
+        tables, domain = xform.create_tables(all_blocks)
         leaves = [b for b in all_blocks if isinstance(b, Block)]
 
         for leaf in leaves:
@@ -236,10 +236,78 @@ class TestComposite:
 
         assert g[0] == g_n
 
-
     def test_flattened_constraints(self):
         block = self.create_composite()
         system = xform.flatten_system(block)
         args, (x0_n, f_n, g_n, h_n) = self.get_test_data()
 
         h = system.constraints(*args)
+
+
+class TestSYS71Bug:
+
+    @staticmethod
+    def build_model():
+        from sysopt.blocks import FullStateOutput, ConstantSignal
+        model = Composite(name='Test Model')
+        # build a LQR model
+        #
+        plant_metadata = Metadata(
+            inputs=['u'],
+            states=['x_0', 'x_1']
+        )
+        A = np.array([[0, 1],
+                      [-1, 0]], dtype=float)
+        B = np.array([[1], [0]])
+
+        def f(t, x, u, _):
+            return A @ x + B @ u
+
+        def x0(_):
+            return np.array([0, 1])
+
+        plant = FullStateOutput(
+            dxdt=f,
+            metadata=plant_metadata,
+            x0=x0,
+            name='plant'
+        )
+        control = ConstantSignal(['u'])
+        model.components = [plant, control]
+        model.declare_outputs(['x_0', 'x_1', 'u'])
+        model.wires = [
+            (control.outputs, plant.inputs),
+            (control.outputs, model.outputs['u']),
+            (plant.outputs[0:2], model.outputs[0:2]),
+        ]
+        return model
+
+    def test_tables_are_correct(self):
+        model = self.build_model()
+        all_blocks = xform.tree_to_list(model)
+        leaves = list(filter(lambda b: not isinstance(b, Composite),
+                             all_blocks))
+        assert len(leaves) == 2
+        tables_raw = [
+            xform.create_tables_from_block(b) for b in leaves
+        ]
+        print(tables_raw)
+        # assert False
+
+    def test_scenario(self):
+        from sysopt.solver import SolverContext
+        # Fix for bug SYS-71
+        # Problem is that a fan-out system model is throwing errors
+        # ie; that when `get_symbolic_integrator` is called, it
+        # is unable to co
+        model = self.build_model()
+        constants = {p: 1 for p in model.parameters}
+
+        with SolverContext(model, t_final=1, constants=constants) as context:
+            y = model.outputs(1)
+            constraint = [
+                y[0:2].T @ y[0:2] < 1e-9
+            ]
+            f = context.get_symbolic_integrator()
+            # throws here!
+

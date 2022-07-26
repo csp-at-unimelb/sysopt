@@ -119,10 +119,12 @@ class TestForeignFunction:
         result = jac_F([1, 2, 3])
         test_result = np.hstack(
             [df_3(1, 2, 3, 1, 0, 0),
-            df_3(1, 2, 3,  0, 1, 0),
-            df_3(1, 2, 3, 0,  0, 1)])
+             df_3(1, 2, 3,  0, 1, 0),
+             df_3(1, 2, 3, 0,  0, 1)])
 
         expected_result = np.hstack(jac_f_3(1, 2, 3))
         assert (np.abs(test_result - expected_result) < 1e-4).all()
 
         assert (np.abs(result - expected_result) < 1e-4).all()
+
+
