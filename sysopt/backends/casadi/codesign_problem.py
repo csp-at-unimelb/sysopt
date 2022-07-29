@@ -1,6 +1,6 @@
 import casadi
 import math
-from typing import Union, Dict, List, Tuple
+from typing import Union, Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from collections import defaultdict, namedtuple
 import numpy as np
@@ -9,11 +9,11 @@ from sysopt.types import Domain
 from sysopt.backends.casadi.compiler import implements
 from sysopt.backends.casadi.expression_graph import substitute, to_function
 from sysopt.symbolic.problem_data import ConstrainedFunctional
-
+from sysopt.backends.casadi.foreign_function import CasadiForeignFunction
 from sysopt.backends.casadi.variational_solver import get_collocation_matrices
 from sysopt.symbolic.symbols import ConstantFunction, Parameter, \
     Variable, is_temporal, Inequality, PathInequality, GraphWrapper, \
-    get_time_variable, is_symbolic
+    Function, Compose
 # from sysopt.solver.solver import Problem
 from sysopt.symbolic.decision_variables import PiecewiseConstantSignal
 
@@ -65,7 +65,7 @@ class PiecewiseConstantFactory:
         self.upper = upper_bound
 
     def __call__(self, t):
-        index = math.floor(t * self._frequency)
+        index = max(math.ceil(t * self._frequency) - 1, 0)
 
         last = len(self._vector)
         while index >= last:
@@ -74,6 +74,11 @@ class PiecewiseConstantFactory:
             last = len(self._vector)
 
         return self._vector[index]
+
+    def regularisation_cost(self):
+        factor = 1 / len(self._vector)
+        return factor ** 2 * sum((v2 - v1)**2
+                    for v2, v1 in zip(self._vector[1:], self._vector[:-1]))
 
     def finalise(self):
         x = casadi.vertcat(*self._vector)
@@ -105,6 +110,8 @@ class CodesignSolverOptions:
     final_time: float = 1
     degree: int = 4
     grid_size: int = 100
+    solver: str = "ipopt"
+    solver_options: Optional[Dict] = None
 
 
 @dataclass
@@ -148,6 +155,15 @@ class ParameterFactory:
 
     def __call__(self, t):
         return casadi.vertcat(*[f(t) for f in self.factories])
+
+    def regularisation_cost(self):
+        cost = 0
+        for factory in self.factories:
+            try:
+               cost += factory.regularisation_cost()
+            except AttributeError:
+                pass
+        return cost
 
     def finalise(self):
         p = []
@@ -218,7 +234,7 @@ class StateFactory:
         h_impl = problem_data.algebraic_constraint(t, x, z, p)
 
         dae_spec = {
-            'x': casadi.vertcat(t,x),
+            'x': casadi.vertcat(t, x),
             'z': z,
             'p': p,
             'ode': f_impl,
@@ -458,12 +474,33 @@ def build_fixed_endpoint_codesign_problem(problem: ConstrainedFunctional,
         path_constraints=c_t,
         terminal_constraints=c_T,
     )
+    t_f = float(problem.final_time())
+    grid_size = 100
+    for parameter in problem.parameters:
+        try:
+            grid_size = max(np.ceil(t_f* parameter.frequency), grid_size)
+        except AttributeError:
+            pass
 
+    hessian_functions = [
+        *problem.path_constraints, problem.system.vector_field,
+        problem.system.output_map, problem.system.constraints
+    ]
     options = CodesignSolverOptions(
         degree=4,
         final_time=float(problem.final_time()),
-        grid_size=50
+        grid_size=int(grid_size),
+        solver='ipopt',
+        solver_options={}
     )
+    for f in [f_i for f_i in hessian_functions if f_i is not None] :
+        if any(isinstance(node, (Function, Compose))
+               for node in f.graph.nodes):
+            options.solver_options.update(
+                {'ipopt.hessian_approximation': 'limited-memory'}
+            )
+            print("Using Hessian Approximation")
+            break
     return data, options
 
 
@@ -472,9 +509,7 @@ data = namedtuple('data', ['symbol', 'lower', 'upper', 'initial'])
 
 def transcribe_problem(problem_data: CasadiCodesignProblemData,
                        options: CodesignSolverOptions, p_guess):
-    t_out = []
-    y_out = []
-    q_out = []
+
     equality_constraints = []   # all constraints == 0
     inequality_constraints = [] # all constraints >= 0
 
@@ -495,7 +530,9 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
     equality_constraints.append(x - x0)
     y = problem_data.outputs(t, x, z, p)
     dt = options.final_time / options.grid_size
-
+    t_out = [t]
+    y_out = [y]
+    q_out = [q]
     equality_constraints.append(problem_data.algebraic_constraint(t, x, z, p))
     inequality_constraints.append(problem_data.path_constraints(t, y, q, p))
 
@@ -545,7 +582,7 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
     inequality_constraints.append(problem_data.terminal_constraints(t, y, q, p))
     x_array, x_min, x_max, x_initial = state_factory.finalise()
     p_array, p_min, p_max, p_initial = param_factory.finalise()
-
+    cost += param_factory.regularisation_cost()
     nlp_vars = casadi.vertcat(p_array, x_array)
     nlp_min = casadi.vertcat(p_min, x_min)
     nlp_max = casadi.vertcat(p_max, x_max)
@@ -575,8 +612,9 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
         'lam_x0': np.zeros(nlp_init.shape),
         'lam_g0': np.zeros(c_max.shape)
     }
-
-    solver = casadi.nlpsol('solver', 'ipopt', nlp_spec)
+    # opts = {'ipopt.hessian_approximation':'limited-memory'}
+    opts = {}
+    solver = casadi.nlpsol('solver', 'ipopt', nlp_spec, opts)
 
     sol_to_min_and_argmin = casadi.Function(
         'argmim',
@@ -623,9 +661,12 @@ class FixedTimeCodesignProblem:
         )
 
         result = solver(**solver_args)
-        value = result['f']
-        argmin = prob(result['x'])
-        t, y, q = path(result['x'])
+        value = result['f'].full()
+        if len(initial_values) > 1:
+            argmin = [arg.full() for arg in prob(result['x'])]
+        else:
+            argmin = prob(result['x']).full()
+        t, y, q = [a.full() for a in path(result['x'])]
 
         return CodesignSolution(
             cost=value,

@@ -5,7 +5,6 @@ from sysopt.symbolic.symbols import wrap_as_op, numpy_handlers
 import sysopt.backends as backend
 
 exp = wrap_as_op(backend.exp, 1, numpy_func=np.exp)
-
 log = wrap_as_op(backend.log, 1, numpy_func=np.log)
 sin = wrap_as_op(backend.sin, 1, numpy_func=np.sin)
 cos = wrap_as_op(backend.cos, 1, numpy_func=np.cos)
@@ -19,6 +18,7 @@ tanh = wrap_as_op(backend.tanh, 1, numpy_func=np.tanh)
 asinh = wrap_as_op(backend.asinh, 1, numpy_func=np.arcsinh)
 acosh = wrap_as_op(backend.acosh, 1, numpy_func=np.arccosh)
 atanh = wrap_as_op(backend.atanh, 1, numpy_func=np.arctanh)
+fabs = wrap_as_op(backend.fabs, 1, numpy_func=np.abs)
 
 heaviside = wrap_as_op(backend.heaviside, 1)
 numpy_handlers[np.heaviside] = lambda x, x0, *args, **kwargs: heaviside(x)

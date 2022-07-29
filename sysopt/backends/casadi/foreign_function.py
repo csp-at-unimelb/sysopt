@@ -42,7 +42,6 @@ class CasadiJacobian(casadi.Callback):
             self.arg_offsets.append(n)
         m, = f_shape
         self._shape = (m, n)
-
         self.construct(name, opts)
 
     def get_n_in(self):
@@ -110,9 +109,8 @@ class CasadiForwards(casadi.Callback):
             self.arg_lengths.append(len(arg))
             self.arg_offsets.append(n)
         m, = f_shape
-        self._inshape = (n ,1)
+        self._inshape = (n, 1)
         self._outshape = (m, 1)
-
         self.construct(name, opts)
 
     def get_n_in(self):
@@ -183,7 +181,6 @@ class CasadiFFI(casadi.Callback):
         self._outs = shape[0]
         self._jacobian_impl = None
         self._forwards_impl = None
-
         self.construct(name, opts)
 
     def has_forward(self, nfwd):
