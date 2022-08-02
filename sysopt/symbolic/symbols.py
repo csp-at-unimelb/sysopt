@@ -13,10 +13,8 @@ from sysopt.exceptions import InvalidShape, EvaluationError
 array = np.array
 epsilon = 1e-12
 
-SymbolicAtom = NewType('SymbolicAtom', Union['Variable', 'Parameter'])
-SymbolicArray = NewType(
-    'SymbolicArray', Union[List[SymbolicAtom], Tuple[SymbolicAtom]]
-)
+SymbolicArray = NewType('SymbolicArray',
+                        Union[List['Variable'], Tuple['Variable']])
 
 
 class Matrix(np.ndarray):
@@ -57,7 +55,7 @@ class Matrix(np.ndarray):
 
 def as_array(
     item: Union[List[Union[int, float]], int, float, np.ndarray],
-    prototype: SymbolicAtom =None):
+    prototype: Variable =None):
 
     if isinstance(item, Algebraic):
         return item
@@ -954,7 +952,7 @@ class Compose(Algebraic):
 
     """
 
-    def __init__(self, function: Function, arguments: Dict[SymbolicAtom, Any]):
+    def __init__(self, function: Function, arguments: Dict[Variable, Any]):
         self.function = function
         self.arg_map = arguments
         self.arguments = ordered_set.OrderedSet()
@@ -1358,7 +1356,7 @@ class ConstantFunction(Algebraic):
 class GraphWrapper(Algebraic):
     """Wraps an expression graph with the specified arguments."""
 
-    def __init__(self, graph: ExpressionGraph, arguments: List[SymbolicAtom]):
+    def __init__(self, graph: ExpressionGraph, arguments: List[Variable]):
         self.arguments = tuple(arguments)
         unbound_symbols = {
             s for s in graph.symbols() if s not in arguments
@@ -1376,7 +1374,7 @@ class GraphWrapper(Algebraic):
     def shape(self):
         return self.graph.shape
 
-    def call(self, args: Dict[SymbolicAtom, Any]):
+    def call(self, args: Dict[Variable, Any]):
 
         symbols = self.graph.symbols()
         inner_args = {
@@ -1410,7 +1408,7 @@ class GraphWrapper(Algebraic):
         return self._impl.pushforward(*args)
 
 
-def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
+def function_from_graph(graph: ExpressionGraph, arguments: List[Variable]):
     if not isinstance(graph, ExpressionGraph):
         if graph is None:
             return None
@@ -1419,7 +1417,7 @@ def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
     return GraphWrapper(graph, arguments)
 
 
-def substitute(graph: ExpressionGraph, symbols: Dict[SymbolicAtom, Any]):
+def substitute(graph: ExpressionGraph, symbols: Dict[Variable, Any]):
 
     def on_leaf_node(node):
         try:
