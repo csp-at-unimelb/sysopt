@@ -4,13 +4,13 @@ from typing import Dict, List
 
 import casadi
 from sysopt.symbolic import is_matrix, recursively_apply, \
-    SymbolicAtom, ExpressionGraph, Algebraic, GraphWrapper, Function, Compose
+    Variable, ExpressionGraph, Algebraic, GraphWrapper, Function, Compose
 
 from .compiler import implements, get_implementation
 
 
 def substitute(graph: ExpressionGraph,
-               symbols: Dict[SymbolicAtom, casadi.MX]):
+               symbols: Dict[Variable, casadi.MX]):
 
     def leaf_function(obj):
         if is_matrix(obj) or isinstance(obj, (int, float, complex)):
@@ -36,13 +36,25 @@ def compile_expression_graph(obj: GraphWrapper):
     return CasadiGraphWrapper(obj.graph, obj.arguments)
 
 
+def to_function(obj: GraphWrapper, name='f'):
+    symbols = {
+        s: casadi.MX.sym(str(s), *s.shape) for s in obj.arguments
+    }
+    impl = substitute(obj.graph, symbols)
+    return casadi.Function(
+        name,
+        list(symbols.values()),
+        [impl]
+    )
+
+
 class CasadiGraphWrapper(Algebraic):
     """Casadi function wrapper for a function compled from an
     expression graph."""
 
     def __init__(self,
                  graph: ExpressionGraph,
-                 arguments: List[SymbolicAtom],
+                 arguments: List[Variable],
                  name: str = 'f'):
         self._shape = graph.shape
         self._symbols = {

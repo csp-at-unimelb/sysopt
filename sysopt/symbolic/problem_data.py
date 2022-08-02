@@ -2,14 +2,16 @@
 
 from collections import namedtuple
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple, Union
+from typing import Optional, List, Tuple, Union, Dict
 
 import numpy as np
 
 from sysopt.types import Domain
 from sysopt.symbolic.symbols import (
-    Matrix, Variable, ExpressionGraph, Parameter,ConstantFunction
+    Matrix, Variable, ExpressionGraph, ConstantFunction,
+    GraphWrapper
 )
+from sysopt.symbolic.decision_variables import Parameter
 
 
 Bounds = namedtuple('Bounds', ['upper', 'lower'])
@@ -18,23 +20,23 @@ Bounds = namedtuple('Bounds', ['upper', 'lower'])
 @dataclass
 class FlattenedSystem:
     """Container for flattened system functions."""
-    initial_conditions: Optional[ExpressionGraph] = None
-    vector_field: Optional[ExpressionGraph] = None
+    initial_conditions: Optional[GraphWrapper] = None
+    vector_field: Optional[GraphWrapper] = None
     state_transitions: Optional[Tuple[int,
-                                      ExpressionGraph,
+                                      GraphWrapper,
                                       Optional[ExpressionGraph]]] = None
-    output_map: Optional[ExpressionGraph] = None
-    constraints: Optional[ExpressionGraph] = None
+    output_map: Optional[GraphWrapper] = None
+    constraints: Optional[GraphWrapper] = None
     tables: Optional[dict] = None
     domain: Domain = None
-    parameter_map: Optional[ExpressionGraph] = None
+    parameter_map: Optional[GraphWrapper] = None
 
 
 @dataclass
 class Quadratures:
     """Container for quadratures associated with a given system."""
     output_variable: Variable
-    vector_quadrature: ExpressionGraph
+    vector_quadrature: Union[ExpressionGraph, GraphWrapper]
     regularisers: List[Variable] = field(default_factory=list)
 
 
@@ -58,7 +60,7 @@ class ConstrainedFunctional:
 
     """
 
-    value: ExpressionGraph
+    value: GraphWrapper
     """Represents a function from `(t, p, rho) -> value`
     Implicit arguments are `y(t)` and `q(t)` which are paths
     generated from solving an integral equation."""
@@ -66,24 +68,22 @@ class ConstrainedFunctional:
     system: FlattenedSystem
     """System level model which produces the path `p -> y(t; p)` """
 
-    parameters: List[str]
-    """Names of each of the free parameters"""
+    parameters: Dict[Parameter, List[int]]
+    """List of the free parameters"""
 
-    parameter_map: ExpressionGraph
+    parameter_map: Union[GraphWrapper, ConstantFunction]
     """Mapping from the free parameters to the system parameters"""
 
-    quadratures: ExpressionGraph
+    quadratures: Optional[GraphWrapper]
     """Vector-valued quadratures that are solved along side y(t);
     ie so that p-> (y(t;p), q(t;p))"""
 
-    final_time: Union[ExpressionGraph, ConstantFunction]
+    final_time: Union[GraphWrapper, ConstantFunction]
     """Terminal time, (interpreted as a function of p)"""
 
-    constraints: List[ExpressionGraph] = field(default_factory=list)
+    point_constraints: List[GraphWrapper] = field(default_factory=list)
     """List of equality or inequality constraints"""
-
-    regularisers: List[Variable] = field(default_factory=list)
-    """List of regularisers for non-smooth functions"""
+    path_constraints: List[GraphWrapper] = field(default_factory=list)
 
 
 @dataclass

@@ -143,9 +143,6 @@ class SolverContext:
 
         return q[index]
 
-    def solve(self, problem):
-        raise NotImplementedError
-
     def integrate(self, parameters=None, t_final=None, resolution=50):
 
         integrator = self.get_integrator(resolution)
@@ -215,8 +212,9 @@ class Problem:
 
         self._context = weakref.ref(context)
         self.arguments = arguments
-        self.constraints = constraints if constraints else []
-        self._regularisers = []
+        """Symbolic variables matching the unbound parameters"""
+        self.constraints: List[symbolic.Inequality] = constraints or []
+
         self._impl = None
         self._terminal_cost = None
         self._cost = cost
@@ -229,40 +227,64 @@ class Problem:
     def cost(self):
         return self._cost
 
-    def get_implementation(self):
+    def _get_problem_specification(self):
         context = self.context
         param_args, parameters, t_final, param_map = create_parameter_map(
             self.context.model, self.context.constants, self.context.t_final,
         )
-
-        terminal_cost, q, dot_q = symbolic.extract_quadratures(self.cost)
-
+        t = get_time_variable()
         y = self.context.model.outputs(context.t)
-        y_final = symbolic.symbolic_vector('y_T',
-            self.context.flattened_system.output_map.shape[0]
+        symbols = {
+            self.arguments[i]: param_args[i]
+            for i, p_i in enumerate(parameters)
+        }
+        terminal_cost, q, dot_q = symbolic.extract_quadratures(self.cost)
+        terminal_cost = symbolic.replace_signal(
+            terminal_cost, y, context.t_final, y
         )
-        terminal_cost = symbolic.replace_signal(terminal_cost,
-                                                y, context.t_final, y_final)
+        terminal_cost = symbolic.substitute(terminal_cost, symbols)
 
-        t_f = self.context.t_final if is_symbolic(self.context.t_final)\
-            else self.context.t
+        if dot_q:
+            dot_q = GraphWrapper(symbolic.substitute(dot_q, symbols),
+                                 [t, y, param_args])
 
         if q is not None:
-            cost_args = [
-                t_f,
-                y_final,
-                q,
-                param_args
-            ]
+            cost_args = [t, y, q, param_args]
         else:
-            cost_args = [
-                t_f,
-                y_final,
-                param_args
-            ]
+            cost_args = [t, y,
+                         symbolic.symbolic_vector('q', 0),
+                         param_args]
 
-        cost_fn = symbolic.function_from_graph(
-            terminal_cost, cost_args)
+        cost_fn = symbolic.function_from_graph(terminal_cost, cost_args)
+        parameters = {
+            a: [-np.inf, np.inf] for a in self.arguments
+        }
+        path_constraints = []
+        point_constraints = []
+        for constraint in self.constraints:
+            if is_box_constraint(constraint, parameters.keys()):
+                smaller = constraint.smaller
+                bigger = constraint.bigger
+                if smaller in parameters:
+                    old_max = parameters[smaller][1]
+                    parameters[smaller][1] = min(old_max, bigger)
+                    continue
+                elif bigger in parameters:
+                    old_min = parameters[bigger][0]
+                    parameters[bigger][0] = max(old_min, smaller)
+                    continue
+            if symbolic.is_temporal(constraint):
+                c = symbolic.substitute(constraint.to_graph(), symbols)
+                path_constraints.append(GraphWrapper(c, cost_args))
+            else:
+                c = symbolic.replace_signal(
+                    constraint.to_graph(),
+                    y, context.t_final, y
+                )
+
+                c = symbolic.substitute(c, symbols)
+
+                point_constraints.append(GraphWrapper(c, cost_args))
 
         spec = ConstrainedFunctional(
             final_time=t_final,
@@ -270,30 +292,39 @@ class Problem:
             system=self.context.flattened_system,
             quadratures=dot_q,
             value=cost_fn,
-            parameters=[str(p) for p in parameters],
-            constraints=self.constraints
+            parameters=parameters,
+            point_constraints=point_constraints,
+            path_constraints=path_constraints
         )
         self._terminal_cost = cost_fn
-        return get_implementation(spec)
+        return spec
 
     def __call__(self, args):
         """Evaluate the problem with the given arguments."""
-        _ = self.get_implementation()
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
+        spec = self._get_problem_specification()
+
+        _ = get_implementation(spec)
 
         integrator = self.context.get_integrator()
 
-        t = self.context.t_final
-        y, q = integrator(t, args)
-        cost = self._terminal_cost(t, y, q, args)
+        t = self.context._params_to_t_final(args)
+        p = self.context.parameter_map(args)
+
+        if self.context.quadratures:
+            y, q = integrator(t, p)
+        else:
+            y = integrator(t, p)
+            q = None
+        cost = self._terminal_cost(t, y, q, p)
 
         return cost
 
     def jacobian(self, args):
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
-        _ = self.get_implementation()
+        _ = self._get_problem_specification()
         # create a functional object
         # with
         # - vector field
@@ -312,6 +343,12 @@ class Problem:
                                                        0, dy, dq, basis)
             jac[i] = dcost
         return jac
+
+    def solve(self, initial_values):
+
+        problem = self._get_problem_specification()
+        solver = get_implementation(problem)
+        return solver.minimise(initial_values)
 
 
 def create_parameter_map(model, constants, final_time):
@@ -360,3 +397,13 @@ def create_parameter_map(model, constants, final_time):
     else:
         p_func = ConstantFunction(param_constants, args)
     return args, params, t_func, p_func
+
+
+def is_box_constraint(constraint: symbolic.Inequality, symbols):
+    try:
+        return ((constraint.smaller in symbols
+                 and not is_symbolic(constraint.bigger))
+                or (constraint.bigger in symbols
+                    and not is_symbolic(constraint.smaller)))
+    except AttributeError:
+        return False

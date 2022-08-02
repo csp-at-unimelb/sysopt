@@ -4,7 +4,7 @@ from sysopt.symbolic import (
 )
 
 from sysopt.symbolic.symbols import get_time_variable
-import sysopt.symbolic.scalar_ops as scalar_ops
+import sysopt.backends.scalar_ops as scalar_ops
 
 from sysopt.blocks import Gain, Oscillator
 from sysopt.block import Composite

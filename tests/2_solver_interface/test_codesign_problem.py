@@ -3,8 +3,9 @@ import sympy as sp
 from sysopt.types import *
 from sysopt.block import Block
 from sysopt.solver.solver import Problem, SolverContext, get_time_variable
-
-
+from sysopt.block import Composite
+from sysopt.blocks import FullStateOutput, ConstantSignal
+from sysopt.symbolic import Variable, PiecewiseConstantSignal
 
 
 class LinearScalarEquation(Block):
@@ -130,3 +131,72 @@ def test_codesign_problem_1():
 
         grad_known = Problem1.tangent_space(p0, t=1)
         assert (jac - grad_known < 1e-4).all()
+
+
+def test_codesign_problem_with_path_variable():
+    model = Composite(name='Test Model')
+    # build a LQR model
+    #
+    plant_metadata = Metadata(
+        inputs=['u'],
+        states=['x_0', 'x_1']
+    )
+    A = np.array([[0, 1],
+                  [-1, 0]], dtype=float)
+    B = np.array([[1], [0]], dtype=float)
+
+    def f(t, x, u, _):
+        return A @ x + B @ u
+
+    def x0(_):
+        return np.array([0, 1])
+
+    plant = FullStateOutput(
+        dxdt=f,
+        metadata=plant_metadata,
+        x0=x0,
+        name='plant'
+    )
+    control = ConstantSignal(['u'])
+    model.components = [plant, control]
+    model.declare_outputs(['x_0', 'x_1', 'u'])
+    model.wires = [
+        (control.outputs, plant.inputs),
+        (control.outputs[0], model.outputs[2]),
+        (plant.outputs[0], model.outputs[0]),
+        (plant.outputs[1], model.outputs[1])
+    ]
+
+    u = PiecewiseConstantSignal('u', frequency=10)
+    t_final = Variable('t_f')
+    with SolverContext(model, t_final=t_final) as context:
+        y = model.outputs(t_final)
+        constraint = [
+            y[0:2].T @ y[0:2] < 1e-9,
+            u <= 1,
+            u >= -1
+        ]
+        problem = context.problem(
+            [t_final, u],
+            cost=t_final,
+            subject_to=constraint
+        )
+        spec = problem._get_problem_specification()
+        assert u in spec.parameters
+        assert t_final in spec.parameters
+        p, = spec.parameter_map.symbols()
+        t = get_time_variable()
+        expected_symbols = {
+            p, get_time_variable(),
+            model.outputs(t)
+        }
+        q, = spec.value.symbols() - expected_symbols
+        expected_symbols.add(q)
+        assert spec.parameters[u] == [-1, 1]
+
+        assert len(spec.point_constraints) == 1
+        constraint, = spec.point_constraints
+        assert constraint.symbols() == expected_symbols
+        y_f_test = np.array([1, 1, 0])
+        result = constraint(0, y_f_test, None, np.array([1, 1]))
+        assert result < -1.9, "Result should be near -2, with satisfaction >=0"

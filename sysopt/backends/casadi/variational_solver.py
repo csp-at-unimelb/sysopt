@@ -22,13 +22,13 @@ Problem = namedtuple(
 default_options = SolverOptions()
 
 
-def generate_collocation_matrixes(degree):
+def get_collocation_matrices(degree):
     collocation_times = np.append(
         0, casadi.collocation_points(degree, 'legendre')
     )
     collocation_coeeff = np.zeros((degree + 1, degree + 1))
     continuity_coeff = np.zeros(degree + 1)
-    quadrature_coeff = np.zeros_like(continuity_coeff)
+    quad_coeff = np.zeros_like(continuity_coeff)
 
     for i in range(degree + 1):
         tau_i = collocation_times[i]
@@ -42,12 +42,9 @@ def generate_collocation_matrixes(degree):
         collocation_coeeff[i, :] = [
             dbasis_i(tau_j) for tau_j in collocation_times
         ]
-        quadrature_coeff[i] = np.polyint(basis_i)(1.0)
+        quad_coeff[i] = np.polyint(basis_i)(1.0)
 
-    return collocation_times, \
-           collocation_coeeff, \
-           continuity_coeff, \
-           quadrature_coeff
+    return collocation_times, collocation_coeeff, continuity_coeff, quad_coeff
 
 
 def _get_solver(t_final: float,
@@ -55,7 +52,7 @@ def _get_solver(t_final: float,
                 options: SolverOptions):
 
     # Direct Collocation method
-    times, colloc_coeff, diff_coeff, quad_coeff = generate_collocation_matrixes(
+    times, colloc_coeff, diff_coeff, quad_coeff = get_collocation_matrices(
         options.degree
     )
 
@@ -90,7 +87,7 @@ def _get_solver(t_final: float,
 
     dim_x, _ = problem.state[0].shape
     dim_u, _ = problem.control[0].shape
-    # total_size = steps * ((options.degree + 1) * dim_x + dim_u) + dim_x
+
     x_lower, x_upper = problem.state[1]
     u_lower, u_upper = problem.control[1]
 

@@ -6,7 +6,7 @@ from dataclasses import asdict
 from sysopt.types import (Signature, Metadata, Time, States, Parameters,
                           Inputs, Algebraics, Numeric)
 
-from sysopt.symbolic.symbols import SignalReference, restriction_map
+from sysopt.symbolic import SignalReference, restriction_map
 from sysopt.exceptions import (
     DanglingInputError, InvalidWire, UnconnectedInputError,
     InvalidComponentError, UnconnectedOutputError, InvalidPort

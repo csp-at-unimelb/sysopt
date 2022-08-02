@@ -6,7 +6,7 @@ from casadi import (
     cos, cosh, acos, acosh,
     tan, tanh, atan, atanh, atan2,
     exp, log, power,
-    fmax, fmin, sign
+    fmax, fmin, sign, fabs
 )
 import casadi as __casadi
 

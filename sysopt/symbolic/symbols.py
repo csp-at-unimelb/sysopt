@@ -13,26 +13,8 @@ from sysopt.exceptions import InvalidShape, EvaluationError
 array = np.array
 epsilon = 1e-12
 
-SymbolicAtom = NewType('SymbolicAtom', Union['Variable', 'Parameter'])
-SymbolicArray = NewType(
-    'SymbolicArray', Union[List[SymbolicAtom], Tuple[SymbolicAtom]]
-)
-
-
-def find_param_index_by_name(block, name: str):
-    try:
-        return block.find_by_name('parameters', name)
-    except (AttributeError, ValueError):
-        pass
-    try:
-        return block.parameters.index(name)
-    except ValueError:
-        pass
-    try:
-        return block.parameters.index(f'{str(block)}/{name}')
-    except ValueError:
-        pass
-    raise ValueError(f'Could not find parameter \'{name}\' in block {block}.')
+SymbolicArray = NewType('SymbolicArray',
+                        Union[List['Variable'], Tuple['Variable']])
 
 
 class Matrix(np.ndarray):
@@ -72,8 +54,8 @@ class Matrix(np.ndarray):
 
 
 def as_array(
-    item: Union[List[Union[int, float]], int, float, np.ndarray],
-    prototype: SymbolicAtom =None):
+        item: Union[List[Union[int, float]], int, float, np.ndarray],
+        prototype: 'Variable' = None):
 
     if isinstance(item, Algebraic):
         return item
@@ -302,7 +284,6 @@ def power(base, exponent):
     return base ** exponent
 
 
-
 @register_op(string='+')
 def add(lhs, rhs):
     return lhs + rhs
@@ -312,6 +293,7 @@ def add(lhs, rhs):
 def sub(lhs, rhs):
     return lhs - rhs
 
+
 def is_scalar(item):
     if isinstance(item, (float, int, complex)):
         return True
@@ -320,6 +302,7 @@ def is_scalar(item):
     except AttributeError:
         pass
     return False
+
 
 @register_op(shape_func=matmul_shape, string='@')
 def matmul(lhs, rhs):
@@ -406,14 +389,16 @@ class PathInequality(Inequality):
             the constraint is violated.
 
         """
+
         c = Variable('c')
         rho = regulariser
         g = self.to_graph()
         # TODO: fix me
         # pylint: disable=import-outside-toplevel
-        from sysopt.symbolic.scalar_ops import exp
+        from sysopt.backends.scalar_ops import exp
 
         return c, exp(rho * (c - g)) / (alpha * rho)
+
 
 def is_zero(arg, shape=scalar_shape):
     try:
@@ -573,9 +558,7 @@ def recursively_apply(graph: 'ExpressionGraph',
         return leaf_function(graph.value)
     if isinstance(graph, GraphWrapper):
         return recursively_apply(graph.graph, trunk_function, leaf_function)
-    if isinstance(graph, (Parameter, Variable)):
-        return leaf_function(graph)
-    if isinstance(graph, (int, float, np.ndarray)):
+    if not isinstance(graph, ExpressionGraph):
         return leaf_function(graph)
     sorted_nodes = graph.get_topological_sorted_indices()
     trunk_indices = {i for i in sorted_nodes if i in graph.edges}
@@ -895,118 +878,6 @@ numpy_handlers.update(
 )
 
 
-def symbolic_vector(name, length=1):
-    return Variable(name, shape=(length, ))
-
-
-class Variable(Algebraic):
-    """Symbolic type for a free variable."""
-    is_symbolic = True
-    __array_ufunc__ = None
-
-    def __init__(self, name=None, shape=scalar_shape):
-        self._shape = (shape, ) if isinstance(shape, int) else shape
-        self.name = name
-
-    def __str__(self):
-        shape_str = 'x'.join(str(n) for n in self.shape)
-        return f'{self.name}^({shape_str})'
-
-    def __repr__(self):
-        if self.name is not None:
-            return f'{self.__class__.__name__}({self.name}, {self.shape})'
-        else:
-            return 'unnamed_variable'
-
-    @property
-    def shape(self):
-        return self._shape
-
-    def symbols(self):
-        return {self}
-
-    def __hash__(self):
-        return hash(id(self))
-
-    def __cmp__(self, other):
-        return id(self) == id(other)
-
-
-_t = Variable('time')
-
-
-def resolve_parameter_uid(block, index):
-    name = block.parameters[index]
-    return hash(name)
-
-
-class Parameter(Algebraic):
-    """Symbolic type for variables bound to a block parameter.
-
-    Args:
-        block: The model block from which to derive the symbolic parameter.
-        parameter: Index or name of the desired symbolic parameter.
-
-    """
-    _table = {}
-
-    def __new__(cls, block, parameter: Union[str, int]):
-
-        if isinstance(parameter, str):
-            index = find_param_index_by_name(block, parameter)
-        else:
-            index = parameter
-        assert 0 <= index < len(block.parameters),\
-            f'Invalid parameter index for {block}: got {parameter},'\
-            f'expected a number between 0 and {len(block.parameters)}'
-
-        uid = resolve_parameter_uid(block, index)
-
-        try:
-            obj = Parameter._table[uid]
-            return obj
-        except KeyError:
-            pass
-        obj = Algebraic.__new__(cls)
-        obj.__init__()
-        setattr(obj, 'uid', uid)
-        setattr(obj, 'index', index)
-        setattr(obj, '_parent', weakref.ref(block))
-        Parameter._table[uid] = obj
-        return obj
-
-    def __hash__(self):
-        return hash(self.uid)
-
-    def __cmp__(self, other):
-        try:
-            return self.uid == other.uid
-        except AttributeError:
-            return False
-
-    def get_source_and_slice(self):
-        return self._parent(), slice(self.index, self.index + 1, None)
-
-    @property
-    def name(self):
-        parent = self._parent()
-        return parent.parameters[self.index]
-
-    def __repr__(self):
-        return self.name
-
-    @property
-    def shape(self):
-        return scalar_shape
-
-    def symbols(self):
-        return {self}
-
-    @staticmethod
-    def from_block(block):
-        return [Parameter(block, i) for i in range(len(block.parameters))]
-
-
 @register_op()
 def evaluate_signal(signal, t):
     return signal(t)
@@ -1081,7 +952,7 @@ class Compose(Algebraic):
 
     """
 
-    def __init__(self, function: Function, arguments: Dict[SymbolicAtom, Any]):
+    def __init__(self, function: Function, arguments: Dict['Variable', Any]):
         self.function = function
         self.arg_map = arguments
         self.arguments = ordered_set.OrderedSet()
@@ -1241,6 +1112,45 @@ def as_vector(arg):
     )
 
 
+class Variable(Algebraic):
+    """Symbolic type for a free variable."""
+    is_symbolic = True
+    __array_ufunc__ = None
+
+    def __init__(self, name=None, shape=scalar_shape):
+        self._shape = (shape, ) if isinstance(shape, int) else shape
+        self._name = name
+
+    def __str__(self):
+        shape_str = 'x'.join(str(n) for n in self.shape)
+        return f'{self.name}^({shape_str})'
+
+    def __repr__(self):
+        if self.name is not None:
+            return f'{self.__class__.__name__}({self.name}, {self.shape})'
+        else:
+            return 'unnamed_variable'
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def shape(self):
+        return self._shape
+
+    def symbols(self):
+        return {self}
+
+    def __hash__(self):
+        return hash(id(self))
+
+    def __cmp__(self, other):
+        return id(self) == id(other)
+
+
+_t = Variable('time')
+
 def get_time_variable():
     return _t
 
@@ -1268,6 +1178,8 @@ def replace_signal(graph: ExpressionGraph, port, time, subs):
             # todo: should not be comparing by string (SYS-80)
             if str(signal_ref.port) == str(port) and eval_time == time:
                 return subs
+            else:
+                print(f'{eval_time}, {time}')
 
         return ExpressionGraph(obj, *args)
 
@@ -1275,6 +1187,7 @@ def replace_signal(graph: ExpressionGraph, port, time, subs):
 
 
 def is_temporal(symbol):
+
     if isinstance(symbol, PathInequality):
         return True
     if isinstance(symbol, ExpressionGraph):
@@ -1363,6 +1276,8 @@ def extract_quadratures(graph: Union[ExpressionGraph, Quadrature]) \
         -> Tuple[Algebraic, Variable, ExpressionGraph]:
 
     quadratures = {}
+    if isinstance(graph, (Variable)):
+        return graph, None, None
 
     if isinstance(graph, Quadrature):
         q = Variable('q', shape=graph.integrand.shape)
@@ -1408,7 +1323,7 @@ def extract_quadratures(graph: Union[ExpressionGraph, Quadrature]) \
 
 class ConstantFunction(Algebraic):
     """Wrap a constant value and treat it like a function."""
-    def __init__(self, value, arguments: List[Union[Variable, Parameter]]):
+    def __init__(self, value, arguments: List[Variable]):
         if isinstance(value, np.ndarray):
             self.value = value.view(Matrix)
         elif isinstance(value, (list, tuple)):
@@ -1441,7 +1356,7 @@ class ConstantFunction(Algebraic):
 class GraphWrapper(Algebraic):
     """Wraps an expression graph with the specified arguments."""
 
-    def __init__(self, graph: ExpressionGraph, arguments: List[SymbolicAtom]):
+    def __init__(self, graph: ExpressionGraph, arguments: List[Variable]):
         self.arguments = tuple(arguments)
         unbound_symbols = {
             s for s in graph.symbols() if s not in arguments
@@ -1459,7 +1374,7 @@ class GraphWrapper(Algebraic):
     def shape(self):
         return self.graph.shape
 
-    def call(self, args: Dict[SymbolicAtom, Any]):
+    def call(self, args: Dict[Variable, Any]):
 
         symbols = self.graph.symbols()
         inner_args = {
@@ -1493,7 +1408,7 @@ class GraphWrapper(Algebraic):
         return self._impl.pushforward(*args)
 
 
-def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
+def function_from_graph(graph: ExpressionGraph, arguments: List[Variable]):
     if not isinstance(graph, ExpressionGraph):
         if graph is None:
             return None
@@ -1502,4 +1417,18 @@ def function_from_graph(graph: ExpressionGraph, arguments: List[SymbolicAtom]):
     return GraphWrapper(graph, arguments)
 
 
+def substitute(graph: ExpressionGraph, symbols: Dict[Variable, Any]):
+
+    def on_leaf_node(node):
+        try:
+            return symbols[node]
+        except KeyError:
+            return node
+
+    def on_trunk_node(op, *args):
+        return ExpressionGraph(op, *args)
+
+    return recursively_apply(graph,
+                             trunk_function=on_trunk_node,
+                             leaf_function=on_leaf_node)
 
