@@ -397,7 +397,7 @@ def build_fixed_endpoint_codesign_problem(problem: ConstrainedFunctional,
         *problem.path_constraints, problem.system.vector_field,
         problem.system.output_map, problem.system.constraints
     ]
-    options.final_time = float(problem.final_time()),
+    options.final_time = float(problem.final_time())
     options.grid_size = int(grid_size)
     options.solver = 'ipopt'
 
@@ -431,6 +431,7 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
 
     x0 = problem_data.initial_conditions(p)
     t_grid = np.linspace(0, options.final_time, options.grid_size + 1)
+
     state_factory = StateFactory(problem_data, t_grid, p_guess)
 
     x, z = state_factory.new_terminal(0)
