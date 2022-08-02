@@ -139,8 +139,6 @@ def test_codesign_problem_1():
         assert (jac - grad_known < 1e-4).all()
 
 
-
-
 class TestCasadiCodesign:
     def test_constrained_functional(self):
         # vector field
@@ -156,10 +154,10 @@ class TestCasadiCodesign:
         y = casadi.MX.sym('y', 3)
         x = casadi.vertcat(x_0, x_1)
         args = [t, x, u, p]
-        vector_field = casadi.Function('f', args, [casadi.vertcat(-x_1 + u, x_0)])
+        vector_field = casadi.Function('f', args, [10 * casadi.vertcat(-x_1 + u, x_0)])
         outputs = casadi.Function('g', args, [casadi.vertcat(x_0, x_1, u)])
         constraints = casadi.Function('h', args, [u - p])
-        quadrature = casadi.Function('q_dot', [t, y, p], [y[2]])
+        quadrature = casadi.Function('q_dot', [t, y, p], [10 * y[2]])
         intitial_conditions = casadi.Function('x0', [p], [casadi.MX([0, 1])])
         cost = casadi.Function('cost', [t, y, q, p], [y[0]**2 + y[1]**2])
         parameters = {
@@ -171,6 +169,7 @@ class TestCasadiCodesign:
         terminal_constraint = casadi.Function(
             'c_T', [t, y, q, p], [casadi.MX()]
         )
+        t_final = casadi.Function('t_f', [p], [10])
         data = CasadiCodesignProblemData(
             domain=Domain(1, 2, 0, 1, 1),
             vector_field=vector_field,
@@ -181,11 +180,11 @@ class TestCasadiCodesign:
             cost_function=cost,
             parameters=parameters,
             path_constraints=path_constraint,
-            terminal_constraints=terminal_constraint
+            terminal_constraints=terminal_constraint,
+            final_time=t_final
         )
 
         options = CodesignSolverOptions(
-            final_time=10,
             grid_size=100,
             degree=4
         )
@@ -197,7 +196,7 @@ class TestCasadiCodesign:
         control = argmin(soln)
         t, y, q = path(soln)
         y = y.full()
-        assert np.linalg.norm(y[0:2, -1]) < 1e-6
+        assert np.linalg.norm(y[0:2, -1]) < 1e-3
 
     def test_codesign_problem_with_path_variable(self):
         model = Composite(name='Test Model')

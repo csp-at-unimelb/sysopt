@@ -260,7 +260,6 @@ plt.show()
 
 
 # @nb.skip
-@pytest.mark.skip
 def test_ballistic_model():
     soln = evaluate()
     assert all(c > 0 for c in soln.constraints)
