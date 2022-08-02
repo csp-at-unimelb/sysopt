@@ -1433,3 +1433,4 @@ def substitute(graph: ExpressionGraph, symbols: Dict[SymbolicAtom, Any]):
     return recursively_apply(graph,
                              trunk_function=on_trunk_node,
                              leaf_function=on_leaf_node)
+
