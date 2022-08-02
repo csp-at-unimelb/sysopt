@@ -2,7 +2,6 @@
 
 import weakref
 from typing import Optional, Dict, List, Union, NewType
-from collections import namedtuple
 
 import numpy as np
 
@@ -214,9 +213,8 @@ class Problem:
         self._context = weakref.ref(context)
         self.arguments = arguments
         """Symbolic variables matching the unbound parameters"""
-        self.constraints:List[symbolic.Inequality] = constraints if constraints else []
+        self.constraints: List[symbolic.Inequality] = constraints or []
 
-        self._regularisers = []
         self._impl = None
         self._terminal_cost = None
         self._cost = cost
@@ -229,7 +227,7 @@ class Problem:
     def cost(self):
         return self._cost
 
-    def get_spec(self):
+    def _get_problem_specification(self):
         context = self.context
         param_args, parameters, t_final, param_map = create_parameter_map(
             self.context.model, self.context.constants, self.context.t_final,
@@ -301,15 +299,13 @@ class Problem:
         self._terminal_cost = cost_fn
         return spec
 
-    def get_implementation(self):
-        spec = self.get_spec()
-        return get_implementation(spec)
-
     def __call__(self, args):
         """Evaluate the problem with the given arguments."""
-        spec = self.get_implementation()
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
+        spec = self._get_problem_specification()
+
+        _ = get_implementation(spec)
 
         integrator = self.context.get_integrator()
 
@@ -328,7 +324,7 @@ class Problem:
     def jacobian(self, args):
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
-        _ = self.get_implementation()
+        _ = self._get_problem_specification()
         # create a functional object
         # with
         # - vector field
@@ -350,9 +346,9 @@ class Problem:
 
     def solve(self, initial_values):
 
-        problem = self.get_implementation()
-
-        return problem.minimise(initial_values)
+        problem = self._get_problem_specification()
+        solver = get_implementation(problem)
+        return solver.minimise(initial_values)
 
 
 def create_parameter_map(model, constants, final_time):

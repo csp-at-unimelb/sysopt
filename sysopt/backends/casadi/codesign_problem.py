@@ -11,7 +11,7 @@ from sysopt.backends.casadi.expression_graph import substitute, to_function
 from sysopt.symbolic.problem_data import ConstrainedFunctional
 from sysopt.backends.casadi.foreign_function import CasadiForeignFunction
 from sysopt.backends.casadi.variational_solver import get_collocation_matrices
-from sysopt.symbolic.symbols import ConstantFunction, Parameter, \
+from sysopt.symbolic import ConstantFunction, Parameter, \
     Variable, is_temporal, Inequality, PathInequality, GraphWrapper, \
     Function, Compose
 # from sysopt.solver.solver import Problem

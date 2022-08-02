@@ -8,9 +8,10 @@ import numpy as np
 
 from sysopt.types import Domain
 from sysopt.symbolic.symbols import (
-    Matrix, Variable, ExpressionGraph, Parameter, ConstantFunction,
-    GraphWrapper, Inequality
+    Matrix, Variable, ExpressionGraph, ConstantFunction,
+    GraphWrapper
 )
+from sysopt.symbolic.decision_variables import Parameter
 
 
 Bounds = namedtuple('Bounds', ['upper', 'lower'])
