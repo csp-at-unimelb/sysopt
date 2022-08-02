@@ -54,8 +54,8 @@ class Matrix(np.ndarray):
 
 
 def as_array(
-    item: Union[List[Union[int, float]], int, float, np.ndarray],
-    prototype: Variable =None):
+        item: Union[List[Union[int, float]], int, float, np.ndarray],
+        prototype: 'Variable' = None):
 
     if isinstance(item, Algebraic):
         return item
@@ -952,7 +952,7 @@ class Compose(Algebraic):
 
     """
 
-    def __init__(self, function: Function, arguments: Dict[Variable, Any]):
+    def __init__(self, function: Function, arguments: Dict['Variable', Any]):
         self.function = function
         self.arg_map = arguments
         self.arguments = ordered_set.OrderedSet()
