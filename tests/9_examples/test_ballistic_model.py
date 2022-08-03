@@ -154,7 +154,7 @@ class OpenLoopController(Block):
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
 
         cutoff_time, = parameters
-        return np.heaviside(cutoff_time - t, 0.5),
+        return np.exp(-100 * t / cutoff_time)
 
 
 # @nb.text_cell
@@ -260,12 +260,12 @@ plt.show()
 
 
 # @nb.skip
-@pytest.mark.skip
 def test_ballistic_model():
     soln = evaluate()
-    assert all(c > 0 for c in soln.constraints)
-    assert 0 < soln.cost < 1e7
+    # assert all(c > 0 for c in soln.constraints)
+    # assert 0 < soln.cost < 1e7
 
+    parameter_sweep()
 
 # @nb.text_cell
 r"""
@@ -294,8 +294,8 @@ def parameter_sweep():
     }
 
     n = 25
-    X, Y = np.meshgrid(np.linspace(0, 1, n),
-                       np.linspace(0, 1, n))
+    X, Y = np.meshgrid(np.linspace(1, 2, n),
+                       np.linspace(0.1, 1, n))
     Z = np.empty_like(X)
 
     with SolverContext(model, t_f, parameters) as context:
@@ -315,8 +315,7 @@ def parameter_sweep():
 
         for i in range(n):
             for j in range(n):
-                parameters = [float(X[i, j]), float(Y[i, j])]
-                Z[i, j] = problem(parameters).cost
+                Z[i, j] = problem([float(X[i, j]), float(Y[i, j])])
 
     return X, Y, Z
 

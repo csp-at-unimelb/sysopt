@@ -1,7 +1,6 @@
 """Codesign collation solver implementation."""
 
 import casadi
-import math
 from typing import Union, Dict, Tuple, Optional
 from dataclasses import dataclass
 import numpy as np
@@ -11,8 +10,9 @@ from sysopt.backends.casadi.compiler import implements
 from sysopt.backends.casadi.expression_graph import substitute
 from sysopt.backends.casadi.variational_solver import get_collocation_matrices
 from sysopt.symbolic import (
-    ConstantFunction, Parameter, Variable,  Function, Compose,
-    PiecewiseConstantSignal, ConstrainedFunctional
+    Parameter, Variable,  Function, Compose,
+    PiecewiseConstantSignal, ConstrainedFunctional,
+    CodesignSolution
 )
 
 __all__ = []
@@ -58,9 +58,7 @@ class PiecewiseConstantFactory:
         self.lower = lower_bound
         self.upper = upper_bound
 
-    def __call__(self, t):
-        index = max(math.ceil(t * self._frequency) - 1, 0)
-
+    def __call__(self, index):
         last = len(self._vector)
         while index >= last:
             new_symbol = casadi.MX.sym(f'{self._name}[{last}]', *self._shape)
@@ -107,8 +105,8 @@ class ParameterFactory:
             for p, bounds in parameters.items()
         ]
 
-    def __call__(self, t):
-        return casadi.vertcat(*[f(t) for f in self.factories])
+    def __call__(self, step):
+        return casadi.vertcat(*[f(step) for f in self.factories])
 
     def regularisation_cost(self):
         cost = 0
@@ -155,57 +153,28 @@ class StateFactory:
     """
 
     def __init__(self, problem_data: 'CasadiCodesignProblemData',
-                 t_grid: np.ndarray, p_guess):
+                 options, p_guess):
         domain = problem_data.domain
 
         self.dim_x = domain.states
         self.dim_zu = domain.constraints + domain.inputs
         self._xz_0 = self._get_initial_conditions(
-            problem_data, t_grid, p_guess)
+            problem_data, options, p_guess)
 
         self._xz = [
             (casadi.MX.sym(f'x_{i}', self.dim_x),
              casadi.MX.sym(f'z_{i}', self.dim_zu))
-            for i in range(len(t_grid))
+            for i in range(options.grid_size + 1)
         ]
 
         self._xz_colloc = {}
 
     @staticmethod
-    def _get_initial_conditions(problem_data, t_grid, p_guess):
-        x0 = problem_data.initial_conditions(p_guess)
-        dim_x = problem_data.domain.states
+    def _get_initial_conditions(problem_data, options, p_guess):
+        solver, args, _, _ = evaluate_problem(problem_data, options, p_guess)
 
-        dim_z = problem_data.domain.constraints + problem_data.domain.inputs
-        z = casadi.MX.sym('z', dim_z)
-        residue = problem_data.algebraic_constraint(0, x0, z, p_guess)
-        objective = casadi.Function('z0', [z], [residue])
+        soln = solver(**args)
 
-        z0 = casadi.rootfinder('z0', 'newton', objective)([0] * dim_z)
-        t = casadi.MX.sym('t')
-        x = casadi.MX.sym('x', dim_x)
-        p = casadi.MX.sym('p', len(p_guess))
-        t_final = t_grid[-1]
-
-        f_impl = t_final * casadi.vertcat(
-            casadi.MX.ones(1, 1),
-            problem_data.vector_field(t, x, z, p)
-        )
-        h_impl = problem_data.algebraic_constraint(t, x, z, p)
-
-        dae_spec = {
-            'x': casadi.vertcat(t, x),
-            'z': z,
-            'p': p,
-            'ode': f_impl,
-            'alg': h_impl
-        }
-        dae_options = {
-            'grid': (t_grid / t_final).tolist(),
-            'output_t0': True
-        }
-        integrator = casadi.integrator('dae', 'idas', dae_spec, dae_options)
-        soln = integrator(x0=casadi.vertcat(0, x0), z0=z0, p=p_guess)
         xf = soln['xf'][1:, :]
         zf = soln['zf']
 
@@ -244,21 +213,10 @@ class StateFactory:
 
 @dataclass
 class CodesignSolverOptions:
-    final_time: float = 1
     degree: int = 4
     grid_size: int = 100
     solver: str = 'ipopt'
     solver_options: Optional[Dict] = None
-
-
-@dataclass
-class CodesignSolution:
-    cost: float
-    argmin: Dict[Union[Parameter, Variable, PiecewiseConstantSignal],
-                 Union[float, np.ndarray]]
-    t: np.ndarray
-    y: np.ndarray
-    q: np.ndarray
 
 
 @dataclass
@@ -269,37 +227,40 @@ class CasadiCodesignProblemData:
     """Shape of the dynamical system to be optimised"""
 
     vector_field: casadi.Function
-    """Function of t, x, zu, p -> dx"""
+    """Function of s, x, zu, p -> dx/ds"""
 
     outputs: casadi.Function
-    """Function of t, x, zu, p-> y"""
+    """Function of s, x, zu, p-> y"""
+
+    final_time: casadi.Function
+    """Function p -> T"""
 
     algebraic_constraint: casadi.Function
-    """Function of t, x, zu, p-> 0"""
+    """Function of s, x, zu, p-> 0"""
 
     quadrature: casadi.Function
-    """Function of t, y, p -> dot(q)"""
+    """Function of s, y, p -> dq/ds"""
 
     initial_conditions: casadi.Function
     """Function p -> x(0)"""
 
     cost_function: casadi.Function
-    """Function of T, y[T], q[T] p"""
+    """Function of T(1), y[1], q[1] p"""
 
     parameters: Dict[Union[Variable, Parameter, PiecewiseConstantSignal],
                      Tuple[float, float]]
     """List of all parameters with the upper and lower bounds"""
 
     path_constraints: casadi.Function
-    """Function c(t,y,q) such that c >= 0 implies constraint is satisfied"""
+    """Function c(s,y,q) such that c >= 0 implies constraint is satisfied"""
 
     terminal_constraints: casadi.Function
-    """Function C(T y(T), q(T) such"""
+    """Function C(1, y(1), q(1), p) such"""
 
 
-def build_fixed_endpoint_codesign_problem(problem: ConstrainedFunctional,
-                                          options=CodesignSolverOptions()
-                                          ) -> CasadiCodesignProblemData:
+def build_codesign_problem(problem: ConstrainedFunctional,
+                           options=CodesignSolverOptions()
+                           ) -> CasadiCodesignProblemData:
 
     p = casadi.vertcat(*[
         casadi.MX.sym(str(param), *param.shape)
@@ -312,8 +273,18 @@ def build_fixed_endpoint_codesign_problem(problem: ConstrainedFunctional,
         for s in flattened_system.output_map.arguments[:-1]
     }
 
-    p_inner = flattened_system.output_map.arguments[-1]
     p_arg, = problem.parameter_map.symbols()
+    p_inner = flattened_system.output_map.arguments[-1]
+
+    t_arg = flattened_system.output_map.arguments[0]
+    # 0 < tau < 1 -> t = tau * T,
+    #             -> df/dtau = df/dt * dt*dtau = T * df/dt
+    tau = symbols[t_arg]
+    t_final = substitute(problem.final_time, {p_arg: p})
+
+    t = tau * t_final
+    symbols[t_arg] = t
+
     symbols[p_inner] = substitute(problem.parameter_map.graph, {p_arg: p})
     dx = substitute(flattened_system.vector_field.graph, symbols)
     y = substitute(flattened_system.output_map.graph, symbols)
@@ -322,11 +293,11 @@ def build_fixed_endpoint_codesign_problem(problem: ConstrainedFunctional,
     except AttributeError:
         x0 = flattened_system.initial_conditions()
 
-    t, x, z, u, _ = symbols.values()
+    _, x, z, u, _ = symbols.values()
     zu = casadi.vertcat(z, u)
-    args = [t, x, zu, p]
+    args = [tau, x, zu, p]
 
-    f = casadi.Function('f', args, [dx])
+    f = casadi.Function('f', args, [t_final * dx])
     g = casadi.Function('g', args, [y])
     x0 = casadi.Function('x0', [p], [x0])
 
@@ -342,17 +313,14 @@ def build_fixed_endpoint_codesign_problem(problem: ConstrainedFunctional,
         for s in problem.value.arguments
     }
 
-    cost_args = list(symbols.values())
+    tau, y, q, p = list(symbols.values())
+    symbols[problem.value.arguments[0]] *= t_final
 
     cost_impl = substitute(problem.value.graph, symbols)
-    cost = casadi.Function('cost', cost_args, [cost_impl])
-
-    t, y, _, p = cost_args
-    q_args = [t, y, p]
+    cost = casadi.Function('cost', [tau, y, q, p], [cost_impl])
     q_dot = casadi.Function(
-        'q_dot',
-        q_args,
-        [substitute(problem.quadratures.graph, symbols)
+        'q_dot', [tau, y, p],
+        [t_final * substitute(problem.quadratures.graph, symbols)
          if problem.quadratures else casadi.MX()],
     )
 
@@ -360,7 +328,7 @@ def build_fixed_endpoint_codesign_problem(problem: ConstrainedFunctional,
         substitute(c.graph, symbols) for c in problem.path_constraints
     ]
     c_t = casadi.Function(
-        'c_t', cost_args,
+        'c_t', [tau, y, q, p],
         [casadi.vertcat(*path_constraints)
          if path_constraints else casadi.MX()]
     )
@@ -368,15 +336,18 @@ def build_fixed_endpoint_codesign_problem(problem: ConstrainedFunctional,
         substitute(c.graph, symbols) for c in problem.point_constraints
     ]
     terminal_constraint = casadi.Function(
-        'c_T', cost_args,
+        'c_T', [tau, y, q, p],
         [casadi.vertcat(*point_constraints)
          if point_constraints else casadi.MX()]
     )
+
+    t_final_impl = casadi.Function('T', [p], [t_final])
 
     problem_data = CasadiCodesignProblemData(
         domain=problem.system.domain,
         vector_field=f,
         outputs=g,
+        final_time=t_final_impl,
         algebraic_constraint=h,
         initial_conditions=x0,
         cost_function=cost,
@@ -385,19 +356,12 @@ def build_fixed_endpoint_codesign_problem(problem: ConstrainedFunctional,
         path_constraints=c_t,
         terminal_constraints=terminal_constraint,
     )
-    t_f = float(problem.final_time())
-    grid_size = 100
-    for parameter in problem.parameters:
-        try:
-            grid_size = max(np.ceil(t_f* parameter.frequency), grid_size)
-        except AttributeError:
-            pass
 
+    grid_size = 100
     hessian_functions = [
         *problem.path_constraints, problem.system.vector_field,
         problem.system.output_map, problem.system.constraints
     ]
-    options.final_time = float(problem.final_time())
     options.grid_size = int(grid_size)
     options.solver = 'ipopt'
 
@@ -412,6 +376,74 @@ def build_fixed_endpoint_codesign_problem(problem: ConstrainedFunctional,
 
 
 # Data = namedtuple('Data', ['symbol', 'lower', 'upper', 'initial'])
+def evaluate_problem(problem_data: CasadiCodesignProblemData,
+                     options: CodesignSolverOptions, p):
+
+    x0 = problem_data.initial_conditions(p)
+    dim_x = problem_data.domain.states
+
+    dim_z = problem_data.domain.constraints + problem_data.domain.inputs
+    t = casadi.MX.sym('t')
+    x = casadi.MX.sym('x', dim_x)
+    t_final = problem_data.final_time(p)
+    z = casadi.MX.sym('z', dim_z)
+    f_impl = casadi.vertcat(
+        casadi.MX.ones(1, 1),
+        problem_data.vector_field(t, x, z, p)
+    )
+    dae_spec = {
+        'x': casadi.vertcat(t, x),
+        'ode': f_impl,
+    }
+    solver_args = dict(x0=casadi.vertcat(0, x0))
+    if dim_z > 0:
+        residue = problem_data.algebraic_constraint(0, x0, z, p)
+        objective = casadi.Function('z0', [z], [residue])
+        z0 = casadi.rootfinder('z0', 'newton', objective)([0] * dim_z)
+        h_impl = problem_data.algebraic_constraint(t, x, z, p)
+        dae_spec.update({
+            'z': z,
+            'alg': h_impl,
+        })
+        solver_args['z0'] = z0
+
+    y = problem_data.outputs(t, x, z, p)
+    q_dot = problem_data.quadrature(t, y, p)
+
+    if q_dot.shape[0] > 0:
+        dae_spec['quad']: q_dot
+
+    dae_options = {
+        'grid': np.linspace(0, 1, options.grid_size + 1),
+        'output_t0': True
+    }
+    solver = casadi.integrator('dae', 'idas', dae_spec, dae_options)
+
+    tx = casadi.MX.sym('X', 1 + dim_x, options.grid_size + 1)
+    t, x = tx[0, :]*t_final, tx[1:, :]
+    z = casadi.MX.sym('Z', dim_z, options.grid_size + 1)
+    q = casadi.MX.sym('Q', q_dot.shape[0], options.grid_size + 1)
+    p_matrix = casadi.repmat(p, 1, options.grid_size + 1)
+    g_out = problem_data.outputs.map(options.grid_size + 1)
+    g_constraint = problem_data.path_constraints.map(options.grid_size + 1)
+
+    y = g_out(t, x, z, p_matrix)
+    c_t = g_constraint(t, y, q, p_matrix)
+
+    c_point = problem_data.terminal_constraints(t[-1], y[:, -1], q[:, -1], p)
+
+    cost = problem_data.cost_function(y[-1], y[:, -1], q[:, -1], p)
+    soln_to_cost = casadi.Function(
+        'cost', [tx, z, q], [cost], ['xf', 'zf', 'qf'], ['cost']
+    )
+    soln_to_path = casadi.Function(
+        'path', [tx, z, q],
+        [t, y, q, c_t, c_point],
+        ['xf', 'zf', 'qf'],
+        ['t', 'y', 'q', 'c_t', 'c_T']
+    )
+
+    return solver, solver_args, soln_to_cost, soln_to_path
 
 
 def transcribe_problem(problem_data: CasadiCodesignProblemData,
@@ -426,23 +458,23 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
 
     param_factory = ParameterFactory(problem_data.parameters)
     q = 0
-    t = 0
-    p = param_factory(t)
+    s = 0
+    p = param_factory(0)
 
     x0 = problem_data.initial_conditions(p)
-    t_grid = np.linspace(0, options.final_time, options.grid_size + 1)
 
-    state_factory = StateFactory(problem_data, t_grid, p_guess)
+    state_factory = StateFactory(problem_data, options, p_guess)
 
     x, z = state_factory.new_terminal(0)
     equality_constraints.append(x - x0)
-    y = problem_data.outputs(t, x, z, p)
-    dt = options.final_time / options.grid_size
-    t_out = [t]
+    y = problem_data.outputs(s, x, z, p)
+    ds = 1 / options.grid_size
+    s_out = [0]
     y_out = [y]
     q_out = [q]
-    equality_constraints.append(problem_data.algebraic_constraint(t, x, z, p))
-    inequality_constraints.append(problem_data.path_constraints(t, y, q, p))
+    c_t_out = []
+    equality_constraints.append(problem_data.algebraic_constraint(s, x, z, p))
+    inequality_constraints.append(problem_data.path_constraints(s, y, q, p))
 
     for k in range(options.grid_size):
         x_jk, z_jk = state_factory.new_collocation_points(k, options.degree)
@@ -455,42 +487,41 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
                 c_ij * x_ij
                 for c_ij, x_ij in zip(colloc_coeff[1:, j], x_jk)
             )
-            t_j = t + times[j - 1] * dt
-            p_j = param_factory(t_j)
-            args = [t_j, x_jk[j - 1], z_jk[j - 1], p_j]
+            s_j = s + times[j - 1] * ds
+            args = [s_j, x_jk[j - 1], z_jk[j - 1], p]
             f_inter = problem_data.vector_field(*args)
             res_inter = problem_data.algebraic_constraint(*args)
             equality_constraints.append(res_inter)
             y_j = problem_data.outputs(*args)
-            equality_constraints.append(dt * f_inter - dx)
+            equality_constraints.append(ds * f_inter - dx)
 
-            q_dot = problem_data.quadrature(t_j, y_j, p_j)
-            q += quad_coeff[j] * q_dot * dt
+            q_dot = problem_data.quadrature(s_j, y_j, p)
+            q += quad_coeff[j] * q_dot * ds
             x_next = x_next + diff_coeff[j] * x_jk[j - 1]
 
-        t += dt
+        s += ds
 
         x, z = state_factory.new_terminal(k + 1)
 
-        p = param_factory(t)
+        p = param_factory(k)
         equality_constraints.append(x - x_next)
         equality_constraints.append(
-            problem_data.algebraic_constraint(t, x, z, p)
+            problem_data.algebraic_constraint(s, x, z, p)
         )
-        y = problem_data.outputs(t, x, z, p)
+        y = problem_data.outputs(s, x, z, p)
 
-        c_j = problem_data.path_constraints(t, y, q, p)
+        c_j = problem_data.path_constraints(s, y, q, p)
+        c_t_out.append(c_j)
         inequality_constraints.append(c_j)
 
-        t_out.append(t)
+        s_out.append(s)
         y_out.append(y)
         q_out.append(q)
 
-    cost = problem_data.cost_function(t, y, q, p)
+    cost = problem_data.cost_function(s, y, q, p)
+    c_final = problem_data.terminal_constraints(s, y, q, p)
+    inequality_constraints.append(c_final)
 
-    inequality_constraints.append(
-        problem_data.terminal_constraints(t, y, q, p)
-    )
     x_array, x_min, x_max, x_initial = state_factory.finalise()
     p_array, p_min, p_max, p_initial = param_factory.finalise()
     cost += param_factory.regularisation_cost()
@@ -533,34 +564,50 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
         param_factory.output_list()
     )
 
-    t_out = casadi.horzcat(*t_out)
+    s_out = casadi.horzcat(*s_out) * problem_data.final_time(p)
     y_out = casadi.horzcat(*y_out)
     q_out = casadi.horzcat(*q_out)
 
     sol_to_path = casadi.Function(
         'trajectory',
         [nlp_vars],
-        [t_out, y_out, q_out]
+        [s_out, y_out, q_out, casadi.horzcat(*c_t_out), c_final]
     )
 
     return solver, nlp_args, sol_to_min_and_argmin, sol_to_path
 
 
-class FixedTimeCodesignProblem:
+@implements(ConstrainedFunctional)
+class CodesignSolver:
     """Solver for the fixed-time codesign problem"""
-
     def __init__(self, problem):
-        self.data, self.options = build_fixed_endpoint_codesign_problem(problem)
+        self.data, self.options = build_codesign_problem(problem)
 
     def __call__(self, *args):
         """Evaluates the constrained functional with the given parameters.
 
         Args: list of values for decision variables."""
 
+        solver, solver_args, cost_fn, path = evaluate_problem(
+            self.data, self.options, args)
+
         # set cost = |param - args|^2
         # solve codesign problem
         # evaluate cost function
         # return result
+        soln = solver(**solver_args)
+        x, z, q = (soln[key] for key in ('xf', 'zf', 'qf'))
+        cost = cost_fn(x, z, q)
+        t, y, q, c_t, c_final = [a.full() for a in path(x, z, q)]
+        return CodesignSolution(
+            cost=cost.full(),
+            argmin=args,
+            time=t,
+            outputs=y,
+            quadratures=q,
+            path_constraints=c_t,
+            point_constraints=c_final
+        )
 
     def minimise(self, initial_values) -> CodesignSolution:
         """Minimise the constrained function to sovle the codesign problem"""
@@ -579,20 +626,12 @@ class FixedTimeCodesignProblem:
             argmin = [arg.full() for arg in prob(result['x'])]
         else:
             argmin = prob(result['x']).full()
-        t, y, q = [a.full() for a in path(result['x'])]
+        t, y, q, c_t, c_final = [a.full() for a in path(result['x'])]
 
-        return CodesignSolution(cost=value, argmin=argmin, t=t, y=y, q=q)
-
-
-@implements(ConstrainedFunctional)
-def build_codesign_problem(problem: ConstrainedFunctional):
-    # casadi functions
-    # - B = [dot{x} - f(x,z,p), h(x,z,p), dot{q} - l(x,z,p)]
-    if (not isinstance(problem.final_time, ConstantFunction) and
-            any(isinstance(p, PiecewiseConstantSignal)
-                for p in problem.parameters)):
-        raise NotImplementedError(
-            'Variational codesign problems with free end time are not currently'
-            'supported')
-
-    return FixedTimeCodesignProblem(problem)
+        return CodesignSolution(cost=value,
+                                argmin=argmin,
+                                time=t,
+                                outputs=y,
+                                quadratures=q,
+                                path_constraints=c_t,
+                                point_constraints=c_final)

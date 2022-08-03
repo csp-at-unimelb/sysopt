@@ -259,6 +259,7 @@ class Problem:
         parameters = {
             a: [-np.inf, np.inf] for a in self.arguments
         }
+
         path_constraints = []
         point_constraints = []
         for constraint in self.constraints:
@@ -317,7 +318,7 @@ class Problem:
         else:
             y = integrator(t, p)
             q = None
-        cost = self._terminal_cost(t, y, q, p)
+        cost = self._terminal_cost(t, y, q, args)
 
         return cost
 

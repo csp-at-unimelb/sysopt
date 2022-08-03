@@ -37,14 +37,18 @@ def build_lqr_model():
                   [0, 1, 0, 0]], dtype=float).T
 
     def x0(_):
-        return np.array([[0, 0, 1, 1]], dtype=float).T,
+        return np.array([0, 0, 1, 1], dtype=float),
 
     def dxdt(t, x, u, p):
         return A @ x + B @ u
 
     def lqr(t, x, p):
-        k = np.array(p).reshape((4, 2))
-        return k @ x
+        result = [
+            sum(p[2 * i: 2 * i + 2] @ x[i] for i in range(4)),
+            sum(p[2 * i + 1 : 2 * i + 3] @ x[i] for i in range(4))
+        ]
+
+        return result
 
     plant = FullStateOutput(Signature(inputs=2, states=4), dxdt=dxdt, x0=x0)
     controller = InputOutput(Signature(inputs=4, outputs=2, parameters=8), lqr)
@@ -59,7 +63,6 @@ def build_lqr_model():
     ]
 
     return model
-
 
 @pytest.mark.skip
 def test_model_assembly():

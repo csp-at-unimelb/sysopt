@@ -110,6 +110,3 @@ class Parameter(Variable):
     @staticmethod
     def from_block(block):
         return [Parameter(block, i) for i in range(len(block.parameters))]
-
-
-

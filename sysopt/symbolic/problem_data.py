@@ -7,11 +7,10 @@ from typing import Optional, List, Tuple, Union, Dict
 import numpy as np
 
 from sysopt.types import Domain
-from sysopt.symbolic.symbols import (
+from sysopt.symbolic import (
     Matrix, Variable, ExpressionGraph, ConstantFunction,
-    GraphWrapper
+    GraphWrapper, Parameter, PiecewiseConstantSignal
 )
-from sysopt.symbolic.decision_variables import Parameter
 
 
 Bounds = namedtuple('Bounds', ['upper', 'lower'])
@@ -114,3 +113,16 @@ class MinimumPathProblem:
             bounds = Bounds([-np.inf] * len(self.control),
                             [np.inf] * len(self.control))
             self.control = (self.control, bounds)
+
+
+@dataclass
+class CodesignSolution:
+    cost: float
+    argmin: Dict[Union[Parameter, Variable, PiecewiseConstantSignal],
+                 Union[float, np.ndarray]]
+    time: np.ndarray
+    outputs: np.ndarray
+    quadratures: np.ndarray
+    path_constraints: np.ndarray
+    point_constraints: np.ndarray
+
