@@ -13,7 +13,6 @@ from sysopt.backends.casadi.codesign_problem import (
 from sysopt import Domain
 
 
-
 class LinearScalarEquation(Block):
     r"""Linear ODE of the form
 
@@ -194,7 +193,7 @@ class TestCasadiCodesign:
         result = solver(**solver_args)
         soln = result['x']
         control = argmin(soln)
-        t, y, q = path(soln)
+        t, y, q,_,_ = path(soln)
         y = y.full()
         assert np.linalg.norm(y[0:2, -1]) < 1e-3
 
