@@ -242,6 +242,7 @@ class Problem:
         terminal_cost = symbolic.replace_signal(
             terminal_cost, y, context.t_final, y
         )
+
         terminal_cost = symbolic.substitute(terminal_cost, symbols)
 
         if dot_q:
