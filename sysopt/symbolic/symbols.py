@@ -1276,12 +1276,12 @@ def extract_quadratures(graph: Union[ExpressionGraph, Quadrature]) \
         -> Tuple[Algebraic, Variable, ExpressionGraph]:
 
     quadratures = {}
-    if isinstance(graph, (Variable)):
+    if isinstance(graph, Variable):
         return graph, None, None
 
     if isinstance(graph, Quadrature):
         q = Variable('q', shape=graph.integrand.shape)
-        return 0, q, graph.integrand
+        return q, q, graph.integrand
 
     def recurse(node_idx):
         node = graph.nodes[node_idx]
@@ -1409,12 +1409,15 @@ class GraphWrapper(Algebraic):
 
 
 def function_from_graph(graph: ExpressionGraph, arguments: List[Variable]):
-    if not isinstance(graph, ExpressionGraph):
-        if graph is None:
-            return None
-        return ConstantFunction(graph, arguments)
 
-    return GraphWrapper(graph, arguments)
+    if graph in arguments or isinstance(graph, ExpressionGraph):
+        return GraphWrapper(graph, arguments)
+
+    if graph is None:
+        return None
+
+    return ConstantFunction(graph, arguments)
+
 
 
 def substitute(graph: ExpressionGraph, symbols: Dict[Variable, Any]):
