@@ -37,7 +37,7 @@ class FullStateOutput(Block):
                  name=None):
 
         assert not metadata.constraints, \
-            f"{type(self)} must have no constraints"
+            f'{type(self)} must have no constraints'
 
         metadata.outputs = metadata.states
 
@@ -73,10 +73,19 @@ class InputOutput(Block):
                  function: StatelessFunction,
                  name=None):
         assert not metadata.states and not metadata.constraints,\
-            f"{type(self)} must not have states"
+            f'{type(self)} must not have states'
 
         super().__init__(metadata, name=name)
         self._output_function = function
 
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
         return self._output_function(t, inputs, parameters)
+
+
+class SignalSource(Block):
+    def __init__(self, function, name=None):
+        self.func = function
+        super().__init__(Metadata(outputs=['Signal']), name=name)
+
+    def compute_outputs(self, t, *args, **kwargs):
+        return self.func(t)

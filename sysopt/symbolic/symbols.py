@@ -140,7 +140,6 @@ def basis_vector(index, dimension):
 class LinearMap:
     """Functional representation of a linear operator defined by a matrix."""
 
-
     def __init__(self, matrix):
         self.matrix = matrix
 
@@ -1417,7 +1416,6 @@ def function_from_graph(graph: ExpressionGraph, arguments: List[Variable]):
         return None
 
     return ConstantFunction(graph, arguments)
-
 
 
 def substitute(graph: ExpressionGraph, symbols: Dict[Variable, Any]):
