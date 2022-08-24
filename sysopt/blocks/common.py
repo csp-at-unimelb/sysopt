@@ -135,3 +135,44 @@ class LowPassFilter(Block):
     def compute_outputs(self, t, states, algebraics, inputs, parameters):
         x, = states
         return x,
+
+
+class HighPassFilter(Block):
+    """First order highpass filter."""
+    def __init__(self, name=None):
+        super().__init__(
+            metadata_or_signature=Metadata(
+                states=['state'],
+                inputs=['input'],
+                outputs=['output'],
+                parameters=['cutoff frequency']
+            ),
+            name=name
+        )
+
+    def initial_state(self, _):
+        return [0]
+
+    def compute_dynamics(self,
+                         t,
+                         states,
+                         algebraics,
+                         inputs,
+                         parameters):
+        x, = states
+        u, = inputs
+        w, = parameters
+
+        return (u - x) / w
+
+    def compute_outputs(self,
+                        t,
+                        states,
+                        algebraics,
+                        inputs,
+                        parameters):
+        x, = states
+        u, = inputs
+        w, = parameters
+        return (u - x) / w
+
