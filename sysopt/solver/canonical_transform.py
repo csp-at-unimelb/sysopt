@@ -233,7 +233,7 @@ def is_wire_forwarding_inputs(wire: Connection) -> bool:
     return src.port_type == dest.port_type == 'inputs'
 
 
-def forwarded_input_to_table_entry(tables:Tables,
+def forwarded_input_to_table_entry(tables: Tables,
                                    wire: Connection) -> List[TableEntry]:
     src_port, dest_port, indices = get_ports_and_indices(wire)
     entries = []
@@ -249,6 +249,7 @@ def forwarded_input_to_table_entry(tables:Tables,
             global_index=global_index
         ))
     return entries
+
 
 def forwarded_output_to_table_entry(tables: Tables,
                                     wire: Connection) -> List[TableEntry]:

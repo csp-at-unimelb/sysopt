@@ -12,12 +12,10 @@ from sysopt import Metadata, Composite
 from sysopt.symbolic import Parameter, PiecewiseConstantSignal
 from sysopt.solver import SolverContext
 
+
 def dxdt(t, x, u, p):
     k, *_ = p
-    return [
-        x[1],
-        -k * x[0] + u
-    ]
+    return [x[1], -k * x[0] + u]
 
 
 def x0(p):
@@ -28,6 +26,7 @@ def x0(p):
 plant_metadata = Metadata(
     inputs=['u'],
     states=['x', 'v'],
+    outputs=['x', 'v'],
     parameters=['k', 'x_0', 'v_0']
 )
 
