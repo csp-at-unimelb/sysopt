@@ -3,3 +3,4 @@ pytest-cov
 sympy
 flake8
 pylint
+sphinx
