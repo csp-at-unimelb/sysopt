@@ -1,5 +1,5 @@
-Developer Environment Setup
-===========================
+Development Overview
+====================
 
 Development Toolchain
 ---------------------
@@ -27,12 +27,15 @@ Install these using pip:
 
     $ pip install -r test-requirements.txt
 
-Workflow
---------
+Development Workflow
+--------------------
 Sysopt is currently using a topic branch workflow (https://git-scm.com/book/en/v2/Git-Branching-Branching-Workflows).
 Generally speaking, this means the development process follows:
-1. A new feature has been identified, or a bug needs to be fixed.
-2. The developer creates a new branch from the most up-to-date version of `main`.
-3. The developer locally checks out the branch, proceeds to implement the feature, appropriate tests and documentation.
-4. 
-
+1. Identify a new feature, or a bug to be fixed.
+2. Create a new branch from the most up-to-date version of `main`.
+3. Check out the branch on a local machine, implement the feature along with appropriate tests and documentation.
+4. Commit changes and push the local branch to the remote repo
+5. Open a pull request to merge the new feature into `main`.
+6. Resolve any merge conflicts, test failures and linting issues.
+7. Respond to any review comments.
+8. Delete the branch once it's been accepted.

@@ -11,7 +11,7 @@ Welcome to sysopt's documentation!
    :caption: Contents:
 
    getting_started
-   developer/overview
+   developer/index
 
 
 Indices and tables
