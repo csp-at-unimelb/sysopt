@@ -4,7 +4,8 @@ Development Documentation
 .. toctree::
    :maxdepth: 1
    :caption: Contents:
-    dev-setup
+
+   dev-setup
 
 
 ..

@@ -12,7 +12,7 @@ Welcome to sysopt's documentation!
 
    getting_started
    developer/index
-
+   api/api
 
 Indices and tables
 ==================
