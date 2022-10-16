@@ -1,19 +1,10 @@
-# SysOpt -  Modelling and Optimisation
+# SysOpt - Systems Modelling and Optimisation
 
-## Installation
+## Overview
+`sysopt` is a `python3` framework for component based modelling, simulation and optimisation of continuous time dynamic and control systems.
 
-Install: `pip install sysopt`
+It allows users to design modular plant and control systems, simulate the trajectory of closed loop systems, and run joint parameter/path optimisation studies.
 
-Update: `pip install sysopt --upgrade`
+- Install via `pip install sysopt`
+- Documentation and user guide at https://sysopt.readthedocs.io .
 
-## Documentation
-
-- readthedocs
-
-Documentation uses `sphinx` (see (here)[https://docs.readthedocs.io/en/stable/intro/getting-started-with-sphinx.html]).
-
-https://www.sphinx-doc.org/en/master/tutorial/getting-started.html
-
-To build the documentation locally
-- Navigate to `sysopt/docs'
-- execute `make [buidler]` where `[builder]` is the desired format (eg, html, latex).
