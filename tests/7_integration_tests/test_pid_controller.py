@@ -5,8 +5,8 @@ import sysopt.symbolic as symbolic
 import numpy as np
 from sysopt.blocks.common import Oscillator, LowPassFilter, DifferentialAmplifier
 from sysopt import Composite
-from sysopt.solver import SolverContext
-from sysopt.block import DiscreteBlock
+from sysopt.problems import SolverContext
+from sysopt.modelling.block import DiscreteBlock
 
 
 def test_pid_isolated():

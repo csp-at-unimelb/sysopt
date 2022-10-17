@@ -1,7 +1,7 @@
 import numpy as np
 
 from sysopt import Signature, Block
-from sysopt.blocks import InputOutput
+from sysopt.modelling import InputOutput
 
 # Variable
 # - name

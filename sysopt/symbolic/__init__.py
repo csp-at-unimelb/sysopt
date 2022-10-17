@@ -1,6 +1,7 @@
-"""Sysopt symbolic and function manipulations."""
+"""Symbolic variable definitions.
+
+
+"""
 
 from sysopt.symbolic.symbols import *
 from sysopt.symbolic.decision_variables import *
-from sysopt.symbolic.problem_data import *
-

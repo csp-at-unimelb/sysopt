@@ -8,7 +8,7 @@ from operator import mul
 from functools import reduce
 
 from sysopt.backends.casadi.expression_graph import substitute
-from sysopt.symbolic.problem_data import MinimumPathProblem, SolverOptions
+from sysopt.problems.problem_data import MinimumPathProblem, SolverOptions
 from sysopt.backends.casadi.path import InterpolatedPath
 
 
@@ -172,7 +172,7 @@ def _get_solver(t_final: float,
         'p': casadi.vertcat(*params)
     }
     nlp_options = {}
-    npl_solver = casadi.nlpsol('solver', 'ipopt', nlp_spec, nlp_options)
+    npl_solver = casadi.nlpsol('problems', 'ipopt', nlp_spec, nlp_options)
     x_initial = casadi.vertcat(*decision_vars_guess)
     param_to_args = casadi.Function(
         'nlp_args',

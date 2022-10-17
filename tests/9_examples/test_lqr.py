@@ -31,9 +31,9 @@ import numpy as np
 from scipy.linalg import solve_continuous_are
 
 from sysopt import Metadata
-from sysopt.blocks.builders import FullStateOutput, InputOutput
-from sysopt.block import Composite
-from sysopt.solver import SolverContext
+from sysopt.modelling.builders import FullStateOutput, InputOutput
+from sysopt.modelling.block import Composite
+from sysopt.problems import SolverContext
 
 
 # @nb.text_cell
@@ -190,7 +190,7 @@ _ = ax.set_title('Uncontrolled Dynamics')
 r"""
 ## Solving - Determining the optimal gains. 
 
-We can use `scipy`'s built in Ricatti solver to find the optimal 
+We can use `scipy`'s built in Ricatti problems to find the optimal 
 gains for the infinite horizon problem given the cost function
 $$ J[x,u] = \int_0^{t_final} \lVert x \rVert ^2 + \rho |u|^2 \mathrm{d}t$$
 where $\rho = 0.1$ 

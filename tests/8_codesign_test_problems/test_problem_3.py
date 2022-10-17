@@ -9,8 +9,9 @@ Mechanical Design 141.1 (2019).
 
 
 from sysopt import Metadata, Composite
-from sysopt.solver import SolverContext
-from sysopt.blocks import FullStateOutput, ConstantSignal
+from sysopt.problems import SolverContext
+from sysopt.modelling.builders import FullStateOutput
+from sysopt.blocks import ConstantSignal
 from sysopt.symbolic import PiecewiseConstantSignal, Parameter
 
 J = 1

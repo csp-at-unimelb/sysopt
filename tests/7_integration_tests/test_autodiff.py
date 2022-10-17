@@ -1,8 +1,8 @@
 
 import sysopt
 import numpy as np
-from sysopt.blocks.builders import FullStateOutput
-from sysopt.solver import SolverContext
+from sysopt.modelling.builders import FullStateOutput
+from sysopt.problems import SolverContext
 metadata = sysopt.Metadata(states=['x'], parameters=['a', 'x0'])
 
 
