@@ -5,8 +5,8 @@ from typing import Optional, List, Union, Callable, Dict, Tuple, Iterable
 from dataclasses import dataclass, asdict
 from collections import deque
 
-from sysopt.types import Domain
-from sysopt.block import (
+from sysopt.problems.problem_data import Domain
+from sysopt.modelling.block import (
     Block, Composite, Connection, Channel, Port, ComponentBase, DiscreteBlock
 )
 from sysopt.symbolic import (
@@ -14,7 +14,7 @@ from sysopt.symbolic import (
     get_time_variable, function_from_graph,
     restriction_map, as_array, sparse_matrix, Matrix
 )
-from sysopt.symbolic.problem_data import FlattenedSystem
+from sysopt.problems.problem_data import FlattenedSystem
 
 
 from sysopt import exceptions

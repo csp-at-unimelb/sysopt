@@ -77,7 +77,6 @@ def as_array(
         return backend_array(item)
 
     except TypeError as ex:
-        print(ex)
         pass
 
     raise NotImplementedError(
@@ -136,6 +135,7 @@ def basis_vector(index, dimension):
     e_i = np.zeros(shape=(dimension, ), dtype=float).view(Matrix)
     e_i[index] = 1
     return e_i
+
 
 class LinearMap:
     """Functional representation of a linear operator defined by a matrix."""

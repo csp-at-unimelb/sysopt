@@ -10,7 +10,7 @@ from sysopt.symbolic import Function
 from sysopt.symbolic.symbols import (
     SymbolicArray, Variable
 )
-from sysopt.symbolic.problem_data import  MinimumPathProblem, SolverOptions
+from sysopt.problems.problem_data import MinimumPathProblem, SolverOptions
 
 
 from sysopt.helpers import flatten

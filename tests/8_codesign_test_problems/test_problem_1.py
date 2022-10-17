@@ -6,12 +6,10 @@ strategies for general combined plant and control design problems." Journal of
 Mechanical Design 141.1 (2019).
 
 """
-
-from sysopt.blocks import (
-    FullStateOutput, Gain, ConstantSignal
-)
+from sysopt.modelling.builders import FullStateOutput
+from sysopt.blocks import ConstantSignal, Gain
 from sysopt import Composite, Metadata
-from sysopt.solver import SolverContext, Parameter
+from sysopt.problems import SolverContext, Parameter
 
 
 def dxdt(t, x, u, p):

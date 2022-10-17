@@ -3,8 +3,8 @@ from typing import Iterable, Optional, Union, NewType, Tuple, List
 from functools import partial
 import weakref
 from dataclasses import asdict
-from sysopt.types import (Signature, Metadata, Time, States, Parameters,
-                          Inputs, Algebraics, Numeric)
+from sysopt.modelling.types import (Signature, Metadata, Time, States, Parameters,
+                                    Inputs, Algebraics, Numeric)
 
 from sysopt.symbolic import SignalReference, restriction_map
 from sysopt.exceptions import (
@@ -531,6 +531,25 @@ class Composite(ComponentBase):  # noqa
                 ) from ex
         raise ValueError(f'Invalid port type {port_type}')
 
+    def check_wiring_or_raise(self):
+        ext_inputs, ext_outputs, internal_inputs = _find_unconnected_io(self)
+
+        if ext_inputs:
+            raise DanglingInputError(
+                self, {str(channel) for channel in ext_inputs}
+            )
+
+        if internal_inputs:
+            raise UnconnectedInputError(
+                str(self), {str(channel) for channel in internal_inputs}
+            )
+
+        if not self.outputs:
+            raise InvalidComponentError(self, 'has no defined outputs')
+
+        if ext_outputs:
+            raise UnconnectedOutputError(self, ext_outputs)
+
 
 def _find_unconnected_io(composite):
     external_inputs = set(composite.inputs)
@@ -566,20 +585,3 @@ def _find_unconnected_io(composite):
     return external_inputs, external_outputs, internal_inputs
 
 
-def check_wiring_or_raise(composite: Composite):
-    external_inputs, external_outputs, internal_inputs = _find_unconnected_io(
-        composite
-    )
-    if external_inputs:
-        raise DanglingInputError(
-            composite, {str(channel) for channel in external_inputs})
-
-    if internal_inputs:
-        raise UnconnectedInputError(
-            str(composite), {str(channel) for channel in internal_inputs})
-
-    if not composite.outputs:
-        raise InvalidComponentError(composite, 'has no defined outputs')
-
-    if external_outputs:
-        raise UnconnectedOutputError(composite, external_outputs)
