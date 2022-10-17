@@ -7,4 +7,3 @@ It allows users to design modular plant and control systems, simulate the trajec
 
 - Install via `pip install sysopt`
 - Documentation and user guide at https://sysopt.readthedocs.io .
-
