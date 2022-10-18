@@ -228,7 +228,7 @@ def concatenate(*arguments):
 # ------------------------------------------------------------------------------
 # ------------------ Shape Operations ------------------------------------------
 # ------------------------------------------------------------------------------
-# When building an expression tree out of matrix/vector operations, we'd like 
+# When building an expression tree out of matrix/vector operations, we'd like
 # to keep track of the shapes of the tree.
 # Here is the magic that makes that happen!
 
@@ -753,10 +753,10 @@ class ExpressionGraph(Algebraic):
 
     def call(self, values: Union[List, Dict]) -> Union[Algebraic, np.ndarray]:
         """Call the graph with the given arguments.
-        
+
         Args:
             values - A list or dictionary of arguments.
-            
+
         Try to evaluate the graph with the given arguments.
         A partial call
         """
@@ -1312,10 +1312,11 @@ class Quadrature(Algebraic):
 
     def __call__(self, t, *args):
         return self.context.evaluate_quadrature(self.index, t, *args)
-    
+
 
 class ConstantFunction(Algebraic):
     """Wrap a constant value and treat it like a function."""
+
     def __init__(self, value, arguments: List[Variable]):
         if isinstance(value, np.ndarray):
             self.value = value.view(Matrix)
