@@ -27,6 +27,7 @@ plant_metadata = Metadata(
         states=['xi'],
         parameters=['b', 'xi_0']
     )
+
 w_c = 1
 w_p = 0.3
 r = 1

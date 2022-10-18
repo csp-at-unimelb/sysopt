@@ -1,8 +1,11 @@
-"""Symbolic variable definitions.
+"""Symbolic mathematics framework.
+
+Modules:
+    core
+    decision_variables
 
 
 """
 
 from sysopt.symbolic.core import *
 from sysopt.symbolic.decision_variables import *
-from sysopt.symbolic.graph_evaluators import *

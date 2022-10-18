@@ -17,11 +17,8 @@ from sysopt.symbolic import PiecewiseConstantSignal, Parameter
 J = 1
 
 
-def dxdt(t,x,u,p):
-    return [
-        x[1],
-        - p[0] * x[0] / J + u[0]/J
-    ]
+def dxdt(t, x, u, p):
+    return [x[1], - p[0] * x[0] / J + u[0]/J]
 
 
 def x0(p):

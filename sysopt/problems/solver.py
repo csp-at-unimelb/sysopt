@@ -346,11 +346,11 @@ class Problem:
             jac[i] = dcost
         return jac
 
-    def solve(self, initial_values):
+    def solve(self, guess):
 
         problem = self._get_problem_specification()
         solver = get_implementation(problem)
-        return solver.minimise(initial_values)
+        return solver.minimise(guess)
 
 
 def create_parameter_map(model, constants, final_time):

@@ -1,13 +1,22 @@
-"""sysopt - Component-base system modelling and optimisation.
-
+"""
+sysopt - Systems Optmisation
+============================
 Build component based models, symbolically evaluate them, and translate the
 result into desired backend format.
 
-Packages:
-    modelling - Classes and methods for constructing component based models.
-    problems  - API for solving model simulation and optimisation problems.
-    symbolic  - Classes and methods for building symbolic expressions.
-    backends  - Interface shims for different algorithmic/numerical routines.
+
+Package Documentation:
+
+    https://sysopt.readthedocs.io
+
+Source:
+
+    https://github.com/csp-at-unimelb/sysopt
+
+
+Bug reports:
+
+    https://github.com/csp-at-unimelb/sysopt/issues
 
 """
 
