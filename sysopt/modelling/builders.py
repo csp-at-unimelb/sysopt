@@ -10,10 +10,10 @@ See Also:
 
 from typing import Union, Optional
 
-from sysopt.types import (
+from sysopt.modelling.types import (
     Metadata, Signature, ParameterisedConstant, StatelessFunction, VectorField
 )
-from sysopt.block import Block
+from sysopt.modelling.block import Block
 
 
 class FullStateOutput(Block):

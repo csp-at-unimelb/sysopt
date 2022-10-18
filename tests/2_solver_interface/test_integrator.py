@@ -12,9 +12,9 @@
 # Requirements:
 # - fixed window of integration
 
-from sysopt.types import *
-from sysopt.block import Block
-from sysopt.solver import SolverContext
+from sysopt.modelling.types import *
+from sysopt.modelling.block import Block
+from sysopt.problems import SolverContext
 
 
 class LinearScalarEquation(Block):

@@ -1,6 +1,6 @@
-from sysopt.symbolic import (
-    symbolic_vector, Variable, Algebraic, MinimumPathProblem
-)
+from sysopt.symbolic import symbolic_vector, Variable, Algebraic
+from sysopt.problems.problem_data import MinimumPathProblem
+
 import numpy as np
 from sysopt.blocks.optimal_controllers import PathPlanner
 

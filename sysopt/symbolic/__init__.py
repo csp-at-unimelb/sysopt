@@ -1,6 +1,11 @@
-"""Sysopt symbolic and function manipulations."""
+"""Symbolic mathematics framework.
 
-from sysopt.symbolic.symbols import *
+Modules:
+    core
+    decision_variables
+
+
+"""
+
+from sysopt.symbolic.core import *
 from sysopt.symbolic.decision_variables import *
-from sysopt.symbolic.problem_data import *
-

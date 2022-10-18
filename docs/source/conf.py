@@ -6,6 +6,11 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+import os
+import sys
+sys.path.insert(0, os.path.abspath('../../sysopt'))
+
+
 project = 'sysopt'
 copyright = '2022, Peter Cudmore'
 author = 'Peter Cudmore'
@@ -22,11 +27,12 @@ extensions = [
     'sphinx.ext.autosummary'
 ]
 
+autosummary_generate = True  # Turn on sphinx.ext.autosummary
+
 templates_path = ['_templates']
 exclude_patterns = []
 
 napoleon_google_docstring = True
-
 
 
 # -- Options for HTML output -------------------------------------------------

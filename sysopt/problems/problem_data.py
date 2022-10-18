@@ -6,14 +6,56 @@ from typing import Optional, List, Tuple, Union, Dict
 
 import numpy as np
 
-from sysopt.types import Domain
 from sysopt.symbolic import (
     Matrix, Variable, ExpressionGraph, ConstantFunction,
     GraphWrapper, Parameter, PiecewiseConstantSignal
 )
 
-
 Bounds = namedtuple('Bounds', ['upper', 'lower'])
+
+
+@dataclass
+class Domain:
+    """Domain description of sysopt common function"""
+    time: int = 1
+    states: int = 0
+    constraints: int = 0
+    inputs: int = 0
+    parameters: int = 0
+
+    def __iter__(self):
+        return iter((self.time, self.states, self.constraints,
+                    self.inputs, self.parameters))
+
+    def __getitem__(self, item):
+        return list(self)[item]
+
+    def copy(self):
+        return Domain(*self)
+
+    def __iadd__(self, other):
+        self.states += other.states
+        self.constraints += other.constraints
+        self.inputs += other.inputs
+        self.parameters += other.parameters
+        return self
+
+    def __add__(self, other):
+        obj = Domain(*self)
+        obj += other
+        return obj
+
+    def __eq__(self, other):
+        try:
+            return all(i == j for i, j in zip(self, other))
+        except TypeError:
+            return False
+
+    @staticmethod
+    def index_of_field(field_name):
+        return ['time', 'states', 'constraints', 'inputs', 'parameters'].index(
+            field_name
+        )
 
 
 @dataclass
@@ -87,7 +129,7 @@ class ConstrainedFunctional:
 
 @dataclass
 class SolverOptions:
-    """Configuration Options for Optimisation base solver."""
+    """Configuration Options for Optimisation base problems."""
     control_hertz: int = 10     # hertz
     degree: int = 3             # Collocation polynomial degree
 

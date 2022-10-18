@@ -11,9 +11,9 @@ from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
     is_symbolic, ConstantFunction, GraphWrapper
 )
-from sysopt.solver.canonical_transform import flatten_system
-from sysopt.symbolic.problem_data import Quadratures, ConstrainedFunctional, FlattenedSystem
-from sysopt.block import Block, Composite
+from sysopt.problems.canonical_transform import flatten_system
+from sysopt.problems.problem_data import Quadratures, ConstrainedFunctional, FlattenedSystem
+from sysopt.modelling.block import Block, Composite
 
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
 
@@ -346,11 +346,11 @@ class Problem:
             jac[i] = dcost
         return jac
 
-    def solve(self, initial_values):
+    def solve(self, guess):
 
         problem = self._get_problem_specification()
         solver = get_implementation(problem)
-        return solver.minimise(initial_values)
+        return solver.minimise(guess)
 
 
 def create_parameter_map(model, constants, final_time):

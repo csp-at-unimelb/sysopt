@@ -1,7 +1,7 @@
 """Casadi Function Factories."""
 from typing import Dict, NewType, Callable, Any
 import casadi
-from sysopt.symbolic.symbols import Algebraic, ConstantFunction
+from sysopt.symbolic.core import Algebraic, ConstantFunction
 
 
 Factory = NewType('Factory', Callable[[Any], Algebraic])

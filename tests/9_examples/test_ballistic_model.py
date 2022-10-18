@@ -19,7 +19,7 @@ plt.ion()
 # @nb.code_cell
 from sysopt import Block, Metadata, Composite
 from sysopt.symbolic import Variable, Parameter
-from sysopt.solver import SolverContext
+from sysopt.problems import SolverContext
 import numpy as np
 
 g = -9.81
@@ -41,7 +41,7 @@ Steps to solving a system optimisation problem with `sysopt`:
 3. Define decision variables and model parameters.
 4. Set up optimisation problem: cost and constraints
 5. Evaluate the problem with a feasible initial guess.
-6. Run the solver.   
+6. Run the problems.   
 
 """
 

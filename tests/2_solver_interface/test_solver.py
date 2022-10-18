@@ -1,18 +1,13 @@
 import numpy as np
-import pytest
 import random
 
 import sympy
 
 from sysopt import Metadata
-from sysopt.block import Composite, Block
+from sysopt.modelling.block import Composite, Block
 from sysopt.blocks import Gain, Oscillator, LowPassFilter
-from sysopt.solver import SolverContext, Parameter, create_parameter_map
-from sysopt.symbolic import Variable, find_param_index_by_name
-import math
-
-import sympy as sp
-
+from sysopt.problems import SolverContext, Parameter, create_parameter_map
+from sysopt.symbolic import Variable
 
 eps = 1e-4
 
@@ -217,14 +212,14 @@ class TestSolverUnconstrained:
             # - 't' as the independent variable of an integration scheme
             t = solver.t            # a symbol for t in [0,t_f]
 
-            # this should bind the y to the solver context via t
+            # this should bind the y to the problems context via t
             y = model.outputs(t)    # a symbol for y at time t
 
             squared = solver.integral(y ** 2)
             # this should add a quadrature to the state variables.
             # in particular, we should have
             # dot{q_0} = y^2, q(0) = 0
-            # stored somewhere in the solver workspace
+            # stored somewhere in the problems workspace
 
             # we should be able to check that this is now a function
             # with 2 arguments: time t and
@@ -274,14 +269,14 @@ class TestSolverCompositeModel:
             # - 't' as the independent variable of an integration scheme
             t = solver.t            # a symbol for t in [0,t_f]
 
-            # this should bind the y to the solver context via t
+            # this should bind the y to the problems context via t
             y = model.outputs(t)    # a symbol for y at time t
 
             squared = solver.integral(y ** 2)
             # this should add a quadrature to the state variables.
             # in particular, we should have
             # dot{q_0} = y^2, q(0) = 0
-            # stored somewhere in the solver workspace
+            # stored somewhere in the problems workspace
 
             # we should be able to check that this is now a function
             # with 2 arguments: time t and

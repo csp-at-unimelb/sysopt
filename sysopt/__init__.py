@@ -1,6 +1,26 @@
-"""sysopt - System Modelling and Optimisation Library."""
+"""
+sysopt - Systems Optmisation
+============================
+Build component based models, symbolically evaluate them, and translate the
+result into desired backend format.
 
-from sysopt.types import *
-from sysopt.block import *
+
+Package Documentation:
+
+    https://sysopt.readthedocs.io
+
+Source:
+
+    https://github.com/csp-at-unimelb/sysopt
+
+
+Bug reports:
+
+    https://github.com/csp-at-unimelb/sysopt/issues
+
+"""
+
+from sysopt.env import version
+from sysopt.modelling import *
 from sysopt.symbolic import *
-from sysopt.solver import *
+from sysopt.problems import *

@@ -7,7 +7,7 @@ Includes:
 
 from typing import List, Optional
 from sysopt import Metadata
-from sysopt.block import DiscreteBlock
+from sysopt.modelling.block import DiscreteBlock
 
 from sysopt.symbolic import concatenate
 

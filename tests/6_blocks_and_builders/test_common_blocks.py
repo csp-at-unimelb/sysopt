@@ -1,6 +1,6 @@
 import numpy as np
-from sysopt.block import Composite
-from sysopt.solver import SolverContext
+from sysopt.modelling.block import Composite
+from sysopt.problems import SolverContext
 from sysopt.blocks.common import HighPassFilter, Oscillator, DifferentialAmplifier
 
 

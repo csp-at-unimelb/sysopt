@@ -1,18 +1,17 @@
-"""Codesign collation solver implementation."""
+"""Codesign collation problems implementation."""
 
 import casadi
 from typing import Union, Dict, Tuple, Optional
 from dataclasses import dataclass
 import numpy as np
 
-from sysopt.types import Domain
+from sysopt.problems.problem_data import Domain, ConstrainedFunctional, CodesignSolution
 from sysopt.backends.casadi.compiler import implements
 from sysopt.backends.casadi.expression_graph import substitute
 from sysopt.backends.casadi.variational_solver import get_collocation_matrices
 from sysopt.symbolic import (
-    Parameter, Variable,  Function, Compose,
-    PiecewiseConstantSignal, ConstrainedFunctional,
-    CodesignSolution
+    Parameter, Variable,  Function, Composition,
+    PiecewiseConstantSignal,
 )
 
 __all__ = []
@@ -366,7 +365,7 @@ def build_codesign_problem(problem: ConstrainedFunctional,
     options.solver = 'ipopt'
 
     for f in [f_i for f_i in hessian_functions if f_i is not None] :
-        if any(isinstance(node, (Function, Compose))
+        if any(isinstance(node, (Function, Composition))
                for node in f.graph.nodes):
             options.solver_options.update(
                 {'ipopt.hessian_approximation': 'limited-memory'}
@@ -556,7 +555,7 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
         'lam_g0': np.zeros(c_max.shape)
     }
     opts = options.solver_options or {}
-    solver = casadi.nlpsol('solver', 'ipopt', nlp_spec, opts)
+    solver = casadi.nlpsol('problems', 'ipopt', nlp_spec, opts)
 
     sol_to_min_and_argmin = casadi.Function(
         'argmim',

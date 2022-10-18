@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 
 from sysopt import Metadata
-from sysopt.block import Block, Composite
-from sysopt.symbolic import ExpressionGraph, get_time_variable, symbolic_vector, Function, Variable
-from sysopt.solver import canonical_transform as xform
+from sysopt.modelling.block import Block, Composite
+from sysopt.symbolic import get_time_variable, symbolic_vector
+from sysopt.problems import canonical_transform as xform
 
 from sysopt.blocks.common import Gain, LowPassFilter, Oscillator
 from sysopt import exceptions
@@ -248,7 +248,9 @@ class TestSYS71Bug:
 
     @staticmethod
     def build_model():
-        from sysopt.blocks import FullStateOutput, ConstantSignal
+        from sysopt.modelling.builders import FullStateOutput
+        from sysopt.blocks import ConstantSignal
+
         model = Composite(name='Test Model')
         # build a LQR model
         #
@@ -295,7 +297,7 @@ class TestSYS71Bug:
         # assert False
 
     def test_scenario(self):
-        from sysopt.solver import SolverContext
+        from sysopt.problems import SolverContext
         # Fix for bug SYS-71
         # Problem is that a fan-out system model is throwing errors
         # ie; that when `get_symbolic_integrator` is called, it
