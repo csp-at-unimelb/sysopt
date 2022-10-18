@@ -1,8 +1,11 @@
 """Symbolic Variables and Functions for optmisation problems."""
 
 import weakref
-from typing import Union
-from sysopt.symbolic.symbols import Variable, scalar_shape
+from typing import Union, Tuple, Optional
+from sysopt.symbolic.symbols import (
+    Variable, scalar_shape, ExpressionGraph, concatenate, Quadrature,
+    Algebraic
+)
 
 
 def find_param_index_by_name(block, name: str):
@@ -110,3 +113,73 @@ class Parameter(Variable):
     @staticmethod
     def from_block(block):
         return [Parameter(block, i) for i in range(len(block.parameters))]
+
+
+def extract_quadratures(graph: Union[ExpressionGraph, Quadrature]) \
+        -> Tuple[Algebraic, Optional[Variable], Optional[ExpressionGraph]]:
+    r"""Split an expression graph into algebraic and integral terms.
+
+    Args:
+        graph - The expression graph `g` that may contain integrals
+
+    Returns:
+         a (possible new) graph, quadrature variables, and integrands
+
+
+    As an example, the function :math:`f(t, x) = x(t) +\int_0^t t(\tau)d\tau`
+    will be split into
+
+    math::
+        f(t, x) = x(t) + q(t)\\
+        \dot{q} = x(t)
+
+    The 'new' graph will be `f(t, x, q) = x(q) + q(t)`,
+    the quadrature variable will be `q`, and the integrand will be `x(t)`.
+
+    """
+    quadratures = {}
+    if isinstance(graph, Variable):
+        return graph, None, None
+
+    if isinstance(graph, Quadrature):
+        q = Variable('q', shape=graph.integrand.shape)
+        return q, q, graph.integrand
+
+    def recurse(node_idx):
+        node = graph.nodes[node_idx]
+        if isinstance(node, Quadrature):
+            q = Variable('q', shape=node.integrand.shape)
+            quadratures[q] = node.integrand
+            return q
+        elif node_idx not in graph.edges:
+            return node
+        else:
+            return ExpressionGraph(
+                graph.nodes[node_idx],
+                *[recurse(idx) for idx in graph.edges[node_idx]]
+            )
+
+    out_graph = recurse(graph.head)
+    if len(quadratures) == 0:
+        return graph, None, None
+
+    if len(quadratures) == 1:
+        q, integrand = list(quadratures.items())[0]
+        return out_graph, q, integrand
+
+    dot_q = concatenate(*quadratures.values())
+    vector_q = Variable('q', shape=dot_q.shape)
+    offset = 0
+    for q in quadratures:
+        try:
+            n, = q.shape
+        except ValueError:
+            n, m = q.shape
+            assert m == 1
+
+        quadratures[q] = vector_q[offset: offset + n]
+        offset += n
+    out_graph = out_graph.call(quadratures)
+    return out_graph, vector_q, dot_q
+
+

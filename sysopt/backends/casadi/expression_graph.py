@@ -4,7 +4,7 @@ from typing import Dict, List
 
 import casadi
 from sysopt.symbolic import is_matrix, recursively_apply, \
-    Variable, ExpressionGraph, Algebraic, GraphWrapper, Function, Compose
+    Variable, ExpressionGraph, Algebraic, GraphWrapper, Function, Composition
 
 from .compiler import implements, get_implementation
 
@@ -17,7 +17,7 @@ def substitute(graph: ExpressionGraph,
             return casadi.MX(obj)
         if obj in symbols:
             return symbols[obj]
-        if isinstance(obj, (Function, Compose)):
+        if isinstance(obj, (Function, Composition)):
             arguments = {a: symbols[a] for a in obj.arguments}
             impl = get_implementation(obj)
             return impl.call(arguments)

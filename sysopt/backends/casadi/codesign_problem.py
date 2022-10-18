@@ -10,7 +10,7 @@ from sysopt.backends.casadi.compiler import implements
 from sysopt.backends.casadi.expression_graph import substitute
 from sysopt.backends.casadi.variational_solver import get_collocation_matrices
 from sysopt.symbolic import (
-    Parameter, Variable,  Function, Compose,
+    Parameter, Variable,  Function, Composition,
     PiecewiseConstantSignal,
 )
 
@@ -365,7 +365,7 @@ def build_codesign_problem(problem: ConstrainedFunctional,
     options.solver = 'ipopt'
 
     for f in [f_i for f_i in hessian_functions if f_i is not None] :
-        if any(isinstance(node, (Function, Compose))
+        if any(isinstance(node, (Function, Composition))
                for node in f.graph.nodes):
             options.solver_options.update(
                 {'ipopt.hessian_approximation': 'limited-memory'}
