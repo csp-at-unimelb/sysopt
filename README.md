@@ -8,9 +8,11 @@ It allows users to design modular plant and control systems, simulate the trajec
 - Install via `pip install sysopt`
 - Documentation and user guide at https://sysopt.readthedocs.io .
 
-## A Minimal Example
 
-Test problem 3 from [Her19]_ provides a minimal example of ``sysopt`` usage.
+
+### A Minimal Example
+
+Test problem 3 from Herber and Allison[^1] provides a minimal example of ``sysopt`` usage.
 First, we define some components (plant, and controller), assemble a composite model then setup a optimsation problem for that model and solve it.  
 
     from sysopt import Metadata, Composite, SolverContext, PiecewiseConstantSignal, Parameter
@@ -61,4 +63,6 @@ First, we define some components (plant, and controller), assemble a composite m
         assert abs(k_min - k_star) < 1e-2
 
 
-.. [Her19] Herber, Daniel R., and James T. Allison. "Nested and simultaneous solution strategies for general combined plant and control design problems." Journal of Mechanical Design 141.1 (2019).
+
+## References
+[^1]:  Herber, Daniel R., and James T. Allison. "Nested and simultaneous solution strategies for general combined plant and control design problems." Journal of Mechanical Design 141.1 (2019).
