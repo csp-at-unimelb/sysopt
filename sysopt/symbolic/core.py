@@ -111,8 +111,7 @@ def as_array(item: Union[List[Union[int, float]], int, float, np.ndarray],
         # pylint: disable=import-outside-toplevel
         from sysopt.backends import as_array as backend_array
         return backend_array(item)
-
-    except TypeError as ex:
+    except TypeError:
         pass
 
     raise NotImplementedError(
@@ -1019,6 +1018,33 @@ def recursively_apply(graph: 'ExpressionGraph',
     return context[graph.head]
 
 
+def substitute(graph: ExpressionGraph, symbols: Dict[Variable, Any]):
+
+    def on_leaf_node(node):
+        try:
+            return symbols[node]
+        except KeyError:
+            return node
+
+    def on_trunk_node(op, *args):
+        return ExpressionGraph(op, *args)
+
+    return recursively_apply(graph,
+                             trunk_function=on_trunk_node,
+                             leaf_function=on_leaf_node)
+
+
+def function_from_graph(graph: ExpressionGraph, arguments: List[Variable]):
+
+    if graph in arguments or isinstance(graph, ExpressionGraph):
+        return GraphWrapper(graph, arguments)
+
+    if graph is None:
+        return None
+
+    return ConstantFunction(graph, arguments)
+
+
 class GraphWrapper(Algebraic):
     """Wraps an expression graph with the specified arguments."""
 
@@ -1213,7 +1239,6 @@ class SignalReference(Algebraic):
             return result
 
 
-
 @register_op(string='call')
 def evaluate_signal(signal: Callable, t: Union[Variable, float]):
     """Evaluates the signal at the given time."""
@@ -1246,7 +1271,6 @@ _t = Variable('time')
 def get_time_variable():
     """Gets the common time variable."""
     return _t
-
 
 
 def _is_subtree_constant(graph, node):
@@ -1376,6 +1400,7 @@ def is_temporal(symbol):
     if is_op(symbol):
         return False
     return False
+
 
 def is_matrix(obj):
     return isinstance(obj, np.ndarray)
