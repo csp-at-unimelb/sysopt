@@ -325,7 +325,7 @@ def create_symbols_from_domain(domain) -> Arguments:
     return arguments
 
 
-def symbolically_evaluate_initial_conditions(block:Block,
+def symbolically_evaluate_initial_conditions(block: Block,
                                              local_arguments: Arguments
                                              ) -> ExpressionGraph:
 
@@ -362,19 +362,19 @@ def symbolically_evaluate(block: Block,
     except NotImplementedError as ex:
         raise exceptions.FunctionError(
             block, func, 'function is not implemented!') from ex
+
     except exceptions.InvalidShape as ex:
         domain = local_arguments.domain
         message = 'Failed to evaluate symbolically when called with '\
                   f'local arguments of {domain}'
-        raise exceptions.FunctionError(
-            block, func, message
-        ) from ex
+        raise exceptions.FunctionError(block, func, message) from ex
+
     except Exception as ex:
         message = f'An execption \'{ex}\' was raised during ' \
                   'symbolic evaluation'
-        raise exceptions.FunctionError(
-            block, func, message
-        ) from ex
+
+        raise exceptions.FunctionError(block, func, message) from ex
+
     f = as_array(f)
     if f.shape != (dimension, ):
         raise exceptions.FunctionError(
@@ -404,6 +404,7 @@ def get_local_args_for_block(proj, block, arguments):
 def symbolically_evaluate_continuous_block(
     tables: Dict, block: Block, arguments: Arguments
 ) -> Tuple[Optional[ExpressionGraph]]:
+
     proj = get_projections_for_block(tables, block)
     proj_x = proj['states']
     proj_z = proj['constraints']
@@ -482,10 +483,11 @@ def flatten_system(root: ComponentBase) -> FlattenedSystem:
 
     tables, domain = create_tables(all_blocks)
     symbols = create_symbols_from_domain(domain)
-    discrete = filter(lambda x: isinstance(x, DiscreteBlock),
-                      all_blocks)
-    cts = filter(lambda x: not isinstance(x, (DiscreteBlock, Composite)),
-                 all_blocks)
+
+    discrete = filter(lambda x: isinstance(x, DiscreteBlock), all_blocks)
+    cts = filter(
+        lambda x: not isinstance(x, (DiscreteBlock, Composite)), all_blocks
+    )
 
     # Flatten all continuous blocks
     function_lists = zip(*[
@@ -503,6 +505,7 @@ def flatten_system(root: ComponentBase) -> FlattenedSystem:
         for function_list in function_lists
     ]
     state_transitions = []
+
     # Flatten discrete blocks
 
     discrete_funcs = [
@@ -549,5 +552,3 @@ def flatten_system(root: ComponentBase) -> FlattenedSystem:
         domain=domain,
         tables=tables
     )
-
-

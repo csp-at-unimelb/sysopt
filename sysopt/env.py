@@ -8,13 +8,12 @@ Notes:
 
 """
 
-backend = 'casadi'
+backend = "casadi"
 
 
-"""SysOpt version info."""
 major = 0
 minor = 5
 patch = 0
 
-
 version = f"{major}.{minor}.{patch}"
+"""SysOpt version info."""
