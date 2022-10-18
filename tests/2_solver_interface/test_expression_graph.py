@@ -3,7 +3,7 @@ from sysopt.symbolic import (
     is_temporal, ExpressionGraph, PathInequality
 )
 
-from sysopt.symbolic.symbols import get_time_variable
+from sysopt.symbolic.core import get_time_variable
 import sysopt.backends.scalar_ops as scalar_ops
 
 from sysopt.blocks import Gain, Oscillator

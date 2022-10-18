@@ -3,7 +3,7 @@
 import casadi
 from typing import List, Tuple, Callable, Optional
 
-from sysopt.symbolic.symbols import Function, Algebraic, Composition, SymbolicArray
+from sysopt.symbolic.core import Function, Algebraic, Composition, SymbolicArray
 from sysopt.backends.casadi.compiler import implements
 from sysopt.backends.casadi.expression_graph import substitute
 

@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 
-from sysopt.symbolic.symbols import ExpressionGraph, GraphWrapper, ConstantFunction, recursively_apply, Variable
+from sysopt.symbolic.core import ExpressionGraph, GraphWrapper, ConstantFunction, recursively_apply, Variable
 
 
 def function_from_graph(graph: ExpressionGraph, arguments: List[Variable]):

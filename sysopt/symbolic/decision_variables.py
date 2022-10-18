@@ -2,7 +2,7 @@
 
 import weakref
 from typing import Union, Tuple, Optional
-from sysopt.symbolic.symbols import (
+from sysopt.symbolic.core import (
     Variable, scalar_shape, ExpressionGraph, concatenate, Quadrature,
     Algebraic
 )
