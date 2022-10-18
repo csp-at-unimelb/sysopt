@@ -1,5 +1,5 @@
 from sysopt.symbolic import (
-    Variable, is_symbolic, list_symbols, Parameter,
+    Variable, is_symbolic, Parameter,
     is_temporal, ExpressionGraph, PathInequality
 )
 
@@ -21,12 +21,12 @@ def test_variables_api():
 
     for expression in expressions:
         assert is_symbolic(expression)
-        assert d in list_symbols(expression)
+        assert d in expression.symbols()
 
     for op in scalar_ops.unary:
         result = op(d)
         assert is_symbolic(result)
-        assert d in list_symbols(result)
+        assert d in expression.symbols()
 
 
 def test_parameter_api():

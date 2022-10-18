@@ -3,7 +3,7 @@
 import casadi
 from typing import List, Tuple, Callable, Optional
 
-from sysopt.symbolic.symbols import Function, Algebraic, Compose, SymbolicArray
+from sysopt.symbolic.symbols import Function, Algebraic, Composition, SymbolicArray
 from sysopt.backends.casadi.compiler import implements
 from sysopt.backends.casadi.expression_graph import substitute
 
@@ -288,8 +288,8 @@ class CasadiForeignFunction(Algebraic):
         return self(*args)
 
 
-@implements(Compose)
-def compose_implementation(composition: Compose):
+@implements(Composition)
+def compose_implementation(composition: Composition):
     f = wrap_function(composition.function)
 
     outer_args = {

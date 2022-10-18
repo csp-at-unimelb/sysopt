@@ -25,3 +25,8 @@ def filter_by_class(iterable: Iterable, cls: Type) -> Iterator:
     for item in iterable:
         if isinstance(item, cls):
             yield item
+
+
+def slice_to_list(slce: slice, max_len=None):
+    n = slce.stop or max_len
+    return list(range(n))[slce]
