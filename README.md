@@ -64,5 +64,4 @@ First, we define some components (plant, and controller), assemble a composite m
 
 
 
-## References
 [^1]:  Herber, Daniel R., and James T. Allison. "Nested and simultaneous solution strategies for general combined plant and control design problems." Journal of Mechanical Design 141.1 (2019).
