@@ -1114,7 +1114,6 @@ def as_vector(arg):
 class Variable(Algebraic):
     """Symbolic type for a free variable."""
     is_symbolic = True
-    __array_ufunc__ = None
 
     def __init__(self, name=None, shape=scalar_shape):
         self._shape = (shape, ) if isinstance(shape, int) else shape

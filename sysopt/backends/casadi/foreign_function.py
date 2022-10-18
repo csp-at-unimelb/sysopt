@@ -30,6 +30,7 @@ class CasadiJacobian(casadi.Callback):
                  func: Callable,
                  f_arguments: List[SymbolicArray],
                  f_shape: Tuple[int],
+                 hessian: Optional[Callable] = None,
                  opts={}):
         casadi.Callback.__init__(self)
         self.func = func
@@ -42,7 +43,11 @@ class CasadiJacobian(casadi.Callback):
             self.arg_offsets.append(n)
         m, = f_shape
         self._shape = (m, n)
-        self.construct(name, opts)
+        jac_opts = opts.copy()
+        jac_opts.update(
+            dict(enable_fd=True)
+        )
+        self.construct(name, jac_opts)
 
     def get_n_in(self):
         return 2
@@ -166,6 +171,7 @@ class CasadiFFI(casadi.Callback):
                  shape: Tuple[int],
                  jacobian: Optional[Callable] = None,
                  forwards: Optional[Callable] = None,
+                 hessian: Optional[Callable] = None,
                  name: str = 'f',
                  opts={}):
         casadi.Callback.__init__(self)
@@ -181,6 +187,7 @@ class CasadiFFI(casadi.Callback):
         self._outs = shape[0]
         self._jacobian_impl = None
         self._forwards_impl = None
+        self._hessian = None
         self.construct(name, opts)
 
     def has_forward(self, nfwd):
@@ -198,7 +205,8 @@ class CasadiFFI(casadi.Callback):
 
     def get_jacobian(self, name, *args, **kwargs):
         self._jacobian_impl = CasadiJacobian(
-            name, self._jacobian, self.arguments, self._shape
+            name, self._jacobian, self.arguments, self._shape,
+            self._hessian
         )
         return self._jacobian_impl
 
