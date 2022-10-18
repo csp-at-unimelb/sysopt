@@ -10,7 +10,7 @@ from typing import Union, List, Callable, Tuple, Optional, Dict, NewType, Any
 
 from sysopt.helpers import flatten, slice_to_list
 from sysopt.exceptions import InvalidShape, EvaluationError
-from sysopt.symbolic.numpy_api import (
+from sysopt.symbolic.matrix import (
     Matrix, sparse_matrix, basis_vector
 )
 

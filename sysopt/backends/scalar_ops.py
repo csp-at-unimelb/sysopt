@@ -1,6 +1,6 @@
 """Symbolic scalar/component-wise operations"""
 import numpy as np
-from sysopt.symbolic.symbols import wrap_as_op, numpy_handlers
+from sysopt.symbolic.core import wrap_as_op, numpy_handlers
 
 import sysopt.backends as backend
 

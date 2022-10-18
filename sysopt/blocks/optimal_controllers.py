@@ -7,7 +7,7 @@ from functools import lru_cache
 from sysopt import Block, Metadata
 from sysopt.backends import get_variational_solver
 from sysopt.symbolic import Function
-from sysopt.symbolic.symbols import (
+from sysopt.symbolic.core import (
     SymbolicArray, Variable
 )
 from sysopt.problems.problem_data import MinimumPathProblem, SolverOptions
