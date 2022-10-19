@@ -5,7 +5,7 @@ import sysopt.symbolic as symbolic
 import numpy as np
 from sysopt.blocks.common import Oscillator, LowPassFilter, DifferentialAmplifier
 from sysopt import Composite
-from sysopt.problems import SolverContext
+from sysopt.problems import CasadiContext
 from sysopt.modelling.block import DiscreteBlock
 
 
@@ -110,7 +110,7 @@ class TestSystemWithPID:
             error.parameters[1]: 0   # 0 bias
         }
         t_final = 10
-        with SolverContext(test_fixture, t_final, constants) as solver:
+        with CasadiContext(test_fixture, t_final, constants) as solver:
             flat_system = solver.flattened_system
             assert flat_system.state_transitions is not None
             assert len(flat_system.state_transitions) == 1

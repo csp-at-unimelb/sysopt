@@ -1,7 +1,7 @@
 import sympy as sp
 from sysopt.modelling.types import *
 from sysopt.modelling.block import Block
-from sysopt.problems.solver import SolverContext, get_time_variable
+from sysopt.problems.solver import CasadiContext, get_time_variable
 from sysopt.modelling.block import Composite
 from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal
@@ -104,7 +104,7 @@ class Problem1:
 def test_codesign_problem_1():
     block = LinearScalarEquation()
 
-    with SolverContext(model=block, t_final=1) as solver:
+    with CasadiContext(model=block, t_final=1) as solver:
         params = solver.parameters
 
         assert len(params) == 2
@@ -169,7 +169,7 @@ def test_codesign_problem_with_path_variable():
 
     u = PiecewiseConstantSignal('u', frequency=10)
     t_final = Variable('t_f')
-    with SolverContext(model, t_final=t_final) as context:
+    with CasadiContext(model, t_final=t_final) as context:
         y = model.outputs(t_final)
         constraint = [
             y[0:2].T @ y[0:2] < 1e-9,

@@ -6,7 +6,7 @@ from typing import Optional, Dict, List, Union, NewType
 import numpy as np
 
 from sysopt import symbolic
-from sysopt.backends import get_backend
+from sysopt.backends import get_backend, BackendContext
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
     is_symbolic, ConstantFunction, GraphWrapper
@@ -22,7 +22,7 @@ class InvalidParameterException(Exception):
     pass
 
 
-class SolverContext:
+class CasadiContext:
     """Context manager for model simulation and optimisation.
 
     Args:
@@ -46,8 +46,10 @@ class SolverContext:
         self.parameter_map = None
         self._params_to_t_final = None
         self.parameters = None
+        self.__ctx = BackendContext('casadi')
 
     def __enter__(self):
+        self.__ctx.__enter__()
         self._flat_system = flatten_system(self.model)
         _, self.parameters, t_map, p_map = create_parameter_map(
             self.model, self.constants, self.t_final
@@ -59,6 +61,7 @@ class SolverContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._flat_system = None
+        self.__ctx.__exit__(exc_type, exc_val, exc_tb)
 
     def prepare_path(self, decision_variables: Dict[DecisionVariable, float]):
         try:
@@ -200,7 +203,7 @@ class Problem:
     """
 
     def __init__(self,
-                 context: SolverContext,
+                 context: CasadiContext,
                  arguments: List[Variable],
                  cost: ExpressionGraph,
                  constraints: Optional[List[ExpressionGraph]]):
