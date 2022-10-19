@@ -7,7 +7,7 @@ from sysopt.modelling.block import Composite
 from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal
 from sysopt.symbolic import PiecewiseConstantSignal
-from sysopt.backends.casadi.codesign_problem import (
+from sysopt.backends.casadi.codesign_solver import (
     CasadiCodesignProblemData, transcribe_problem, CodesignSolverOptions
 )
 from sysopt import Domain

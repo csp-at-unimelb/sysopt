@@ -68,8 +68,10 @@ class PiecewiseConstantFactory:
 
     def regularisation_cost(self):
         factor = 1 / len(self._vector)
-        return factor ** 2 * sum((v2 - v1)**2
-                    for v2, v1 in zip(self._vector[1:], self._vector[:-1]))
+        return factor ** 2 * sum(
+            (v2 - v1)**2
+            for v2, v1 in zip(self._vector[1:], self._vector[:-1])
+        )
 
     def finalise(self):
         x = casadi.vertcat(*self._vector)
