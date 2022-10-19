@@ -4,7 +4,7 @@ from sysopt.backends.casadi.expression_graph import substitute
 from sysopt.backends.casadi.path import InterpolatedPath
 from sysopt.backends.casadi.integrator import get_integrator
 from sysopt.backends.casadi.variational_solver import get_variational_solver
-import sysopt.backends.casadi.codesign_problem
+import sysopt.backends.casadi.codesign_solver
 import sysopt.backends.casadi.foreign_function
 from sysopt.backends.casadi.math import *
 from sysopt.backends.impl_hooks import get_implementation
