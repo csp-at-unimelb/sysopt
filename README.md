@@ -20,6 +20,7 @@ First, we define some components (plant, and controller), assemble a composite m
     from sysopt.blocks import ConstantSignal
 
     k_star = 0.8543 # Known optimal gain. 
+    t_f = 10
     
     # Define the plant    
     def dxdt(t, x, u, p):
