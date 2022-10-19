@@ -209,7 +209,7 @@ class VariationalIntegrator:
         return InterpolatedPath('x', t.T, x)
 
 
-def get_variational_integrator(problem: MinimumPathProblem,
+def get_variational_solver(problem: MinimumPathProblem,
                                options=default_options):
 
     # choose initial number of co-location points per control update

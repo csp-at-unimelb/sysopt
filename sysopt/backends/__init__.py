@@ -1,18 +1,20 @@
 """Symbolic Backend Loader"""
 
 from sysopt.env import backend as backend_name
+from sysopt.backends.impl_hooks import get_implementation
 
 
-if backend_name == 'casadi':
-    import sysopt.backends.casadi as backend
-    from sysopt.backends.casadi.math import *
-else:
-    raise NotImplementedError(f'Backend {backend_name} is not implemented')
+def get_backend():
+    if backend_name == 'casadi':
+        import sysopt.backends.casadi as backend
+    elif backend_name == 'sympy':
+        import sysopt.backends.sympy as backend
+    else:
+        raise NotImplementedError(f'Backend {backend_name} is not implemented')
+
+    return backend
 
 
-InterpolatedPath = backend.InterpolatedPath
-as_array = backend.as_array
-get_integrator = backend.integrator.get_integrator
-get_variational_solver = backend.get_variational_integrator
-get_implementation = backend.get_implementation
-function_from_graph = get_implementation
+# as_array = backend.as_array
+# get_integrator = backend.integrator.get_integrator
+# get_variational_solver = backend.get_variational_solver

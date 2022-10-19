@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from sysopt.problems.problem_data import Domain, ConstrainedFunctional, CodesignSolution
-from sysopt.backends.casadi.compiler import implements
+from sysopt.backends.impl_hooks import implements
 from sysopt.backends.casadi.expression_graph import substitute
 from sysopt.backends.casadi.variational_solver import get_collocation_matrices
 from sysopt.symbolic import (

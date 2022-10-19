@@ -4,7 +4,7 @@ import casadi
 from typing import List, Tuple, Callable, Optional
 
 from sysopt.symbolic.core import Function, Algebraic, Composition, SymbolicArray
-from sysopt.backends.casadi.compiler import implements
+from sysopt.backends.impl_hooks import implements
 from sysopt.backends.casadi.expression_graph import substitute
 
 __all__ = []

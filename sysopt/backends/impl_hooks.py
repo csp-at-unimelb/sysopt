@@ -36,8 +36,5 @@ def get_implementation(obj):
     return factory(obj)
 
 
-@implements(ConstantFunction)
-def to_constant(func: ConstantFunction):
-    return lambda x: casadi.MX(func.value)
 
 

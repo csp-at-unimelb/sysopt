@@ -6,7 +6,7 @@ from typing import Optional, Dict, List, Union, NewType
 import numpy as np
 
 from sysopt import symbolic
-from sysopt.backends import get_integrator, get_implementation
+from sysopt.backends import get_backend
 from sysopt.symbolic import (
     ExpressionGraph, Variable, Parameter, get_time_variable,
     is_symbolic, ConstantFunction, GraphWrapper
@@ -165,7 +165,7 @@ class SolverContext:
         return self._flat_system
 
     def get_integrator(self, resolution=50):
-        return get_integrator(
+        return get_backend().get_integrator(
             self._flat_system,
             resolution=resolution,
             quadratures=self.quadratures
@@ -307,19 +307,23 @@ class Problem:
             f'Invalid arguments: expected {self.arguments}, received {args}'
         spec = self._get_problem_specification()
 
-        _ = get_implementation(spec)
+        # _ = get_implementation(spec)
 
         integrator = self.context.get_integrator()
 
         t = self.context._params_to_t_final(args)
         p = self.context.parameter_map(args)
 
+        backend = get_backend()
         if self.context.quadratures:
             y, q = integrator(t, p)
+            q = backend.as_array(q)
         else:
             y = integrator(t, p)
             q = None
-        cost = self._terminal_cost(t, y, q, args)
+
+        y = backend.as_array(y)
+        cost = (self._terminal_cost(t, y, q, args))
 
         return cost
 
@@ -349,7 +353,7 @@ class Problem:
     def solve(self, guess):
 
         problem = self._get_problem_specification()
-        solver = get_implementation(problem)
+        solver = get_backend().get_implementation(problem)
         return solver.minimise(guess)
 
 
