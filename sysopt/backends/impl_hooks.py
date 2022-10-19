@@ -29,7 +29,7 @@ def get_implementation(obj):
     try:
         factory = __function_factories[cls]
     except KeyError as ex:
-        msg = f'Casadi backend doesn\'t know how to turn and object of {cls}' \
+        msg = f'Backend doesn\'t know how to turn and object of {cls}' \
               'into a function'
         raise NotImplementedError(msg) from ex
 
