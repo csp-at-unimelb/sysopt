@@ -1,6 +1,6 @@
 import numpy as np
 from sysopt.modelling.block import Composite
-from sysopt.problems import SolverContext
+from sysopt.problems import CasadiContext
 from sysopt.blocks.common import HighPassFilter, Oscillator, DifferentialAmplifier
 
 
@@ -32,7 +32,7 @@ def test_highpass_filter_as_differentiator():
         diffamp.parameters[1]: 0
     }
 
-    with SolverContext(model, 10, constants) as solver:
+    with CasadiContext(model, 10, constants) as solver:
         soln = solver.integrate()
     x = soln.x.full().ravel()[1:]
     error = x.T @ x / len(x)    # ~ \int_0^t |x(x)|^2 dt

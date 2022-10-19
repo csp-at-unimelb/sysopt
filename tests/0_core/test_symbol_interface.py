@@ -3,7 +3,7 @@ import numpy as np
 from sysopt.symbolic import (
     Variable, ExpressionGraph, restriction_map, inclusion_map
 )
-
+from sysopt.backends import BackendContext
 
 class TestNumpyAlgebra:
     # def test_numpy_algebra(self):
@@ -92,6 +92,7 @@ class TestNumpyFunctionWrapping:
         expression = np.cos(x_1)
 
         assert expression.symbols() == {x}
-        result = expression.call({x: [0, 0, 0]})
+        with BackendContext():
+            result = expression.call({x: [0, 0, 0]})
         assert result == 1
 

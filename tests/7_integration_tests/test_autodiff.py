@@ -2,7 +2,7 @@
 import sysopt
 import numpy as np
 from sysopt.modelling.builders import FullStateOutput
-from sysopt.problems import SolverContext
+from sysopt.problems import CasadiContext
 metadata = sysopt.Metadata(states=['x'], parameters=['a', 'x0'])
 
 
@@ -26,7 +26,7 @@ block = FullStateOutput(metadata, dfdx, x0)
 def test_autodiff():
 
     t_f = 10
-    with SolverContext(block, t_f) as soln:
+    with CasadiContext(block, t_f) as soln:
         f = soln.get_integrator()
         t = 2
         p = [0.5, 3]

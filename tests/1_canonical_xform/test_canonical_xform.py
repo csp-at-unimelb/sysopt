@@ -4,6 +4,7 @@ import pytest
 from sysopt import Metadata
 from sysopt.modelling.block import Block, Composite
 from sysopt.symbolic import get_time_variable, symbolic_vector
+from sysopt.backends import BackendContext
 from sysopt.problems import canonical_transform as xform
 from sysopt.problems.wiring_tables import (
     create_tables_from_blocks, create_tables_from_block
@@ -230,8 +231,8 @@ class TestComposite:
         f = system.vector_field(*args)
         assert f.shape == system.vector_field.shape
         assert f[0] == f_n
-
-        g = system.output_map(*args)
+        with BackendContext():
+            g = system.output_map(*args)
         assert g.shape == system.output_map.shape
 
         assert g[0] == g_n
@@ -240,8 +241,8 @@ class TestComposite:
         block = self.create_composite()
         system = xform.flatten_system(block)
         args, (x0_n, f_n, g_n, h_n) = self.get_test_data()
-
-        h = system.constraints(*args)
+        with BackendContext():
+            h = system.constraints(*args)
 
 
 class TestSYS71Bug:
@@ -295,7 +296,7 @@ class TestSYS71Bug:
         ]
 
     def test_scenario(self):
-        from sysopt.problems import SolverContext
+        from sysopt.problems import CasadiContext
         # Fix for bug SYS-71
         # Problem is that a fan-out system model is throwing errors
         # ie; that when `get_symbolic_integrator` is called, it
@@ -303,7 +304,7 @@ class TestSYS71Bug:
         model = self.build_model()
         constants = {p: 1 for p in model.parameters}
 
-        with SolverContext(model, t_final=1, constants=constants) as context:
+        with CasadiContext(model, t_final=1, constants=constants) as context:
             y = model.outputs(1)
             constraint = [
                 y[0:2].T @ y[0:2] < 1e-9

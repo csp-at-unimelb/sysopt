@@ -20,7 +20,7 @@ acosh = wrap_as_op(lambda x: get_backend().acosh(x), 1, numpy_func=np.arccosh)
 atanh = wrap_as_op(lambda x: get_backend().atanh(x), 1, numpy_func=np.arctanh)
 fabs = wrap_as_op(lambda x: get_backend().fabs(x), 1, numpy_func=np.abs)
 
-heaviside = wrap_as_op(get_backend().heaviside, 1)
+heaviside = wrap_as_op(lambda x: get_backend().heaviside(x), 1)
 numpy_handlers[np.heaviside] = lambda x, x0, *args, **kwargs: heaviside(x)
 
 dirac = wrap_as_op(lambda x: get_backend().dirac(x), 1)

@@ -2,7 +2,7 @@ import casadi
 import sympy as sp
 from sysopt.modelling.types import *
 from sysopt.modelling.block import Block
-from sysopt.problems.solver import SolverContext
+from sysopt.problems.solver import CasadiContext
 from sysopt.modelling.block import Composite
 from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal
@@ -109,7 +109,7 @@ class Problem1:
 def test_codesign_problem_1():
     block = LinearScalarEquation()
 
-    with SolverContext(model=block, t_final=1) as solver:
+    with CasadiContext(model=block, t_final=1) as solver:
         params = solver.parameters
 
         assert len(params) == 2
@@ -233,7 +233,7 @@ class TestCasadiCodesign:
 
         u = PiecewiseConstantSignal('u', frequency=10)
         t_final = 1
-        with SolverContext(model, t_final=t_final) as context:
+        with CasadiContext(model, t_final=t_final) as context:
             y_t = context.integrate([0])
             y_f = y_t.x[0:2, -1]
             cost_f = y_f.T @ y_f

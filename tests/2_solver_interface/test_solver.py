@@ -6,7 +6,7 @@ import sympy
 from sysopt import Metadata
 from sysopt.modelling.block import Composite, Block
 from sysopt.blocks import Gain, Oscillator, LowPassFilter
-from sysopt.problems import SolverContext, Parameter, create_parameter_map
+from sysopt.problems import CasadiContext, Parameter, create_parameter_map
 from sysopt.symbolic import Variable
 
 eps = 1e-4
@@ -166,7 +166,7 @@ class TestSolverUnconstrained:
         t_f = 2
         test_params = [1, 0, 1, 1]
 
-        with SolverContext(block, t_f, constants) as solver:
+        with CasadiContext(block, t_f, constants) as solver:
             integrator = solver.get_integrator(resolution=150)
             x0 = integrator.x0(test_params)
             assert x0.shape == (2, 1)
@@ -183,7 +183,7 @@ class TestSolverUnconstrained:
 
         t_f = 2
         res = 50
-        with SolverContext(block, t_f, constants) as solver:
+        with CasadiContext(block, t_f, constants) as solver:
             w = 1
             y = solver.integrate(w, t_f, resolution=res)
             error = [
@@ -198,7 +198,7 @@ class TestSolverUnconstrained:
         model, constants, output, quad = build_example()
 
         t_f = 10
-        with SolverContext(model, t_f, constants) as solver:
+        with CasadiContext(model, t_f, constants) as solver:
             # the Solver object should contain a function
             # that represents the solution to the ode
             # with arguments
@@ -240,7 +240,7 @@ class TestSolverCompositeModel:
         model, constants, output, quad = build_example()
 
         t_f = 10
-        with SolverContext(model, t_f, constants) as solver:
+        with CasadiContext(model, t_f, constants) as solver:
             w = 1
             y = solver.integrate(w, t_f)
 
@@ -255,7 +255,7 @@ class TestSolverCompositeModel:
 
         t_f = 10
 
-        with SolverContext(model, t_f, constants) as solver:
+        with CasadiContext(model, t_f, constants) as solver:
             # the Solver object should contain a function
             # that represents the solution to the ode
             # with arguments

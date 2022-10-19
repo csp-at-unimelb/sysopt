@@ -9,7 +9,7 @@ Mechanical Design 141.1 (2019).
 from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal, Gain
 from sysopt import Composite, Metadata, PiecewiseConstantSignal
-from sysopt.problems import SolverContext, Parameter
+from sysopt.problems import CasadiContext, Parameter
 
 
 def dxdt(t, x, u, p):
@@ -56,7 +56,7 @@ def test_problem_1_open_loop():
     }
     b = Parameter(open_loop_plant, 0)
     u_in = PiecewiseConstantSignal(open_loop_controller.parameters[0], 100)
-    with SolverContext(model=open_loop_model,
+    with CasadiContext(model=open_loop_model,
                        t_final=25,
                        constants=constants) as solver:
 
@@ -97,7 +97,7 @@ def test_problem_1_closed_loop():
     constants = {
         f'{str(closed_loop_plant)}/xi_0': xi_0
     }
-    with SolverContext(model=closed_loop_model,
+    with CasadiContext(model=closed_loop_model,
                        t_final=25,
                        constants=constants) as solver:
         xi, u = closed_loop_model.outputs(solver.t)
