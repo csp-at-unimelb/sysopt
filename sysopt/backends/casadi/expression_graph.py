@@ -3,10 +3,11 @@
 from typing import Dict, List
 
 import casadi
-from sysopt.symbolic import is_matrix, recursively_apply, \
-    Variable, ExpressionGraph, Algebraic, GraphWrapper, Function, Composition
+from sysopt.symbolic import (
+    is_matrix, recursively_apply, Variable, ExpressionGraph, Algebraic,
+    GraphWrapper, Function, Composition, ConstantFunction)
 
-from .compiler import implements, get_implementation
+from sysopt.backends.impl_hooks import implements, get_implementation
 
 
 def substitute(graph: ExpressionGraph,
@@ -29,6 +30,11 @@ def substitute(graph: ExpressionGraph,
         return op(*children)
 
     return recursively_apply(graph, trunk_function, leaf_function)
+
+
+@implements(ConstantFunction)
+def to_constant(func: ConstantFunction):
+    return lambda x: casadi.MX(func.value)
 
 
 @implements(GraphWrapper)

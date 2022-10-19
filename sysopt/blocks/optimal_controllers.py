@@ -5,7 +5,7 @@ from typing import List, Union
 from functools import lru_cache
 
 from sysopt import Block, Metadata
-from sysopt.backends import get_variational_solver
+from sysopt.backends import get_backend
 from sysopt.symbolic import Function
 from sysopt.symbolic.core import (
     SymbolicArray, Variable
@@ -56,7 +56,7 @@ class PathPlanner(Block):
 
         @lru_cache(1)
         def solver(t_final):
-            return get_variational_solver(self._problem,
+            return get_backend().get_variational_solver(self._problem,
                                           self._solver_options)(t_final)
 
         def func(t, p):

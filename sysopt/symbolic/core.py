@@ -107,13 +107,6 @@ def as_array(item: Union[List[Union[int, float]], int, float, np.ndarray],
     elif callable(item):
         return Function(prototype.shape, item, prototype)
 
-    try:
-        # pylint: disable=import-outside-toplevel
-        from sysopt.backends import as_array as backend_array
-        return backend_array(item)
-    except TypeError:
-        pass
-
     raise NotImplementedError(
         f'Don\'t know how to treat {item} of type {type(item)} as an array')
 
