@@ -15,7 +15,7 @@ It allows users to design modular plant and control systems, simulate the trajec
 Test problem 3 from Herber and Allison[^1] provides a minimal example of ``sysopt`` usage.
 First, we define some components (plant, and controller), assemble a composite model then setup a optimsation problem for that model and solve it.  
 
-    from sysopt import Metadata, Composite, SolverContext, PiecewiseConstantSignal, Parameter
+    from sysopt import Metadata, Composite, CasadiContext, PiecewiseConstantSignal, Parameter
     from sysopt.modelling.builders import FullStateOutput
     from sysopt.blocks import ConstantSignal
 
@@ -44,7 +44,7 @@ First, we define some components (plant, and controller), assemble a composite m
 
     
     # Setup the joint optimisation problem. 
-    with SolverContext(model=model, t_final=t_f, constants={}) as solver:
+    with CasadiContext(model=model, t_final=t_f, constants={}) as solver:
 
         k = Parameter(plant, 0)
         u = PiecewiseConstantSignal('u', 100)

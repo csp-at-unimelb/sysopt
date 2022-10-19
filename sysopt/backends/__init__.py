@@ -15,6 +15,13 @@ class BackendContext:
         self.__name = name
         self.__pkg = pkg
 
+    def __getattribute__(self, item):
+        try:
+            be = get_backend()
+            return getattr(be, item)
+        except (AttributeError, AssertionError):
+            return super().__getattribute__(item)
+
     def __enter__(self):
         assert not BackendContext.__active_backend, \
             "Cannot open a new backend context while existing context " \
@@ -31,4 +38,9 @@ class BackendContext:
 
     @staticmethod
     def get_backend():
+        assert BackendContext.__active_backend is not None, "No backend loaded."
         return BackendContext.__active_backend
+
+    @staticmethod
+    def get_implementation(obj):
+        return get_implementation(obj)

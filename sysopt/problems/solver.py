@@ -22,109 +22,28 @@ class InvalidParameterException(Exception):
     pass
 
 
-class CasadiContext:
-    """Context manager for model simulation and optimisation.
-
-    Args:
-        model:  The model block diagram
-
-    """
+class SolverContext:
     def __init__(self,
                  model: Union[Block, Composite],
                  t_final: Union[float, Variable],
-                 constants: Optional[Dict] = None,
-                 path_resolution: int = 50
+                 constants: Optional[Dict] = None
                  ):
         self.model = model
         self.start = 0
         self.t_final = t_final
         self.t = get_time_variable()
         self.constants = constants if constants else {}
-        self.resolution = path_resolution
         self.quadratures = None
-        self._flat_system = None
-        self.parameter_map = None
-        self._params_to_t_final = None
-        self.parameters = None
-        self.__ctx = BackendContext('casadi')
-
-    def __enter__(self):
-        self.__ctx.__enter__()
         self._flat_system = flatten_system(self.model)
+        self.parameter_map = None
         _, self.parameters, t_map, p_map = create_parameter_map(
             self.model, self.constants, self.t_final
         )
         self.parameter_map = p_map
         self._params_to_t_final = t_map
 
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._flat_system = None
-        self.__ctx.__exit__(exc_type, exc_val, exc_tb)
-
-    def prepare_path(self, decision_variables: Dict[DecisionVariable, float]):
-        try:
-            values = [
-                decision_variables[p] for p in self.parameters
-            ]
-        except KeyError as ex:
-
-            raise ValueError(
-                f'Undefined parameters: expected {self.parameters}, '
-                f'received {decision_variables}') from ex
-
-        t_final = self._params_to_t_final(values)
-        params = self.parameter_map(values)
-        integrator = self.get_integrator()
-        func = integrator.integrate(t_final, params)
-
-        return func, t_final
-
-    def _create_parameter_projections(self):
-        constants = []
-        proj_indices = []
-
-        if symbolic.is_symbolic(self.t_final):
-            constants.append(0)
-            proj_indices.append(1)
-        else:
-            constants.append(self.t_final)
-        free_params = []
-        for row, parameter in enumerate(self.model.parameters):
-            try:
-                constants.append(self.constants[parameter])
-            except KeyError:
-                constants.append(0)
-                proj_indices.append(row)
-                free_params.append(parameter)
-        out_dimension = len(constants)
-        arguments = symbolic.Variable(
-            shape=(len(proj_indices), ),
-            name=f'''[{','.join(free_params)}]''')
-        basis_map = dict(enumerate(proj_indices))
-        projector = symbolic.inclusion_map(
-            basis_map, len(proj_indices), out_dimension
-        )
-        const_vector = symbolic.array(constants)
-        pi_args = projector(arguments)
-
-        graph = pi_args + const_vector
-        return symbolic.function_from_graph(graph, [arguments])
-
-    def get_symbolic_integrator(self):
-        integrator = self.get_integrator()
-        param_map = self._create_parameter_projections()
-
-        if is_symbolic(self.t_final):
-            def f(t, p):
-                args = param_map(p)
-                return integrator(t, args)
-        else:
-            def f(p):
-                args = param_map(p)
-                return integrator(args[0], args[1:])
-        return f
+    def integral(self, integrand):
+        return symbolic.Quadrature(integrand, self)
 
     def add_quadrature(self, integrand):
         if not self.quadratures:
@@ -138,6 +57,42 @@ class CasadiContext:
                 integrand
             )
         return idx
+
+
+class CasadiContext(SolverContext):
+    """Context manager for model simulation and optimisation.
+
+    Args:
+        model:  The model block diagram
+
+    """
+
+    def __init__(self,
+                 model: Union[Block, Composite],
+                 t_final: Union[float, Variable],
+                 constants: Optional[Dict] = None,
+                 path_resolution: int = 50
+                 ):
+        super().__init__(model, t_final, constants)
+        self.__ctx = BackendContext('casadi')
+        self.resolution = path_resolution
+
+    def __enter__(self):
+        self.__ctx.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.__ctx.__exit__(exc_type, exc_val, exc_tb)
+
+    def get_symbolic_integrator(self):
+        integrator = self.get_integrator()
+        param_map = self.parameter_map
+
+        def f(p):
+            t_f = self._params_to_t_final(p)
+            args = param_map(p)
+            return integrator(t_f, args)
+        return f
 
     def evaluate_quadrature(self, index, t, params):
         integrator = self.get_integrator()
@@ -158,7 +113,8 @@ class CasadiContext:
             ) from ex
 
         if not t_final:
-            t_final = self.t_final
+            t_final = self._params_to_t_final(parameters)
+
         soln = integrator.integrate(t_final, p)
 
         return soln
@@ -176,9 +132,6 @@ class CasadiContext:
 
     def problem(self, arguments, cost, subject_to=None):
         return Problem(self, arguments, cost, subject_to)
-
-    def integral(self, integrand):
-        return symbolic.Quadrature(integrand, self)
 
 
 def lambdify_terminal_constraint(problem: 'Problem',
