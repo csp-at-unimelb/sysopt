@@ -1,45 +1,34 @@
 """Symbolic Backend Loader"""
-
+from importlib import import_module, invalidate_caches
 from sysopt.backends.impl_hooks import get_implementation
-
-_backend_name = None
-
-backend = None
 
 
 def get_backend():
-
-    global _backend_name, backend
-    if _backend_name is None:
-        raise NotImplementedError(
-            "Function requires a symbolic context but none is loaded."
-            "Try wrapping the outer most scope in `with BackendContext()`")
-    if _backend_name == 'casadi':
-        import sysopt.backends.casadi as be
-        backend = be
-    else:
-        raise NotImplementedError(
-            f'Backend {_backend_name} is not implemented'
-        )
-    return backend
+    return BackendContext.get_backend()
 
 
 class BackendContext:
-    def __init__(self, name='casadi'):
+    __active_backend = None
+    __active_name = None
+
+    def __init__(self, name='casadi', pkg='sysopt.backends'):
         self.__name = name
+        self.__pkg = pkg
 
     def __enter__(self):
-        global _backend_name
-        assert _backend_name is None, "Cannot open a new backend context " \
-                                       f"while existing context {_backend_name} " \
-                                       f"is active"
-
-        _backend_name = self.__name
+        assert not BackendContext.__active_backend, \
+            "Cannot open a new backend context while existing context " \
+            f"{BackendContext.__active_backend} is active"
+        module = f'{self.__pkg}.{self.__name}'
+        BackendContext.__active_backend = import_module(module)
+        BackendContext.__active_name = module
+        invalidate_caches()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        global _backend_name
-        _backend_name = None
+        BackendContext.__active_backend = None
+        BackendContext.__active_name = None
 
-    def get_backend(self):
-        return get_backend()
+    @staticmethod
+    def get_backend():
+        return BackendContext.__active_backend
