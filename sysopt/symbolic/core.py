@@ -434,6 +434,7 @@ class Algebraic(metaclass=ABCMeta):
         raise ValueError('Cannot determine the length of a non-vector object')
 
     def __array_ufunc__(self, func, method, *args, **kwargs):
+
         if func not in numpy_handlers:
             return NotImplemented
         if method != '__call__':
@@ -553,7 +554,6 @@ def _less_or_equal(smaller, bigger):
 class Variable(Algebraic):
     """Symbolic type for a free variable."""
     is_symbolic = True
-    __array_ufunc__ = None
 
     def __init__(self, name=None, shape=scalar_shape):
         self._shape = (shape, ) if isinstance(shape, int) else shape
