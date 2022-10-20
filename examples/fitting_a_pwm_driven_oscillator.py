@@ -108,7 +108,7 @@ plt.title("Fitting a PWM driven Van der Pol Oscillator to a sine wave")
 plt.legend()
 plt.show()
 
-print( "=================================")
-print( "==========Solution===============")
-print(f"Optimal at (mu, tau) = %3.2f, %3.2f".format(mu_star, tau_star))
+print("=================================")
+print("==========Solution===============")
+print(f"Optimal at (mu, tau) = {mu_star}, {tau_star}")
 
