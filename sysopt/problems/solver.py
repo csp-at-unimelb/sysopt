@@ -12,7 +12,7 @@ from sysopt.symbolic import (
     is_symbolic, ConstantFunction, GraphWrapper
 )
 from sysopt.problems.canonical_transform import flatten_system
-from sysopt.problems.problem_data import Quadratures, ConstrainedFunctional, FlattenedSystem
+from sysopt.problems.problem_data import Quadratures, ConstrainedFunctional, FlattenedSystem, CodesignSolution
 from sysopt.modelling.block import Block, Composite
 
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
@@ -346,7 +346,7 @@ class Problem:
             jac[i] = dcost
         return jac
 
-    def solve(self, guess):
+    def solve(self, guess:List) -> CodesignSolution :
 
         problem = self._get_problem_specification()
         solver = get_implementation(problem)
