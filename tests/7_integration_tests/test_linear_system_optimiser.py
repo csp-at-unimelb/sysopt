@@ -16,7 +16,7 @@ Such that:
 import pytest
 
 from sysopt import Signature, Composite
-from sysopt.problems import CasadiContext, Parameter
+from sysopt.problems import SolverContext, Parameter
 
 from sysopt.modelling.builders import FullStateOutput, InputOutput
 
@@ -75,7 +75,7 @@ def test_model_assembly():
     Q_x = np.eye(4)
     Q_u = np.eye(2)
 
-    with CasadiContext(model, t_f) as solver:
+    with SolverContext(model, t_f) as solver:
         t = solver.t
         u = model.outputs[4:6](t)
         x = model.outputs[0:4](t)

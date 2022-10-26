@@ -16,11 +16,20 @@ class BackendContext:
         self.__pkg = pkg
 
     def __getattribute__(self, item):
+        # There is probably a cleaner, less convoluted way to do this
+        try:
+            return super().__getattribute__(item)
+        except AttributeError:
+            pass
+
         try:
             be = get_backend()
             return getattr(be, item)
-        except (AttributeError, AssertionError):
-            return super().__getattribute__(item)
+        except AttributeError as ex:
+            raise NotImplementedError(
+                f'Backend {self.__active_name} does not currently '
+                f'implement {item}!'
+            )
 
     def __enter__(self):
         assert not BackendContext.__active_backend, \

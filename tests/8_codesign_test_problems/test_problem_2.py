@@ -11,7 +11,7 @@ from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal
 from sysopt import Metadata, Composite
 from sysopt.symbolic import Parameter, PiecewiseConstantSignal
-from sysopt.problems import CasadiContext
+from sysopt.problems import SolverContext
 
 
 def dxdt(t, x, u, p):
@@ -53,7 +53,7 @@ def test_problem_2():
         plant.parameters[2]: -1,
     }
     t_f = 2
-    with CasadiContext(model=model,
+    with SolverContext(model=model,
                        t_final=t_f,
                        constants=constants) as solver:
 

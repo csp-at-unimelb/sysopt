@@ -1,7 +1,7 @@
 import sympy as sp
 from sysopt.modelling.types import *
 from sysopt.modelling.block import Block
-from sysopt.problems.solver import CasadiContext, get_time_variable
+from sysopt.problems.solver import SolverContext, get_time_variable
 from sysopt.modelling.block import Composite
 from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal
@@ -104,7 +104,7 @@ class Problem1:
 def test_codesign_problem_1():
     block = LinearScalarEquation()
 
-    with CasadiContext(model=block, t_final=1) as solver:
+    with SolverContext(model=block, t_final=1) as solver:
         params = solver.parameters
 
         assert len(params) == 2
@@ -133,44 +133,13 @@ def test_codesign_problem_1():
         assert (jac - grad_known < 1e-4).all()
 
 
-def test_codesign_problem_with_path_variable():
-    model = Composite(name='Test Model')
-    # build a LQR model
-    #
-    plant_metadata = Metadata(
-        inputs=['u'],
-        states=['x_0', 'x_1']
-    )
-    A = np.array([[0, 1],
-                  [-1, 0]], dtype=float)
-    B = np.array([[1], [0]], dtype=float)
-
-    def f(t, x, u, _):
-        return A @ x + B @ u
-
-    def x0(_):
-        return np.array([0, 1])
-
-    plant = FullStateOutput(
-        dxdt=f,
-        metadata=plant_metadata,
-        x0=x0,
-        name='plant'
-    )
-    control = ConstantSignal(['u'])
-    model.components = [plant, control]
-    model.declare_outputs(['x_0', 'x_1', 'u'])
-    model.wires = [
-        (control.outputs, plant.inputs),
-        (control.outputs[0], model.outputs[2]),
-        (plant.outputs[0], model.outputs[0]),
-        (plant.outputs[1], model.outputs[1])
-    ]
+def test_codesign_problem_with_path_variable(linear_model):
 
     u = PiecewiseConstantSignal('u', frequency=10)
     t_final = Variable('t_f')
-    with CasadiContext(model, t_final=t_final) as context:
-        y = model.outputs(t_final)
+
+    with SolverContext(linear_model, t_final=t_final) as context:
+        y = linear_model.outputs(t_final)
         constraint = [
             y[0:2].T @ y[0:2] < 1e-9,
             u <= 1,
@@ -188,7 +157,7 @@ def test_codesign_problem_with_path_variable():
         t = get_time_variable()
         expected_symbols = {
             p, get_time_variable(),
-            model.outputs(t)
+            linear_model.outputs(t)
         }
         q, = spec.value.symbols() - expected_symbols
         expected_symbols.add(q)

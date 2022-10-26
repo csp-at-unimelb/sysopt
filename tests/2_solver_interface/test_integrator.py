@@ -14,7 +14,7 @@
 
 from sysopt.modelling.types import *
 from sysopt.modelling.block import Block
-from sysopt.problems import CasadiContext
+from sysopt.problems import SolverContext
 
 
 class LinearScalarEquation(Block):
@@ -83,7 +83,7 @@ class TestSymbolicIntegrator:
     def test_init(self):
         block = LinearScalarEquation()
 
-        with CasadiContext(model=block, t_final=10) as solver:
+        with SolverContext(model=block, t_final=10) as solver:
 
             f = solver.get_integrator()
             t = 2
@@ -96,7 +96,7 @@ class TestSymbolicIntegrator:
     def test_finite_differences(self):
         block = LinearScalarEquation()
 
-        with CasadiContext(model=block, t_final=10) as solver:
+        with SolverContext(model=block, t_final=10) as solver:
             f = solver.get_integrator()
             t = 2
             params = [1, 1]
@@ -110,7 +110,7 @@ class TestSymbolicIntegrator:
     def test_autodiff(self):
         block = LinearScalarEquation()
 
-        with CasadiContext(model=block, t_final=10) as solver:
+        with SolverContext(model=block, t_final=10) as solver:
             f = solver.get_integrator()
             t = 2
             params = [1, 1]

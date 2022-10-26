@@ -17,7 +17,7 @@ from sysopt import Composite
 from sysopt.blocks import Gain, Oscillator
 
 # Used to run simulation
-from sysopt.problems import CasadiContext
+from sysopt.problems import SolverContext
 
 # @nb.text_cell
 r"""
@@ -183,7 +183,7 @@ The name can be index directly from the objects parameter attribute,
 or specified as a string.  
 
 Once the parameters are fully specified, one can construct a simulation/
-problems window (using the `CasadiContext` context manager) and then
+problems window (using the `SolverContext` context manager) and then
 perform the integration with the `integrate` method.
 
 The output `x_t` is a function that provides cubic interpolation between
@@ -205,7 +205,7 @@ def simulate(t=10):
         f'{duffing_system.resonator}/nonlinearity': 1,
     }
     # get an integrator
-    with CasadiContext(duffing_system, t, default_parameters) as solver:
+    with SolverContext(duffing_system, t, default_parameters) as solver:
         x_t = solver.integrate(resolution=100)
 
     return x_t

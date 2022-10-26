@@ -33,7 +33,7 @@ from scipy.linalg import solve_continuous_are
 from sysopt import Metadata
 from sysopt.modelling.builders import FullStateOutput, InputOutput
 from sysopt.modelling.block import Composite
-from sysopt.problems import CasadiContext
+from sysopt.problems import SolverContext
 
 
 # @nb.text_cell
@@ -169,7 +169,7 @@ def simulate(p):
     model = build_model()
     constants = build_constants(model)
 
-    with CasadiContext(model, t_final, constants) as solver:
+    with SolverContext(model, t_final, constants) as solver:
 
         soln = solver.integrate(p, resolution=150)
         T = soln.t.full()
@@ -232,7 +232,7 @@ def do_parameter_sweep():
     k2_points = np.linspace(1, 4, n)
     K1, K2 = np.meshgrid(k1_points, k2_points)
     C = np.empty_like(K1)
-    with CasadiContext(model, t_final, constants) as solver:
+    with SolverContext(model, t_final, constants) as solver:
         y = model.outputs(solver.t)
 
         running_cost = y.T @ Q @ y
@@ -272,7 +272,7 @@ We can see the optimal cost, control effort and state over time.
 def simulate_with_quadratic_cost(parameters):
     model = build_model()
     constants = build_constants(model)
-    with CasadiContext(model, t_final, constants) as solver:
+    with SolverContext(model, t_final, constants) as solver:
         y = model.outputs(solver.t)
 
         running_cost = y.T @ Q @ y

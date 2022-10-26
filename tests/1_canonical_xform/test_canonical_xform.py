@@ -296,7 +296,7 @@ class TestSYS71Bug:
         ]
 
     def test_scenario(self):
-        from sysopt.problems import CasadiContext
+        from sysopt.problems import SolverContext
         # Fix for bug SYS-71
         # Problem is that a fan-out system model is throwing errors
         # ie; that when `get_symbolic_integrator` is called, it
@@ -304,7 +304,7 @@ class TestSYS71Bug:
         model = self.build_model()
         constants = {p: 1 for p in model.parameters}
 
-        with CasadiContext(model, t_final=1, constants=constants) as context:
+        with SolverContext(model, t_final=1, constants=constants) as context:
             y = model.outputs(1)
             constraint = [
                 y[0:2].T @ y[0:2] < 1e-9

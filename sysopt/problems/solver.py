@@ -14,19 +14,17 @@ from sysopt.symbolic import (
 from sysopt.problems.canonical_transform import flatten_system
 from sysopt.problems.problem_data import Quadratures, ConstrainedFunctional, FlattenedSystem
 from sysopt.modelling.block import Block, Composite
+from sysopt.exceptions import InvalidParameterException
 
 DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
-
-
-class InvalidParameterException(Exception):
-    pass
 
 
 class SolverContext:
     def __init__(self,
                  model: Union[Block, Composite],
                  t_final: Union[float, Variable],
-                 constants: Optional[Dict] = None
+                 constants: Optional[Dict] = None,
+                 backend='casadi'
                  ):
         self.model = model
         self.start = 0
@@ -41,6 +39,14 @@ class SolverContext:
         )
         self.parameter_map = p_map
         self._params_to_t_final = t_map
+        self.__ctx = BackendContext(backend)
+
+    def __enter__(self):
+        self.__ctx.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.__ctx.__exit__(exc_type, exc_val, exc_tb)
 
     def integral(self, integrand):
         return symbolic.Quadrature(integrand, self)
@@ -58,31 +64,12 @@ class SolverContext:
             )
         return idx
 
+    @property
+    def flattened_system(self) -> FlattenedSystem:
+        return self._flat_system
 
-class CasadiContext(SolverContext):
-    """Context manager for model simulation and optimisation.
-
-    Args:
-        model:  The model block diagram
-
-    """
-
-    def __init__(self,
-                 model: Union[Block, Composite],
-                 t_final: Union[float, Variable],
-                 constants: Optional[Dict] = None,
-                 path_resolution: int = 50
-                 ):
-        super().__init__(model, t_final, constants)
-        self.__ctx = BackendContext('casadi')
-        self.resolution = path_resolution
-
-    def __enter__(self):
-        self.__ctx.__enter__()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.__ctx.__exit__(exc_type, exc_val, exc_tb)
+    def problem(self, arguments, cost, subject_to=None):
+        return Problem(self, arguments, cost, subject_to)
 
     def get_symbolic_integrator(self):
         integrator = self.get_integrator()
@@ -119,19 +106,12 @@ class CasadiContext(SolverContext):
 
         return soln
 
-    @property
-    def flattened_system(self) -> FlattenedSystem:
-        return self._flat_system
-
     def get_integrator(self, resolution=50):
-        return get_backend().get_integrator(
+        return self.__ctx.get_integrator(
             self._flat_system,
             resolution=resolution,
             quadratures=self.quadratures
         )
-
-    def problem(self, arguments, cost, subject_to=None):
-        return Problem(self, arguments, cost, subject_to)
 
 
 def lambdify_terminal_constraint(problem: 'Problem',
@@ -156,7 +136,7 @@ class Problem:
     """
 
     def __init__(self,
-                 context: CasadiContext,
+                 context: SolverContext,
                  arguments: List[Variable],
                  cost: ExpressionGraph,
                  constraints: Optional[List[ExpressionGraph]]):
@@ -261,9 +241,8 @@ class Problem:
         """Evaluate the problem with the given arguments."""
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
-        spec = self._get_problem_specification()
 
-        # _ = get_implementation(spec)
+        spec = self._get_problem_specification()
 
         integrator = self.context.get_integrator()
 
@@ -279,7 +258,7 @@ class Problem:
             q = None
 
         y = backend.as_array(y)
-        cost = (self._terminal_cost(t, y, q, args))
+        cost = spec.value(t, y, q, args)
 
         return cost
 
