@@ -70,3 +70,7 @@ class NoTopLevelOutputs(Exception):
                   f'to wire some from internal components to have any ' \
                   f'observables.'
         super().__init__(message)
+
+
+class InvalidParameterException(Exception):
+    pass

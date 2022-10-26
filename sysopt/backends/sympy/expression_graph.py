@@ -5,23 +5,51 @@ from typing import Dict, List
 import sympy
 from sysopt.symbolic import (
     is_matrix, recursively_apply, Variable, ExpressionGraph, Algebraic,
-    GraphWrapper, Function, Composition, ConstantFunction)
+    GraphWrapper, Function, Composition, ConstantFunction, matmul)
 
 from sysopt.backends.impl_hooks import implements, get_implementation
+from sysopt.backends.sympy.helpers import sympy_vector
+
+
+def float_to_int(eq):
+    """Convert floats that are ints to ints
+
+    see: https://stackoverflow.com/questions/64761602/how-to-get-sympy-to-replace-ints-like-1-0-with-1
+    """
+    reps = {}
+    e = eq.replace(
+        lambda x: x.is_Float and x == int(x),
+        lambda x: reps.setdefault(x, sympy.Dummy()))
+    return e.xreplace({v: int(k) for k, v in reps.items()})
+
+
+def to_scalar(obj):
+    if int(obj) == obj:
+        return float_to_int(sympy.Number(int(obj)))
+    else:
+        return sympy.Number(obj)
 
 
 def substitute(graph: ExpressionGraph,
                symbols: Dict[Variable, sympy.Symbol]):
 
-    def leaf_function(obj):
+    def leaf_to_sympy_obj(obj):
         if is_matrix(obj):
-            return sympy.ImmutableSparseMatrix(*obj.shape, obj)
+            if obj.shape == (1, ) or obj.shape == (1, 1):
+                # for some reason sympy doesn't like to (1, ) matricies.
+                return to_scalar(obj.ravel()[0])
+            try:
+                return float_to_int(sympy.ImmutableSparseMatrix(*obj.shape, obj))
+            except TypeError as ex:
+                raise TypeError(f'Failed to convert {obj} to a sympy matrix') from ex
 
         if isinstance(obj, (int, float, complex)):
-            return obj
+            return to_scalar(obj)
 
-        if obj in symbols:
+        try:
             return symbols[obj]
+        except KeyError:
+            pass
 
         if isinstance(obj, (Function, Composition)):
             arguments = {a: symbols[a] for a in obj.arguments}
@@ -31,8 +59,18 @@ def substitute(graph: ExpressionGraph,
         raise NotImplementedError(f'Don\'y know how to evaluate {obj} of'
                                   f'type {type(obj)}')
 
-    def trunk_function(op, *children):
-        r = op(*children)
+    def trunk_to_sympy_obj(op, *children):
+        # Hack to get around sympy.Mul a not having @ defined.
+        if op is matmul:
+            r = children[0]
+            for child in children[1:]:
+                try:
+                    r = r @ child
+                except TypeError:
+                    r = r * child
+        else:
+            r = op(*children)
+
         try:
             if r.shape == (1, 1):
                 r = r[0, 0]
@@ -43,7 +81,7 @@ def substitute(graph: ExpressionGraph,
 
         return r
 
-    return recursively_apply(graph, trunk_function, leaf_function)
+    return recursively_apply(graph, trunk_to_sympy_obj, leaf_to_sympy_obj)
 
 
 @implements(ConstantFunction)
@@ -59,79 +97,61 @@ def to_constant(func: ConstantFunction):
 @implements(ExpressionGraph)
 def to_sympy_eqn(graph: ExpressionGraph):
     symbols = {
-        s: sympy.Matrix(
-            [sympy.symbols(f'{s.name}_{i}') for i in range(s.shape[0])]
-        )
-        for s in graph.symbols()
+        s: sympy_vector(s.name, s.shape) for s in graph.symbols()
     }
 
     return substitute(graph, symbols)
 
 
-# @implements(GraphWrapper)
-# def compile_expression_graph(obj: GraphWrapper):
-#     return CasadiGraphWrapper(obj.graph, obj.arguments)
+@implements(GraphWrapper)
+def compile_expression_graph(obj: GraphWrapper):
+    return SympyGraphWrapper(obj.graph, obj.arguments)
 
 
-# def to_function(obj: GraphWrapper, name='f'):
-#     symbols = {
-#         s: casadi.MX.sym(str(s), *s.shape) for s in obj.arguments
-#     }
-#     impl = substitute(obj.graph, symbols)
-#     return casadi.Function(
-#         name,
-#         list(symbols.values()),
-#         [impl]
-#     )
+class SympyGraphWrapper(Algebraic):
+    """Function wrapper for a function as an expression graph."""
 
+    def __init__(self,
+                 graph: ExpressionGraph,
+                 arguments: List[Variable],
+                 name: str = 'f'):
+        self._shape = graph.shape
+        self._symbols = {
+            a: sympy_vector(a.name, a.shape) for a in arguments
+        }
+        self.name = name
+        self.func = substitute(graph, self._symbols)
 
-# class CasadiGraphWrapper(Algebraic):
-#     """Casadi function wrapper for a function compled from an
-#     expression graph."""
-#
-#     def __init__(self,
-#                  graph: ExpressionGraph,
-#                  arguments: List[Variable],
-#                  name: str = 'f'):
-#         self._shape = graph.shape
-#         self._symbols = {
-#             a: casadi.MX.sym(str(a), *a.shape) for a in arguments
-#         }
-#
-#         f_impl = substitute(graph, self._symbols)
-#         self.func = casadi.Function(name,
-#                                     list(self._symbols.values()),
-#                                     [f_impl])
-#
-#     def __hash__(self):
-#         return id(self)
-#
-#     def __repr__(self):
-#         return repr(self.func)
-#
-#     @property
-#     def shape(self):
-#         return self._shape
-#
-#     def symbols(self):
-#         return set(self._symbols.keys())
-#
-#     def __call__(self, *args):
-#         result = self.func(*args)
-#         try:
-#             return result.full()
-#         except AttributeError:
-#             return result
-#
-#     def pushforward(self, *args):
-#         n = len(self.symbols())
-#         assert len(args) == 2 * n, f'expected {2 * n} arguments, ' \
-#                                    f'got {len(args)}'
-#         x, dx = args[:n], args[n:]
-#         out_sparsity = casadi.DM.ones(*self.shape)
-#         jac = self.func.jacobian()(*x, out_sparsity)
-#         dx = casadi.vertcat(*dx)
-#         result = jac @ dx
-#
-#         return self.func(*x), result
-#
+    def __hash__(self):
+        return id(self)
+
+    def __repr__(self):
+        return repr(self.func)
+
+    @property
+    def shape(self):
+        return self._shape
+
+    def symbols(self):
+        return set(self._symbols.keys())
+
+    def __call__(self, *args):
+        result = self.func.evalf(*args)
+        try:
+            return result.full()
+        except AttributeError:
+            return result
+
+    def pushforward(self, *args):
+        n = len(self.symbols())
+        assert len(args) == 2 * n, f'expected {2 * n} arguments, ' \
+                                   f'got {len(args)}'
+        x, dx = args[:n], args[n:]
+        jac = sympy.Matrix(
+            [sympy.diff(self.func, a) for a in self._symbols.values()]
+        )
+
+        result = jac.evalf(x) @ dx
+
+        return self.func.evalf(x), result
+

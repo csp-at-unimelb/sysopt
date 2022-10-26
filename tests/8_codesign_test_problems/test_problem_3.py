@@ -9,7 +9,7 @@ Mechanical Design 141.1 (2019).
 
 
 from sysopt import Metadata, Composite
-from sysopt.problems import CasadiContext
+from sysopt.problems import SolverContext
 from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal
 from sysopt.symbolic import PiecewiseConstantSignal, Parameter
@@ -47,7 +47,7 @@ def test_problem_3():
     k = Parameter(plant, 0)
     u = PiecewiseConstantSignal('u', 100)
 
-    with CasadiContext(model=model, t_final=t_f, constants={}) as solver:
+    with SolverContext(model=model, t_final=t_f, constants={}) as solver:
         y_f = model.outputs(solver.t_final)
         cost = -y_f[0]
 

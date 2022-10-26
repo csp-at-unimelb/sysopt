@@ -19,7 +19,7 @@ plt.ion()
 # @nb.code_cell
 from sysopt import Block, Metadata, Composite
 from sysopt.symbolic import Variable, Parameter
-from sysopt.problems import CasadiContext
+from sysopt.problems import SolverContext
 import numpy as np
 
 g = -9.81
@@ -212,7 +212,7 @@ def evaluate():
         f'{model.rocket}/dy0': 1
     }
 
-    with CasadiContext(model, t_f, parameters) as context:
+    with SolverContext(model, t_f, parameters) as context:
         x_T = x(context.t_final)    # Final positions
         y_T = y(context.t_final)
 
@@ -298,7 +298,7 @@ def parameter_sweep():
                        np.linspace(0.1, 1, n))
     Z = np.empty_like(X)
 
-    with CasadiContext(model, t_f, parameters) as context:
+    with SolverContext(model, t_f, parameters) as context:
         x_T = x(context.t_final)
         y_T = y(context.t_final)
 

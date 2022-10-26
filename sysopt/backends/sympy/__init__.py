@@ -3,6 +3,8 @@ import sympy as sp
 import sympy.core
 from sysopt.backends.sympy.math import *
 import sysopt.backends.sympy.expression_graph
+from sysopt.backends.sympy.integrator import get_integrator
+
 
 def sparse_matrix(shape):
     return sp.MutableSparseMatrix(*shape, {})
