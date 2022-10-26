@@ -1,4 +1,5 @@
 """Exceptions and Error reporting objects."""
+from typing import Tuple
 
 
 class DanglingInputError(ValueError):
@@ -31,7 +32,7 @@ class InvalidComponentError(ValueError):
 
 class UnconnectedOutputError(ValueError):
     def __init__(self, component, channel):
-        message = f'{component} has output ports without no sources:'
+        message = f'Composite {component} has output ports without no sources:'
         message += ','.join(list(str(c) for c in channel))
         super().__init__(message)
 
@@ -52,6 +53,20 @@ class InvalidShape(ValueError):
 
 class EvaluationError(ValueError):
     def __init__(self, graph, context, path, exception):
-        message = f'''{exception} was raised during the evalution of an
+        message = f'''{exception} was raised during the evaluation of an
         expression graph.\n Evaluation order: {path} with context {context}'''
+        super().__init__(message)
+
+
+class InternalWireNotFound(Exception):
+    def __init__(self, wire: Tuple, *args):
+        message = f'Failed to connect {str(wire[0])} -> {str(wire[1])}.'
+        super().__init__(message, *args)
+
+
+class NoTopLevelOutputs(Exception):
+    def __init__(self, root):
+        message = f'Top level model {root} has no defined outputs. You need ' \
+                  f'to wire some from internal components to have any ' \
+                  f'observables.'
         super().__init__(message)
