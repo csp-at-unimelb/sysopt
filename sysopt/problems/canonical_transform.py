@@ -1,7 +1,7 @@
 """Symbol Database for simulation and optimisation."""
 # pylint: disable=invalid-name
 import copy
-import warnings
+from warnings import warn
 from typing import Optional, List, Union, Callable, Dict, Tuple, Iterable
 from dataclasses import dataclass, asdict
 from collections import deque
@@ -15,7 +15,7 @@ from sysopt.symbolic import (
     restriction_map, as_array, sparse_matrix, Matrix
 )
 from sysopt.problems.problem_data import FlattenedSystem
-from warnings import warn
+
 from sysopt import warnings
 from sysopt import exceptions
 
