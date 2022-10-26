@@ -1,10 +1,10 @@
 """Symbol Database for simulation and optimisation."""
 # pylint: disable=invalid-name
 import copy
+import warnings
 from typing import Optional, List, Union, Callable, Dict, Tuple, Iterable
 from dataclasses import dataclass, asdict
 from collections import deque
-
 from sysopt.problems.problem_data import Domain
 from sysopt.modelling.block import (
     Block, Composite, Connection, Channel, Port, ComponentBase, DiscreteBlock
@@ -15,8 +15,8 @@ from sysopt.symbolic import (
     restriction_map, as_array, sparse_matrix, Matrix
 )
 from sysopt.problems.problem_data import FlattenedSystem
-
-
+from warnings import warn
+from sysopt import warnings
 from sysopt import exceptions
 
 
@@ -191,7 +191,7 @@ def find_channel_in_table(table: List[TableEntry],
         entry, = list(filter(key, table))
     except ValueError as ex:
         if len(list(filter(key, table))) == 0:
-            message = f'Coulnd not find {port.block}' \
+            message = f'Could not find {port.block}' \
                       f'[{local_index}] in table\n'
         else:
             message = f'Multiple entries for {port.block}' \
@@ -211,12 +211,16 @@ def internal_wire_to_table_entries(tables: Tables,
             src_index = find_channel_in_table(
                 tables['outputs'], src_port, src_i
             )
+        except ValueError as ex:
+            raise exceptions.InternalWireNotFound(wire, *ex.args) from ex
+        try:
             dest_index = find_channel_in_table(
                 tables['inputs'], dest_port, dest_i
             )
-        except ValueError as ex:
-            message = f'Failed to get ports for wire {wire} : {ex.args}'
-            raise ValueError(message) from ex
+        except ValueError:
+            warn(warnings.UnconnectedInput(wire))
+            continue
+
         entries.append(WireEntry(
             source_port=str(src_port),
             destination_port=str(dest_port),
@@ -539,6 +543,9 @@ def flatten_system(root: ComponentBase) -> FlattenedSystem:
     output_indices = {
         entry.local_index: entry.global_index for entry in output_tables
     }
+
+    if not output_indices:
+        raise exceptions.NoTopLevelOutputs(root)
 
     proj_y = restriction_map(output_indices, output_map.shape[0])
     outs = proj_y(output_map)

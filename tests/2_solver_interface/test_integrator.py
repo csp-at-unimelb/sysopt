@@ -120,8 +120,3 @@ class TestSymbolicIntegrator:
 
             expected = block.pushforward(t, params, dparams)
             assert abs(result[0][0] - expected) < 1e-2
-
-
-
-
-

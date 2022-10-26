@@ -313,3 +313,42 @@ class TestSYS71Bug:
             f = context.get_symbolic_integrator()
             # throws here!
 
+
+class TestSYS94Bug:
+    def test_no_outputs_should_error(self):
+        from sysopt.blocks import ConstantSignal, Gain
+        from sysopt import SolverContext
+        from sysopt.exceptions import NoTopLevelOutputs
+        from sysopt.warnings import UnconnectedInput
+        inner = Composite(name='inner')
+        inner.gain = Gain(channels=1)
+        inner.components = [inner.gain]
+        inner.declare_inputs = ['in0', 'in1']
+        inner.wires = [
+            (inner.inputs[0], inner.gain.inputs[0]),
+        ]
+
+        test0 = Composite(name='test0')
+        test0.control_signals = ConstantSignal(outputs=2)
+        test0.components = [test0.control_signals, inner]
+        test0.wires = [
+            (test0.control_signals.outputs[0], inner.inputs[0]),
+            (test0.control_signals.outputs[1], inner.inputs[1]),
+        ]
+
+        def simulate(t=10):
+            default_parameters = {
+                test0.control_signals.parameters[0]: 1,
+                test0.control_signals.parameters[1]: 2,
+                inner.gain.parameters[0]: 0.3
+            }
+
+            # get an integrator
+            with SolverContext(test0, t, default_parameters) as solver:
+                x_t = solver.integrate(resolution=1000)
+            return x_t
+
+        t_sim = 10
+        with pytest.warns(UnconnectedInput):
+            with pytest.raises(NoTopLevelOutputs):
+                solution = simulate(t_sim)
