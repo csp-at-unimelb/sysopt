@@ -1,5 +1,6 @@
 """Common helper functions."""
-from typing import List, Iterable, Type, Iterator
+from typing import List, Iterable, Type, Iterator, Tuple, Callable, Any
+from functools import reduce
 
 
 def flatten(the_list: List, depth: int = 1) -> List:
@@ -30,3 +31,20 @@ def filter_by_class(iterable: Iterable, cls: Type) -> Iterator:
 def slice_to_list(slce: slice, max_len=None):
     n = slce.stop or max_len
     return list(range(n))[slce]
+
+
+def partition(the_list: List[Any],
+              pred: Callable[[Any], bool]) -> Tuple[List[Any], List[Any]]:
+    """ Splits the list in two lists based on whether pred is true or false.
+
+    Args:
+        the_list: The list to split
+        pred: The predicate
+
+    Returns:
+        list of items evaluating true, list of items evaluating false.
+    """
+
+    return reduce(
+        lambda x, y: x[0].append(y) or x if pred(y) else x[1].append(y) or x,
+        the_list,  ([], []))

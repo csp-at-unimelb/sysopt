@@ -5,7 +5,9 @@ from sysopt import Metadata
 from sysopt.modelling.block import Block, Composite
 from sysopt.symbolic import get_time_variable, symbolic_vector
 from sysopt.problems import canonical_transform as xform
-
+from sysopt.problems.wiring_tables import (
+    create_tables_from_blocks, create_tables_from_block
+)
 from sysopt.blocks.common import Gain, LowPassFilter, Oscillator
 from sysopt import exceptions
 from dataclasses import asdict
@@ -76,7 +78,7 @@ class MockBlockIncorrect(Block):
 class TestLeafBlockXform:
     def test_correct_tables_are_generated(self):
         block = MockBlockCorrect()
-        tables = xform.create_tables_from_blocks(block)
+        tables = create_tables_from_blocks(block)
         for var_type, size in asdict(block.signature).items():
             assert len(tables[var_type]) == size
 
@@ -179,7 +181,6 @@ class TestComposite:
 
         return args, expected_result
 
-
     def test_correct_tables_are_generated(self):
         block = self.create_composite()
         all_blocks = xform.tree_to_list(block)
@@ -194,7 +195,6 @@ class TestComposite:
                 ))
                 assert len(table_entries) == size
         assert len(tables['wires']) == 2
-
 
     def test_construct_constraints_from_wires(self):
         block = self.create_composite()
@@ -291,10 +291,8 @@ class TestSYS71Bug:
                              all_blocks))
         assert len(leaves) == 2
         tables_raw = [
-            xform.create_tables_from_block(b) for b in leaves
+            create_tables_from_block(b) for b in leaves
         ]
-        print(tables_raw)
-        # assert False
 
     def test_scenario(self):
         from sysopt.problems import SolverContext
