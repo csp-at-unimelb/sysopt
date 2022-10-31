@@ -7,11 +7,12 @@ from sysopt.symbolic import (
     is_matrix, recursively_apply, Variable, ExpressionGraph, Algebraic,
     GraphWrapper, Function, Composition, ConstantFunction, matmul)
 
-from sysopt.backends.impl_hooks import implements, get_implementation
+from sysopt.backends.implementation_hooks import implements, get_implementation
 from sysopt.backends.sympy.helpers import sympy_vector
 
 
 def float_to_int(eq):
+    # pylint: disable=line-too-long
     """Convert floats that are ints to ints
 
     see: https://stackoverflow.com/questions/64761602/how-to-get-sympy-to-replace-ints-like-1-0-with-1
@@ -35,13 +36,16 @@ def substitute(graph: ExpressionGraph,
 
     def leaf_to_sympy_obj(obj):
         if is_matrix(obj):
-            if obj.shape == (1, ) or obj.shape == (1, 1):
-                # for some reason sympy doesn't like to (1, ) matricies.
+            if obj.shape in ((1, ), (1, 1)):
+                # hack: for some reason sympy doesn't like to (1, ) matricies.
                 return to_scalar(obj.ravel()[0])
             try:
-                return float_to_int(sympy.ImmutableSparseMatrix(*obj.shape, obj))
+                return float_to_int(
+                    sympy.ImmutableSparseMatrix(*obj.shape, obj)
+                )
             except TypeError as ex:
-                raise TypeError(f'Failed to convert {obj} to a sympy matrix') from ex
+                raise TypeError(
+                    f'Failed to convert {obj} to a sympy matrix') from ex
 
         if isinstance(obj, (int, float, complex)):
             return to_scalar(obj)
@@ -82,6 +86,20 @@ def substitute(graph: ExpressionGraph,
         return r
 
     return recursively_apply(graph, trunk_to_sympy_obj, leaf_to_sympy_obj)
+
+
+def expand_substitutions(matrix_symbol, matrix_values):
+    try:
+        assert matrix_symbol.shape == matrix_values.shape
+    except AttributeError:
+        if matrix_values is None:
+            return []
+        else:
+            return [(matrix_symbol, matrix_values)]
+
+    return [(matrix_symbol[i, j], matrix_values[i, j])
+            for i in range(matrix_symbol.shape[0])
+            for j in range(matrix_symbol.shape[1])]
 
 
 @implements(ConstantFunction)
@@ -136,11 +154,15 @@ class SympyGraphWrapper(Algebraic):
         return set(self._symbols.keys())
 
     def __call__(self, *args):
-        result = self.func.evalf(*args)
-        try:
-            return result.full()
-        except AttributeError:
-            return result
+        assert len(args) == len(self._symbols)
+
+        subs = []
+        for (atom, value) in zip(self._symbols.values(), args):
+            subs += expand_substitutions(atom, value)
+
+        f = self.func.subs(subs)
+
+        return f
 
     def pushforward(self, *args):
         n = len(self.symbols())
@@ -154,4 +176,3 @@ class SympyGraphWrapper(Algebraic):
         result = jac.evalf(x) @ dx
 
         return self.func.evalf(x), result
-

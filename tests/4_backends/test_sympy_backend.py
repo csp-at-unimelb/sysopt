@@ -32,8 +32,12 @@ def test_simple_model(linear_model):
                        t_final=1,
                        constants={},
                        backend='sympy') as solver:
-        print(solver.parameters)
-        soln = solver.get_symbolic_integrator()
+        p = sp.symbols(
+            ','.join(param.name for param in solver.parameters)
+        )
+        integrator = solver.get_symbolic_integrator()
 
+        soln = integrator([p])
 
-    assert False
+        assert str(soln['f'][0]) == 'u_0 + x_1'
+        assert str(soln['f'][1]) == '-x_0'

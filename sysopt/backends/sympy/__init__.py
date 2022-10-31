@@ -1,3 +1,5 @@
+"""Sympy backend. Allows rendering of system models to symbolic equations."""
+
 import numpy as np
 import sympy as sp
 import sympy.core
