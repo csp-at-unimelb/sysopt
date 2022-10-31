@@ -23,6 +23,14 @@ class Domain:
     inputs: int = 0
     parameters: int = 0
 
+    _letters = {
+        'time': 't',
+        'states': 'x',
+        'constraints': 'z',
+        'inputs': 'u',
+        'parameters': 'p'
+    }
+
     def __iter__(self):
         return iter((self.time, self.states, self.constraints,
                     self.inputs, self.parameters))
@@ -52,10 +60,18 @@ class Domain:
             return False
 
     @staticmethod
-    def index_of_field(field_name):
+    def index_of_field(field_name: str):
         return ['time', 'states', 'constraints', 'inputs', 'parameters'].index(
             field_name
         )
+
+    @staticmethod
+    def letter_of_field(field_name: str):
+        return Domain._letters[field_name]
+
+    @staticmethod
+    def letters():
+        return Domain._letters.values()
 
 
 @dataclass

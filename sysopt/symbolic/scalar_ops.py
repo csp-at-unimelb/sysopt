@@ -26,7 +26,9 @@ numpy_handlers[np.heaviside] = lambda x, x0, *args, **kwargs: heaviside(x)
 dirac = wrap_as_op(lambda x: get_backend().dirac(x), 1)
 
 sign = wrap_as_op(lambda x: get_backend().sign(x), 1, numpy_func=np.sign)
-atan2 = wrap_as_op(lambda y, x: get_backend().atan2(y, x), 2, numpy_func=np.arctan2)
+atan2 = wrap_as_op(
+    lambda y, x: get_backend().atan2(y, x), 2, numpy_func=np.arctan2
+)
 
 unary = [
     sin, cos, asin, acos, tan, atan,

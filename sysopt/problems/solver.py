@@ -20,6 +20,19 @@ DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
 
 
 class SolverContext:
+    """Numerical/algorithmic solver context manager.
+
+    Args:
+        model:      System model under treatment
+        t_final:    Final time for simulations/optimisations to be valid
+        constants:  A mapping from model parameters to numbers, setting the
+                    constant numerical values for this run.
+        backend:    The symbolic backend; currently `casadi` or `sympy`
+
+    Examples:
+        See `README.md` for example usage.
+
+    """
     def __init__(self,
                  model: Union[Block, Composite],
                  t_final: Union[float, Variable],
@@ -73,10 +86,11 @@ class SolverContext:
 
     def get_symbolic_integrator(self):
         integrator = self.get_integrator()
-        param_map = self.parameter_map
+        param_map = self.__ctx.get_implementation(self.parameter_map)
+        time_map = self.__ctx.get_implementation(self._params_to_t_final)
 
         def f(p):
-            t_f = self._params_to_t_final(p)
+            t_f = time_map(p)
             args = param_map(p)
             return integrator(t_f, args)
         return f

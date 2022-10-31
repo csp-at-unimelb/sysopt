@@ -14,3 +14,17 @@ def sympy_vector(name: str, shape=Tuple[int, ...]):
              for i in range(shape[0])])
 
     raise NotImplementedError
+
+
+def is_symbolic(obj):
+    try:
+        return any(a.is_Symbol for a in obj.atoms())
+    except AttributeError:
+        pass
+
+    try:
+        return obj.is_Symbol
+    except AttributeError:
+        pass
+
+    return False

@@ -7,7 +7,7 @@ from sysopt.symbolic import (
     is_matrix, recursively_apply, Variable, ExpressionGraph, Algebraic,
     GraphWrapper, Function, Composition, ConstantFunction)
 
-from sysopt.backends.impl_hooks import implements, get_implementation
+from sysopt.backends.implementation_hooks import implements, get_implementation
 
 
 def substitute(graph: ExpressionGraph,
