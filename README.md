@@ -44,7 +44,7 @@ First, we define some components (plant, and controller), assemble a composite m
 
     
     # Setup the joint optimisation problem. 
-    with CasadiContext(model=model, t_final=t_f, constants={}) as solver:
+    with SolverContext(model=model, t_final=t_f, constants={}) as solver:
 
         k = Parameter(plant, 0)
         u = PiecewiseConstantSignal('u', 100)
