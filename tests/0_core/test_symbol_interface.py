@@ -51,7 +51,7 @@ class TestVectorSpaceMappings:
         assert isinstance(result, ExpressionGraph)
         expect_zero = result() - expected_result
         assert isinstance(expect_zero, np.ndarray)
-        assert all(v == 0 for v in expect_zero.tolist())
+        assert all(v == 0 for v in expect_zero.tolist()), expect_zero
 
     def test_inclusion_map(self):
         indices = dict((i, j) for i, j in enumerate([1, 2, 3]))
@@ -62,7 +62,7 @@ class TestVectorSpaceMappings:
         assert isinstance(result, ExpressionGraph)
         expect_zero = result() - expected_result
         assert isinstance(expect_zero, np.ndarray)
-        assert all(v == 0 for v in expect_zero.tolist())
+        assert all(v == 0 for v in expect_zero.tolist()), expect_zero
 
     def test_implicit_restriction_map(self):
         x = Variable('x', shape=(2,))

@@ -5,6 +5,7 @@ from collections import defaultdict
 from inspect import signature
 
 import numpy as np
+from scipy.sparse import dok_matrix
 import ordered_set
 from typing import Union, List, Callable, Tuple, Optional, Dict, NewType, Any
 
@@ -59,6 +60,63 @@ class Matrix(np.ndarray):
             return result
 
 
+class SparseMatrix(dok_matrix):
+    """Dictionary-of-keys sparse matrix."""
+
+    def __eq__(self, other):
+
+        try:
+            if self.shape != other.shape:
+                return False
+            if set(self.keys()) != set(other.keys()):
+                return False
+        except AttributeError:
+            return False
+
+        return all(other[key] == value for key, value in self.items())
+
+    def __hash__(self):
+        return hash((self.shape, tuple(self.items())))
+
+    def ravel(self):
+        return self.todense().view(Matrix).ravel()
+
+    @property
+    def T(self):  # pylint: disable=invalid-name
+
+        m = SparseMatrix((self.shape[1], self.shape[0]))
+        for (i, j), v in self.items():
+            m[j, i] = v
+
+        return m
+
+    def __mul__(self, other):
+        if isinstance(other, SparseMatrix):
+            return super().__mul__(other)
+        a = self.todense().view(Matrix)
+        out = a * other
+        return out
+
+    def __matmul__(self, other):
+
+        if isinstance(other, SparseMatrix):
+            r = super().__matmul__(other)
+            return r
+        elif isinstance(other, np.ndarray):
+            out = (self.todense() @ other).view(Matrix)
+            if len(other.shape) == 2:
+                out = out.reshape((self.shape[0], other.shape[1]))
+            else:
+                out = out.reshape((self.shape[0], ))
+
+            return out
+        if isinstance(other, Algebraic):
+            r = ExpressionGraph(matmul, self, other)
+
+            return r
+        assert False, f'Matmul not define for {other.__class__}'
+
+
 def sparse_matrix(shape: Tuple[int, int]):
     """Create an empty sparse matrix of the given dimension.
 
@@ -66,7 +124,11 @@ def sparse_matrix(shape: Tuple[int, int]):
         replace with an actual sparse matrix representaiton!
 
     """
-    return np.zeros(shape, dtype=float).view(Matrix)
+    if len(shape) == 1:
+
+        return np.zeros(shape, dtype=float).view(Matrix)
+
+    return SparseMatrix(shape)
 
 
 def basis_vector(index, dimension):
@@ -97,6 +159,8 @@ def as_array(item: Union[List[Union[int, float]], int, float, np.ndarray],
         return item
     if isinstance(item, np.ndarray):
         return item.view(Matrix)
+    elif isinstance(item, dok_matrix):
+        return item
     elif isinstance(item, (list, tuple)):
         return concatenate(*item)
     elif isinstance(item, (int, float)):
@@ -1397,4 +1461,4 @@ def is_temporal(symbol):
 
 
 def is_matrix(obj):
-    return isinstance(obj, np.ndarray)
+    return isinstance(obj, (np.ndarray, Matrix, SparseMatrix))
