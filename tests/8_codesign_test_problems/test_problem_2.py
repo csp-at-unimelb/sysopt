@@ -10,7 +10,7 @@ Mechanical Design 141.1 (2019).
 from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal
 from sysopt import Metadata, Composite
-from sysopt.symbolic import Parameter, PiecewiseConstantSignal
+from sysopt.symbolic import Variable, PiecewiseConstantSignal
 from sysopt.problems import SolverContext
 
 
@@ -28,7 +28,7 @@ plant_metadata = Metadata(
     inputs=['u'],
     states=['x', 'v'],
     outputs=['x', 'v'],
-    parameters=['k', 'x_0', 'v_0']
+    parameters=['k', 'x0', 'v0']
 )
 
 
@@ -46,16 +46,18 @@ def test_problem_2():
     ]
 
     u = PiecewiseConstantSignal('u', 100)
-    k = Parameter(plant, 'k')
+    k = Variable('k')
 
     constants = {
-        plant.parameters[1]: 0,
-        plant.parameters[2]: -1,
+        plant.parameters['x0']: 0,
+        plant.parameters['v0']: -1,
+        controller.parameters['u']: u,
+        plant.parameters['k']: k
     }
     t_f = 2
     with SolverContext(model=model,
                        t_final=t_f,
-                       constants=constants) as solver:
+                       parameters=constants) as solver:
 
         _, _, u_t = model.outputs(solver.t)
         x_f, v_f, _ = model.outputs(t_f)

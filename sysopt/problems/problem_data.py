@@ -8,7 +8,7 @@ import numpy as np
 
 from sysopt.symbolic import (
     Matrix, Variable, ExpressionGraph, ConstantFunction,
-    GraphWrapper, Parameter, PiecewiseConstantSignal
+    GraphWrapper,  PiecewiseConstantSignal
 )
 
 Bounds = namedtuple('Bounds', ['upper', 'lower'])
@@ -125,7 +125,7 @@ class ConstrainedFunctional:
     system: FlattenedSystem
     """System level model which produces the path `p -> y(t; p)` """
 
-    parameters: Dict[Parameter, List[int]]
+    parameters: Dict[Variable, List[int]]
     """List of the free parameters"""
 
     parameter_map: Union[GraphWrapper, ConstantFunction]
@@ -163,11 +163,11 @@ class MinimumPathProblem:
     constraints: Optional[List[ExpressionGraph]] = None
 
     def __post_init__(self):
-        if isinstance(self.state, (Variable, Parameter)):
+        if isinstance(self.state, Variable):
             bounds = Bounds([-np.inf]*len(self.state),
                             [np.inf]*len(self.state))
             self.state = (self.state, bounds)
-        if isinstance(self.control, (Variable, Parameter)):
+        if isinstance(self.control, Variable):
             bounds = Bounds([-np.inf] * len(self.control),
                             [np.inf] * len(self.control))
             self.control = (self.control, bounds)
@@ -176,7 +176,7 @@ class MinimumPathProblem:
 @dataclass
 class CodesignSolution:
     cost: float
-    argmin: Dict[Union[Parameter, Variable, PiecewiseConstantSignal],
+    argmin: Dict[Union[Variable, PiecewiseConstantSignal],
                  Union[float, np.ndarray]]
     time: np.ndarray
     outputs: np.ndarray

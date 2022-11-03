@@ -241,6 +241,35 @@ class ComponentBase:
         return obj
 
 
+class ParameterView:
+    """List/dict-like interface for block parameters"""
+
+    def __init__(self, block):
+        self.block = weakref.ref(block)
+
+    def __getitem__(self, item):
+        parent = self.block()
+        if isinstance(item, str):
+            if item not in parent.metadata.parameters:
+                raise KeyError(item)
+            return f'{str(parent)}/{item}'
+
+        if isinstance(item, int):
+            return f'{str(parent)}/{parent.metadata.parameters[item]}'
+        if isinstance(item, slice):
+            return list(self)[item]
+
+        raise KeyError(item)
+
+    def __len__(self):
+        return len(self.block().metadata.parameters)
+
+    def __iter__(self):
+        parent = self.block()
+        for p in parent.metadata.parameters:
+            yield f'{str(parent)}/{p}'
+
+
 class Block(ComponentBase):
     r"""Base class for component models.
 
@@ -298,8 +327,7 @@ class Block(ComponentBase):
         if not self.metadata.parameters:
             return []
 
-        name = str(self)
-        return [f'{name}/{p}' for p in self.metadata.parameters]
+        return ParameterView(self)
 
     def find_port_by_name(self, var_type, name):
         if var_type not in {'inputs', 'outputs'}:

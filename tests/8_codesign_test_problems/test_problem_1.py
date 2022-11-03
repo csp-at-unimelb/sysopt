@@ -8,8 +8,8 @@ Mechanical Design 141.1 (2019).
 """
 from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal, Gain
-from sysopt import Composite, Metadata, PiecewiseConstantSignal
-from sysopt.problems import SolverContext, Parameter
+from sysopt import Composite, Metadata, PiecewiseConstantSignal, Variable
+from sysopt.problems import SolverContext
 
 
 def dxdt(t, x, u, p):
@@ -54,11 +54,11 @@ def test_problem_1_open_loop():
     constants = {
         f'{str(open_loop_plant)}/xi_0': xi_0
     }
-    b = Parameter(open_loop_plant, 0)
+    b = Variable('b')
     u_in = PiecewiseConstantSignal(open_loop_controller.parameters[0], 100)
     with SolverContext(model=open_loop_model,
                        t_final=25,
-                       constants=constants) as solver:
+                       parameters=constants) as solver:
 
         xi, u = open_loop_model.outputs(solver.t)
         running_cost = q * xi ** 2 + r * u ** 2
@@ -92,14 +92,14 @@ def test_problem_1_closed_loop():
         (closed_loop_plant.outputs, closed_loop_model.outputs['x']),
         (closed_loop_controller.outputs, closed_loop_model.outputs['u'])
     ]
-    k = Parameter(closed_loop_controller, 0)
-    b = Parameter(closed_loop_plant, 0)
+    k = Variable('k')
+    b = Variable('b')
     constants = {
         f'{str(closed_loop_plant)}/xi_0': xi_0
     }
     with SolverContext(model=closed_loop_model,
                        t_final=25,
-                       constants=constants) as solver:
+                       parameters=constants) as solver:
         xi, u = closed_loop_model.outputs(solver.t)
         running_cost = q * xi ** 2 + r * u ** 2
         integral = solver.integral(running_cost)

@@ -16,7 +16,7 @@ Such that:
 import pytest
 
 from sysopt import Signature, Composite
-from sysopt.problems import SolverContext, Parameter
+from sysopt.problems import SolverContext
 
 from sysopt.modelling.builders import FullStateOutput, InputOutput
 

@@ -18,7 +18,7 @@ plt.ion()
 """
 # @nb.code_cell
 from sysopt import Block, Metadata, Composite
-from sysopt.symbolic import Variable, Parameter
+from sysopt.symbolic import Variable
 from sysopt.problems import SolverContext
 import numpy as np
 
@@ -199,7 +199,7 @@ def evaluate():
     x, y, dx, dy, u = model.outputs
 
     t_f = Variable('final time')
-    p = Parameter(model.controller, 'cutoff time')
+    p = Variable('cutoff time')
     x_goal = 1
 
     parameters = {
@@ -280,7 +280,7 @@ def parameter_sweep():
     x, y, dx, dy, u = model.outputs
 
     t_f = Variable(name='final time')
-    p = Parameter(model.controller, 'cutoff time')
+    p = Variable('cutoff time')
     x_goal = 1
 
     parameters = {
@@ -290,7 +290,8 @@ def parameter_sweep():
         f'{model.drag}/coeff': 0.1,
         f'{model.drag}/exponent': 1,
         f'{model.rocket}/dx0': 0.25,
-        f'{model.rocket}/dy0': 1
+        f'{model.rocket}/dy0': 1,
+        f'{model.controller.parameters[0]}': p
     }
 
     n = 25

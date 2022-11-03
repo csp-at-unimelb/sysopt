@@ -30,7 +30,7 @@ def test_simple_model(linear_model):
 
     with SolverContext(model=linear_model,
                        t_final=1,
-                       constants={},
+                       parameters={},
                        backend='sympy') as solver:
         p = sp.symbols(
             ','.join(param.name for param in solver.parameters)

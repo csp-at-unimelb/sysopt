@@ -1,5 +1,5 @@
 from sysopt.symbolic import (
-    Variable, is_symbolic, Parameter,
+    Variable, is_symbolic,
     is_temporal, ExpressionGraph, PathInequality
 )
 
@@ -27,24 +27,6 @@ def test_variables_api():
         result = op(d)
         assert is_symbolic(result)
         assert d in expression.symbols()
-
-
-def test_parameter_api():
-    second_block = Gain(2)
-    block = Gain(1)
-    param = Parameter(block, 0)
-
-    host = Composite()
-    host.components = [block, second_block]
-
-    assert param is not None
-    source, slce = param.get_source_and_slice()
-
-    assert source is block
-    assert (slce.start, slce.stop, slce.step) == (0, 1, None)
-    assert param.name in host.parameters
-    assert host.parameters.index(param.name) == 0
-    assert param.shape == (1, )
 
 
 class TestSignalApi:
@@ -76,15 +58,10 @@ def test_is_temporal():
     source = Oscillator()
     t = get_time_variable()
     sig = source.outputs(t)
-    param = Parameter(source, 0)
 
     assert not is_temporal(var)
-    assert not is_temporal(param)
     assert is_temporal(sig)
-
-    assert not is_temporal(var + param)
     assert is_temporal(var + sig)
-    assert is_temporal(param + sig)
 
     assert not is_temporal(sig(0))
     assert not is_temporal(sig(1))
@@ -99,7 +76,7 @@ def test_evaluate_graph():
     source = Oscillator()
     t = get_time_variable()
     sig = source.outputs(t)
-    param = Parameter(source, 0)
+    param = Variable()
 
     expression = 1 + var * sig(1) + param
     values = {
@@ -133,7 +110,7 @@ def test_supremum_to_function():
     t = get_time_variable()
     source = Oscillator()
     sig = source.outputs(t)
-    param = Parameter(source, 0)
+    param = Variable()
 
     def y(t_):
         return np.exp(-t_)
