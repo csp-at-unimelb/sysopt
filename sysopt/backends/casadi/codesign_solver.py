@@ -10,8 +10,8 @@ from sysopt.backends.implementation_hooks import implements
 from sysopt.backends.casadi.expression_graph import substitute
 from sysopt.backends.casadi.variational_solver import get_collocation_matrices
 from sysopt.symbolic import (
-    Parameter, Variable,  Function, Composition,
-    PiecewiseConstantSignal,
+    Variable,  Function, Composition,
+    PiecewiseConstantSignal
 )
 
 __all__ = []
@@ -20,7 +20,7 @@ __all__ = []
 class ConstantFactory:
     """Helper class to constant valued decision variables."""
     def __init__(self,
-                 param_or_var: Union[Parameter, Variable],
+                 param_or_var: Variable,
                  lower_bound, upper_bound
                  ):
         self.symbol = casadi.MX.sym(param_or_var.name, *param_or_var.shape)
@@ -95,8 +95,7 @@ class ParameterFactory:
     """Helper class for generating a parameter vector at a time point"""
     _factories = {
         PiecewiseConstantSignal: PiecewiseConstantFactory,
-        Variable: ConstantFactory,
-        Parameter: ConstantFactory
+        Variable: ConstantFactory
     }
 
     """Wrapper for generate constants over time"""
@@ -248,7 +247,7 @@ class CasadiCodesignProblemData:
     cost_function: casadi.Function
     """Function of T(1), y[1], q[1] p"""
 
-    parameters: Dict[Union[Variable, Parameter, PiecewiseConstantSignal],
+    parameters: Dict[Union[Variable, PiecewiseConstantSignal],
                      Tuple[float, float]]
     """List of all parameters with the upper and lower bounds"""
 
@@ -267,6 +266,7 @@ def build_codesign_problem(problem: ConstrainedFunctional,
         casadi.MX.sym(str(param), *param.shape)
         for param in problem.parameters
     ])
+
     flattened_system = problem.system
 
     symbols = {

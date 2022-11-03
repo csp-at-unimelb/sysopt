@@ -146,7 +146,7 @@ class LinearMap:
 
     @property
     def T(self):    # pylint: disable=invalid-name
-        return LinearMap(self.matrix.T)
+        return LinearMap(self.matrix.T.copy())
 
     def __call__(self, arg):
         return ExpressionGraph(matmul, self.matrix, arg)

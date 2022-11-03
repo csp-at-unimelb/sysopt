@@ -103,8 +103,14 @@ class Problem1:
 
 def test_codesign_problem_1():
     block = LinearScalarEquation()
+    parameters = {
+        block.parameters[0]: Variable('a', 1),
+        block.parameters[1]: Variable('x0', 1)
+    }
 
-    with SolverContext(model=block, t_final=1) as solver:
+    with SolverContext(model=block,
+                       parameters=parameters,
+                       t_final=1) as solver:
         params = solver.parameters
 
         assert len(params) == 2
@@ -138,7 +144,12 @@ def test_codesign_problem_with_path_variable(linear_model):
     u = PiecewiseConstantSignal('u', frequency=10)
     t_final = Variable('t_f')
 
-    with SolverContext(linear_model, t_final=t_final) as context:
+    parameters = {linear_model.parameters[0]: u}
+
+    with SolverContext(linear_model,
+                       parameters=parameters,
+                       t_final=t_final) as context:
+
         y = linear_model.outputs(t_final)
         constraint = [
             y[0:2].T @ y[0:2] < 1e-9,

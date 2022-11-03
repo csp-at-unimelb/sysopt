@@ -160,7 +160,8 @@ class TestCasadiCodesign:
         intitial_conditions = casadi.Function('x0', [p], [casadi.MX([0, 1])])
         cost = casadi.Function('cost', [t, y, q, p], [y[0]**2 + y[1]**2])
         parameters = {
-            PiecewiseConstantSignal('u', shape=(1,), frequency=10): (-1, 1)
+            PiecewiseConstantSignal('u',
+                                    shape=(1,), frequency=10): (-1, 1)
         }
         path_constraint = casadi.Function(
             'c_t', [t, y, q, p], [casadi.MX()]

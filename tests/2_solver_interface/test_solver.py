@@ -1,12 +1,12 @@
 import numpy as np
 import random
-
+import pytest
 import sympy
 
 from sysopt import Metadata
 from sysopt.modelling.block import Composite, Block
 from sysopt.blocks import Gain, Oscillator, LowPassFilter
-from sysopt.problems import SolverContext, Parameter, create_parameter_map
+from sysopt.problems import SolverContext, create_parameter_map
 from sysopt.symbolic import Variable
 
 eps = 1e-4
@@ -87,10 +87,12 @@ def build_example():
         (lpf.outputs, gain.inputs),
         (gain.outputs, model.outputs)
     ]
+    v = Variable()
     constants = {
         osc.parameters[0]: 1,
         osc.parameters[1]: 0,
-        gain.parameters[0]: 1
+        gain.parameters[0]: 1,
+        lpf.parameters[0]: v
     }
 
     return model, constants, expected_output, expected_quadrature
@@ -107,25 +109,6 @@ class TestParameterMap:
         - a list of parameter p'
         - a function that maps p' -> t_final, p_actual
     """
-
-    def test_generates_identity_map_with_fixed_time_no_args(self):
-        model, *_ = build_example()
-
-        expected_params = [Parameter(model, p) for p in model.parameters]
-
-        t_final = 10
-        _, params, t_map, p_map = create_parameter_map(model, {}, t_final)
-        assert len(params) == len(expected_params)
-        results = list(zip(expected_params, params))
-
-        assert all(expected_p == p for expected_p, p in results),\
-            str(results)
-
-        p_test = [random.random() for _ in params]
-
-        t_result, p_result = t_map(p_test), p_map(p_test)
-        assert t_result == t_final
-        assert p_test == p_result
 
     def test_generates_constant_map_with_variable_time(self):
         model, *_ = build_example()
@@ -144,7 +127,8 @@ class TestParameterMap:
     def test_mixed_map(self):
         model, constants, *_ = build_example()
         t_final = Variable('t_final')
-        _, params, t_map, p_map = create_parameter_map(model, constants, t_final)
+        _, params, t_map, p_map = create_parameter_map(
+            model, constants, t_final)
 
         assert params[0] == t_final
         values = [0, 1]

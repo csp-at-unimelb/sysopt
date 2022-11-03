@@ -12,7 +12,7 @@ from sysopt import Metadata, Composite
 from sysopt.problems import SolverContext
 from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal
-from sysopt.symbolic import PiecewiseConstantSignal, Parameter
+from sysopt.symbolic import PiecewiseConstantSignal, Variable
 
 J = 1
 
@@ -44,13 +44,18 @@ def test_problem_3():
     ]
     t_f = 2
     k_star = 0.8543
-    k = Parameter(plant, 0)
+    k = Variable('k')
     u = PiecewiseConstantSignal('u', 100)
+    parameters = {
+        controller.parameters['u']: u,
+        plant.parameters['k']: k
+    }
 
-    with SolverContext(model=model, t_final=t_f, constants={}) as solver:
+    with SolverContext(model=model,
+                       t_final=t_f,
+                       parameters=parameters) as solver:
         y_f = model.outputs(solver.t_final)
         cost = -y_f[0]
-
         constraints = [
             u <= 1,
             u >= -1,

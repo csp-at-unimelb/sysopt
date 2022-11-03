@@ -304,7 +304,7 @@ class TestSYS71Bug:
         model = self.build_model()
         constants = {p: 1 for p in model.parameters}
 
-        with SolverContext(model, t_final=1, constants=constants) as context:
+        with SolverContext(model, t_final=1, parameters=constants) as context:
             y = model.outputs(1)
             constraint = [
                 y[0:2].T @ y[0:2] < 1e-9

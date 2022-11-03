@@ -8,15 +8,17 @@ import numpy as np
 from sysopt import symbolic
 from sysopt.backends import get_backend, BackendContext
 from sysopt.symbolic import (
-    ExpressionGraph, Variable, Parameter, get_time_variable,
-    is_symbolic, ConstantFunction, GraphWrapper
+    ExpressionGraph, Variable, get_time_variable,
+    is_symbolic, ConstantFunction, GraphWrapper, PiecewiseConstantSignal
 )
 from sysopt.problems.canonical_transform import flatten_system
 from sysopt.problems.problem_data import Quadratures, ConstrainedFunctional, FlattenedSystem
 from sysopt.modelling.block import Block, Composite
 from sysopt.exceptions import InvalidParameterException
 
-DecisionVariable = NewType('DecisionVariable', Union[Variable, Parameter])
+DecisionVariable = NewType(
+    'DecisionVariable',
+    Union[Variable, PiecewiseConstantSignal])
 
 
 class SolverContext:
@@ -36,22 +38,31 @@ class SolverContext:
     def __init__(self,
                  model: Union[Block, Composite],
                  t_final: Union[float, Variable],
-                 constants: Optional[Dict] = None,
+                 parameters: Optional[Dict] = None,
                  backend='casadi'
                  ):
         self.model = model
         self.start = 0
         self.t_final = t_final
         self.t = get_time_variable()
-        self.constants = constants if constants else {}
-        self.quadratures = None
+
         self._flat_system = flatten_system(self.model)
+
+        self.quadratures = None
+
+        # fill in missing parameters with symbols
+        parameters = {
+            name: Variable(name)
+            if not parameters or name not in parameters else parameters[name]
+            for name in model.parameters
+        }
+
         self.parameter_map = None
-        _, self.parameters, t_map, p_map = create_parameter_map(
-            self.model, self.constants, self.t_final
+        self.symbols, self.parameters, t_map, p_map = create_parameter_map(
+            self.model, parameters, self.t_final
         )
         self.parameter_map = p_map
-        self._params_to_t_final = t_map
+        self.t_final_map = t_map
         self.__ctx = BackendContext(backend)
 
     def __enter__(self):
@@ -87,7 +98,7 @@ class SolverContext:
     def get_symbolic_integrator(self):
         integrator = self.get_integrator()
         param_map = self.__ctx.get_implementation(self.parameter_map)
-        time_map = self.__ctx.get_implementation(self._params_to_t_final)
+        time_map = self.__ctx.get_implementation(self.t_final_map)
 
         def f(p):
             t_f = time_map(p)
@@ -114,7 +125,7 @@ class SolverContext:
             ) from ex
 
         if not t_final:
-            t_final = self._params_to_t_final(parameters)
+            t_final = self.t_final_map(parameters)
 
         soln = integrator.integrate(t_final, p)
 
@@ -179,14 +190,15 @@ class Problem:
 
     def _get_problem_specification(self):
         context = self.context
-        param_args, parameters, t_final, param_map = create_parameter_map(
-            self.context.model, self.context.constants, self.context.t_final,
-        )
+
         t = get_time_variable()
         y = self.context.model.outputs(context.t)
+        param_args, = self.context.parameter_map.arguments
+        t_final = self.context.t_final_map
+
         symbols = {
             self.arguments[i]: param_args[i]
-            for i, p_i in enumerate(parameters)
+            for i, p_i in enumerate(self.context.parameters)
         }
         terminal_cost, q, dot_q = symbolic.extract_quadratures(self.cost)
         terminal_cost = symbolic.replace_signal(
@@ -240,7 +252,7 @@ class Problem:
 
         spec = ConstrainedFunctional(
             final_time=t_final,
-            parameter_map=param_map,
+            parameter_map=self.context.parameter_map,
             system=self.context.flattened_system,
             quadratures=dot_q,
             value=cost_fn,
@@ -260,7 +272,7 @@ class Problem:
 
         integrator = self.context.get_integrator()
 
-        t = self.context._params_to_t_final(args)
+        t = self.context.t_final_map(args)
         p = self.context.parameter_map(args)
 
         backend = get_backend()
@@ -307,48 +319,51 @@ class Problem:
 
 
 def create_parameter_map(model, constants, final_time):
-    try:
-        output_idx, params = zip(*[
-            (idx, Parameter(model, name))
-            for idx, name in enumerate(model.parameters)
-            if not constants or name not in constants
-        ])
-        params = list(params)
-    except ValueError:
-        output_idx = []
-        params = []
+
+    basis_map = {}
+    param_constants = np.zeros((len(model.parameters), ), dtype=float)
+    params = []
+    if is_symbolic(final_time):
+        params.append(final_time)
+
+    for idx, name in enumerate(model.parameters):
+        try:
+            value = constants[name]
+        except KeyError as ex:
+            message = f'Model parameter {ex.args[0]} not specified! '
+            raise ValueError(message) from ex
+        if is_symbolic(value):
+            try:
+                param_idx = params.index(value)
+            except ValueError:
+                param_idx = len(params)
+                params.append(value)
+            basis_map[idx] = param_idx
+        else:
+            param_constants[idx] = value
+
     # Parameter Map should look like:
     #
     # t_final = < (e_0, params) >
     # p_final = [ b_i (e^i , params) ,...]
     # where e^i is the cobasis vector of the parameter in the domain (inputs)
-    # and b_i is the correspnding basis in the output space (output, index)
-    offset = 0
-    param_constants = np.array([
-        constants[p] if p in constants else 0 for p in model.parameters
-    ]) if constants else np.zeros((len(model.parameters), ), dtype=float)
+    # and b_i is the corresponding basis in the output space (output, index)
 
     if is_symbolic(final_time):
-        params.insert(0, final_time)
-        args = symbolic.symbolic_vector('parameter vector', len(params))
+        args = symbolic.symbolic_vector('parameters', len(params))
         pi = symbolic.inclusion_map({0: 0}, len(params), 1)
         t_func = GraphWrapper(pi(args), [args])
-        offset = 1
     else:
-        args = symbolic.symbolic_vector('parameter vector', len(params))
+        args = symbolic.symbolic_vector('parameters', len(params))
         t_func = ConstantFunction(final_time, arguments=args)
 
-    if output_idx:
-        basis_map = {
-                in_i + offset: out_i for in_i, out_i in enumerate(output_idx)
-        }
-        inject = symbolic.inclusion_map(
-            basis_map,
-            len(params),
-            len(model.parameters)
-        )
+    if basis_map:
+        m = symbolic.sparse_matrix((len(model.parameters), len(params)))
+        for row, col in basis_map.items():
+            m[row, col] = 1
 
-        p_func = GraphWrapper(inject(args) + param_constants, [args])
+        expr = m @ args
+        p_func = GraphWrapper(expr + param_constants, [args])
     else:
         p_func = ConstantFunction(param_constants, args)
     return args, params, t_func, p_func

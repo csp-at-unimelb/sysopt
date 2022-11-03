@@ -82,6 +82,9 @@ class TestSymbolicIntegrator:
 
     def test_init(self):
         block = LinearScalarEquation()
+        params = {
+
+        }
 
         with SolverContext(model=block, t_final=10) as solver:
 
