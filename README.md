@@ -42,12 +42,16 @@ First, we define some components (plant, and controller), assemble a composite m
                    (plant.outputs, model.outputs[0:2]),
                    (controller.outputs, model.outputs[2])]
 
-    
+    k = Parameter('k'')
+    u = PiecewiseConstantSignal('u', 100)
+    parameters = {
+        plant.parameters['k']: k,
+        controller.parameters['u']:u
+    }
     # Setup the joint optimisation problem. 
-    with SolverContext(model=model, t_final=t_f, constants={}) as solver:
+    with SolverContext(model=model, t_final=t_f, parameters=parameters) as solver:
 
-        k = Parameter(plant, 0)
-        u = PiecewiseConstantSignal('u', 100)
+        
         y_final = model.outputs(solver.t_final)
         
         cost = -y_final[0]
