@@ -3,8 +3,7 @@ from sysopt.symbolic import (
     is_temporal, ExpressionGraph, PathInequality
 )
 
-from sysopt.symbolic.core import get_time_variable
-import sysopt.symbolic.scalar_ops as scalar_ops
+from sysopt.symbolic.core import get_time_variable, unary
 
 from sysopt.blocks import Gain, Oscillator
 from sysopt.modelling.block import Composite
@@ -23,7 +22,7 @@ def test_variables_api():
         assert is_symbolic(expression)
         assert d in expression.symbols()
 
-    for op in scalar_ops.unary:
+    for op in unary:
         result = op(d)
         assert is_symbolic(result)
         assert d in expression.symbols()
