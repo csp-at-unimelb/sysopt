@@ -4,11 +4,13 @@ import casadi
 from typing import List, Tuple, Callable, Optional
 
 from sysopt.symbolic.core import Function, Algebraic, Composition, SymbolicArray
-from sysopt.backends.implementation_hooks import implements
 from sysopt.backends.casadi.expression_graph import substitute
+from sysopt.backends.implementation_hooks import get_backend
 
 __all__ = []
 __functions = []
+
+backend = get_backend('casadi')
 
 
 class CasadiJacobian(casadi.Callback):
@@ -234,7 +236,7 @@ class CasadiFFI(casadi.Callback):
         return [casadi.vertcat(*result)]
 
 
-@implements(Function)
+@backend.implements(Function)
 def wrap_function(func: Function):
 
     impl = CasadiFFI(
@@ -296,7 +298,7 @@ class CasadiForeignFunction(Algebraic):
         return self(*args)
 
 
-@implements(Composition)
+@backend.implements(Composition)
 def compose_implementation(composition: Composition):
     f = wrap_function(composition.function)
 

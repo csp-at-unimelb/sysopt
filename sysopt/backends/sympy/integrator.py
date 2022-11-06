@@ -5,7 +5,8 @@ from sysopt.problems.problem_data import (
     FlattenedSystem, Quadratures, Domain
 )
 from sysopt.backends.sympy.expression_graph import sympy_vector
-from sysopt.backends.implementation_hooks import get_implementation
+from sysopt.backends import get_backend
+backend = get_backend('sympy')
 
 
 def get_integrator(system: FlattenedSystem,
@@ -44,18 +45,18 @@ class SympyDAE:
 
         self.symbols = symbols_from_domain(system.domain)
 
-        f = get_implementation(system.vector_field)
+        f = backend.get_implementation(system.vector_field)
         self.vector_field = f(*self.symbols)
 
         self.constraints = None
         if system.constraints:
-            h = get_implementation(system.constraints)
+            h = backend.get_implementation(system.constraints)
             self.constraints = h(*self.symbols)
 
-        g = get_implementation(system.output_map)
+        g = backend.get_implementation(system.output_map)
         self.output_map = g(*self.symbols)
 
-        x0 = get_implementation(system.initial_conditions)
+        x0 = backend.get_implementation(system.initial_conditions)
         self.initial_conditions = x0(self.symbols[-1])
 
         self.quadratures = None

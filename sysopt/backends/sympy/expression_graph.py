@@ -7,9 +7,10 @@ from sysopt.symbolic import (
     is_matrix, recursively_apply, Variable, ExpressionGraph, Algebraic,
     GraphWrapper, Function, Composition, ConstantFunction, matmul)
 
-from sysopt.backends.implementation_hooks import implements, get_implementation
 from sysopt.backends.sympy.helpers import sympy_vector
+from sysopt.backends.implementation_hooks import get_backend
 
+backend = get_backend('sympy')
 
 def float_to_int(eq):
     # pylint: disable=line-too-long
@@ -102,7 +103,7 @@ def expand_substitutions(matrix_symbol, matrix_values):
             for j in range(matrix_symbol.shape[1])]
 
 
-@implements(ConstantFunction)
+@backend.implements(ConstantFunction)
 def to_constant(func: ConstantFunction):
 
     if is_matrix(func.value):
@@ -112,7 +113,7 @@ def to_constant(func: ConstantFunction):
     return lambda x: v
 
 
-@implements(ExpressionGraph)
+@backend.implements(ExpressionGraph)
 def to_sympy_eqn(graph: ExpressionGraph):
     symbols = {
         s: sympy_vector(s.name, s.shape) for s in graph.symbols()
@@ -121,7 +122,7 @@ def to_sympy_eqn(graph: ExpressionGraph):
     return substitute(graph, symbols)
 
 
-@implements(GraphWrapper)
+@backend.implements(GraphWrapper)
 def compile_expression_graph(obj: GraphWrapper):
     return SympyGraphWrapper(obj.graph, obj.arguments)
 
