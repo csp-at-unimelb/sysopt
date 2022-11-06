@@ -1,10 +1,11 @@
 import casadi
 import numpy as np
 from sysopt.symbolic import Function, symbolic_vector
-from sysopt.backends import get_implementation
+from sysopt.backends import get_backend
 from sysopt.backends.casadi.foreign_function import CasadiFFI
 from casadi import MX
 
+backend = get_backend('casadi')
 
 def f(x, y):
     return x + y, x**2 + y**2
@@ -24,7 +25,7 @@ class TestForeignFunction:
             shape=(2,),
             arguments=[symbolic_vector('x'), symbolic_vector('y')]
         )
-        F = get_implementation(f_spec)
+        F = backend.get_implementation(f_spec)
 
         result = F(1, 2)
 
@@ -47,7 +48,7 @@ class TestForeignFunction:
             shape=(2,),
             arguments=[symbolic_vector('x'), symbolic_vector('y')]
         )
-        F = get_implementation(f_spec).impl
+        F = backend.get_implementation(f_spec).impl
 
         x = MX.sym('x', 2)
         J = casadi.Function('J', [x], [casadi.jacobian(F(x), x)])
@@ -73,7 +74,7 @@ class TestForeignFunction:
             arguments=[symbolic_vector('x'), symbolic_vector('y'), symbolic_vector('z')],
             shape=(2,)
         )
-        F = get_implementation(f_spec)
+        F = backend.get_implementation(f_spec)
 
         x = MX.sym('x', 3)
         F_sym = F(x[0], x[1], x[2])
@@ -111,7 +112,7 @@ class TestForeignFunction:
 
             return dfdx[:, 0:1], dfdx[:, 1:2], dfdx[:, 2: 3]
 
-        F = get_implementation(f_spec)
+        F = backend.get_implementation(f_spec)
 
         x = MX.sym('x', 3)
         F_sym = F(x[0], x[1], x[2])

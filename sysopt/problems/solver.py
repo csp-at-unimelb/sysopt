@@ -6,7 +6,7 @@ from typing import Optional, Dict, List, Union, NewType
 import numpy as np
 
 from sysopt import symbolic
-from sysopt.backends import get_backend, BackendContext
+from sysopt.backends import get_backend
 from sysopt.symbolic import (
     ExpressionGraph, Variable, get_time_variable,
     is_symbolic, ConstantFunction, GraphWrapper, PiecewiseConstantSignal
@@ -63,7 +63,8 @@ class SolverContext:
         )
         self.parameter_map = p_map
         self.t_final_map = t_map
-        self.__ctx = BackendContext(backend)
+        self._params_to_t_final = t_map
+        self.__ctx = get_backend(backend)
 
     def __enter__(self):
         self.__ctx.__enter__()
@@ -87,6 +88,9 @@ class SolverContext:
                 integrand
             )
         return idx
+
+    def get_implementation(self, obj):
+        return self.__ctx.get_implementation(obj)
 
     @property
     def flattened_system(self) -> FlattenedSystem:
@@ -299,6 +303,7 @@ class Problem:
         # - initial conditions
         # -
         integrator = self.context.get_integrator()
+        cost = self.context.get_implementation(self._terminal_cost)
         n = len(self.arguments)
         t = self.context.t_final
         jac = np.zeros((n, 1), dtype=float)
@@ -306,7 +311,8 @@ class Problem:
             basis = np.array([0 if i != j else 1 for j in range(n)])
             y, q, dy, dq = integrator.pushforward(
                 t, args, basis)
-            _, dcost = self._terminal_cost.pushforward(t, y, q, args,
+
+            _, dcost = cost.pushforward(t, y, q, args,
                                                        0, dy, dq, basis)
             jac[i] = dcost
         return jac

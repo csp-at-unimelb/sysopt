@@ -6,13 +6,15 @@ from dataclasses import dataclass
 import numpy as np
 
 from sysopt.problems.problem_data import Domain, ConstrainedFunctional, CodesignSolution
-from sysopt.backends.implementation_hooks import implements
 from sysopt.backends.casadi.expression_graph import substitute
 from sysopt.backends.casadi.variational_solver import get_collocation_matrices
 from sysopt.symbolic import (
     Variable,  Function, Composition,
     PiecewiseConstantSignal
 )
+from sysopt.backends.implementation_hooks import get_backend
+backend = get_backend('casadi')
+
 
 __all__ = []
 
@@ -578,7 +580,7 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
     return solver, nlp_args, sol_to_min_and_argmin, sol_to_path
 
 
-@implements(ConstrainedFunctional)
+@backend.implements(ConstrainedFunctional)
 class CodesignSolver:
     """Solver for the fixed-time codesign problem"""
     def __init__(self, problem):

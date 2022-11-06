@@ -7,7 +7,8 @@ from sysopt.symbolic import (
     is_matrix, recursively_apply, Variable, ExpressionGraph, Algebraic,
     GraphWrapper, Function, Composition, ConstantFunction)
 
-from sysopt.backends.implementation_hooks import implements, get_implementation
+from sysopt.backends.implementation_hooks import get_backend
+backend = get_backend('casadi')
 
 
 def substitute(graph: ExpressionGraph,
@@ -20,7 +21,7 @@ def substitute(graph: ExpressionGraph,
             return symbols[obj]
         if isinstance(obj, (Function, Composition)):
             arguments = {a: symbols[a] for a in obj.arguments}
-            impl = get_implementation(obj)
+            impl = backend.get_implementation(obj)
             return impl.call(arguments)
 
         raise NotImplementedError(f'Don\'y know how to evaluate {obj} of'
@@ -32,12 +33,12 @@ def substitute(graph: ExpressionGraph,
     return recursively_apply(graph, trunk_function, leaf_function)
 
 
-@implements(ConstantFunction)
+@backend.implements(ConstantFunction)
 def to_constant(func: ConstantFunction):
     return lambda x: casadi.MX(func.value)
 
 
-@implements(GraphWrapper)
+@backend.implements(GraphWrapper)
 def compile_expression_graph(obj: GraphWrapper):
     return CasadiGraphWrapper(obj.graph, obj.arguments)
 

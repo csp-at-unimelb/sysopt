@@ -5,23 +5,20 @@
 import pytest
 import sympy
 import sympy as sp
-from sysopt.backends import BackendContext
+from sysopt.backends import get_backend
 from sysopt.symbolic import *
 from sysopt.problems.solver import SolverContext
 
-def test_sympy_is_backend():
-    with BackendContext('sympy') as be:
-        x = sp.symbols('x')
-        assert be.cos(x) == sp.cos(x)
+backend = get_backend('sympy')
 
 
+@pytest.mark.xfail
 def test_simple_expression_graph():
 
     x = Variable('x', 2)
-    y = x[0] * x[1]
+    y = x[0] * x[1] + np.cos(x[1])
 
-    with BackendContext('sympy') as backend:
-        y_s = backend.get_implementation(y)
+    y_s = backend.get_implementation(y)
 
     assert isinstance(y_s, sympy.Mul)
 

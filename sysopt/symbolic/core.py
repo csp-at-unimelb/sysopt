@@ -373,11 +373,9 @@ def op_to_string(op):
         return str(op)
 
 
-def wrap_as_op(func: Callable,
+def wrap_ufunc(ufunc: Callable,
                arguments: Optional[int] = None,
-               shape_func=_infer_scalar_shape,
-               numpy_func=None
-               ) -> Callable:
+               shape_func=_infer_scalar_shape,) -> Callable:
     """Wraps the function for use in expression graphs.
 
     Args:
@@ -391,18 +389,16 @@ def wrap_as_op(func: Callable,
         An callable operator for use in an expression graph.
 
     """
-    __ops[arguments].append(func)
+    __ops[arguments].append(ufunc)
 
     def wrapper(*args):
-        return ExpressionGraph(func, *args)
+        return ExpressionGraph(ufunc, *args)
 
-    __shape_ops[func] = shape_func
+    __shape_ops[ufunc] = shape_func
 
-    if numpy_func is not None:
-        decorator = implements(numpy_func)
-        decorator(wrapper)
+    decorator = implements(ufunc)
 
-    return wrapper
+    return decorator(wrapper)
 
 
 def is_op(value):
@@ -1144,17 +1140,6 @@ class GraphWrapper(Algebraic):
 
     def __repr__(self):
         return f'{self.symbols()} ->  {self.graph}'
-
-    @property
-    def _impl(self):
-        if self.__impl is None:
-            # pylint: disable=import-outside-toplevel
-            from sysopt.backends import get_implementation
-            self.__impl = get_implementation(self)
-        return self.__impl
-
-    def pushforward(self, *args):
-        return self._impl.pushforward(*args)
 
 
 class Inequality:
