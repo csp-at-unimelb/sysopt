@@ -242,4 +242,9 @@ plt.show()
 
 # @nb.skip
 def test_simulate():
-    simulate()
+    trajectory = simulate(10)
+    T = np.linspace(0, 10, 50)
+    x = np.empty(shape=(2, 50))
+    for i, t_i in enumerate(T):
+        x[:, i:i + 1] = trajectory(t_i)[:, 0]
+
