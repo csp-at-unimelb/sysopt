@@ -5,12 +5,13 @@ from typing import Dict, List
 import sympy
 from sysopt.symbolic import (
     is_matrix, recursively_apply, Variable, ExpressionGraph, Algebraic,
-    GraphWrapper, Function, Composition, ConstantFunction, matmul)
+    GraphWrapper, Function, Composition, ConstantFunction, matmul, Matrix)
 
 from sysopt.backends.sympy.helpers import sympy_vector
 from sysopt.backends.implementation_hooks import get_backend
 
 backend = get_backend('sympy')
+
 
 def float_to_int(eq):
     # pylint: disable=line-too-long
@@ -32,14 +33,22 @@ def to_scalar(obj):
         return sympy.Number(obj)
 
 
+def to_sympy_matrix(m: Matrix):
+    return float_to_int(sympy.Matrix(m))
+
+
 def substitute(graph: ExpressionGraph,
                symbols: Dict[Variable, sympy.Symbol]):
 
     def leaf_to_sympy_obj(obj):
+
         if is_matrix(obj):
+
             if obj.shape in ((1, ), (1, 1)):
                 # hack: for some reason sympy doesn't like to (1, ) matricies.
                 return to_scalar(obj.ravel()[0])
+            if isinstance(obj, Matrix):
+                return to_sympy_matrix(obj)
             try:
                 return float_to_int(
                     sympy.ImmutableSparseMatrix(*obj.shape, obj)
@@ -55,10 +64,9 @@ def substitute(graph: ExpressionGraph,
             return symbols[obj]
         except KeyError:
             pass
-
         if isinstance(obj, (Function, Composition)):
             arguments = {a: symbols[a] for a in obj.arguments}
-            impl = get_implementation(obj)
+            impl = backend.get_implementation(obj)
             return impl.call(arguments)
 
         raise NotImplementedError(f'Don\'y know how to evaluate {obj} of'
@@ -74,7 +82,13 @@ def substitute(graph: ExpressionGraph,
                 except TypeError:
                     r = r * child
         else:
-            r = op(*children)
+
+            try:
+                impl = backend.get_implementation(op)
+                print(impl)
+                r = impl(*children)
+            except NotImplementedError:
+                r = op(*children)
 
         try:
             if r.shape == (1, 1):

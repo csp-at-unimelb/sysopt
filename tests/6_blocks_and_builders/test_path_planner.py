@@ -1,6 +1,6 @@
 from sysopt.symbolic import symbolic_vector, Variable, Algebraic
 from sysopt.problems.problem_data import MinimumPathProblem
-from sysopt.backends import BackendContext
+
 import numpy as np
 from sysopt.blocks.optimal_controllers import PathPlanner
 
@@ -41,9 +41,9 @@ def test_setup_path_planner():
     params_numeric = [5, 1, 0]
     t_numeric = 3
 
-    with BackendContext():
-        numerical_result = planner.compute_outputs(
-            t_numeric, None, None, None, params_numeric)
+
+    numerical_result = planner.compute_outputs(
+        t_numeric, None, None, None, params_numeric)
 
     numerical_result = numerical_result.full()
     # test to see the numerical result make sense

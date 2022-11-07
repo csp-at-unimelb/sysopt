@@ -1,17 +1,16 @@
 """Casadi Function Factories."""
-from typing import Dict, NewType, Callable, Any
-from importlib import import_module, invalidate_caches
+from typing import NewType, Callable, Any
+
+import numpy as np
 
 from sysopt.symbolic.core import Algebraic
 
 Factory = NewType('Factory', Callable[[Any], Algebraic])
 
-__backends = {}
+__backends = {}     # pylint: disable=invalid-name
 
 
 def get_backend(name='casadi'):
-    global __backends
-
     try:
         return __backends[name]
     except KeyError:
@@ -31,11 +30,16 @@ class BackendContext:
     name = None
 
     def __init__(self):
-        self.__implementations = {}
+        self._implementations = {}
 
     def implements(self, sysopt_cls):
+
+        if not isinstance(sysopt_cls, np.ufunc):
+            key = sysopt_cls
+        else:
+            key = str(sysopt_cls)
         def wrapper(func):
-            self.__implementations[str(sysopt_cls)] = func
+            self._implementations[key] = func
             return func
         return wrapper
 
@@ -46,13 +50,17 @@ class BackendContext:
         pass
 
     def get_implementation(self, obj):
-        cls = str(obj.__class__)
-
+        if not isinstance(obj, np.ufunc):
+            key = type(obj)
+        else:
+            key = str(obj)
         try:
-            factory = self.__implementations[cls]
+            factory = self._implementations[key]
         except KeyError as ex:
-            msg = f'Backend doesn\'t know how to turn and object of {cls}' \
+            msg = f'Backend doesn\'t know how to turn and object of {key}' \
                   'into a function'
             raise NotImplementedError(msg) from ex
-
-        return factory(obj)
+        if isinstance(obj, np.ufunc):
+            return factory
+        else:
+            return factory(obj)

@@ -2,17 +2,15 @@
 # - specify sympy as the backend instead of casadi
 # - set up a symbolic 2nd order ODE
 # - produce symbolic representation
-import pytest
-import sympy
 import sympy as sp
 from sysopt.backends import get_backend
+import sysopt.backends.sympy
 from sysopt.symbolic import *
 from sysopt.problems.solver import SolverContext
 
 backend = get_backend('sympy')
 
 
-@pytest.mark.xfail
 def test_simple_expression_graph():
 
     x = Variable('x', 2)
@@ -20,7 +18,8 @@ def test_simple_expression_graph():
 
     y_s = backend.get_implementation(y)
 
-    assert isinstance(y_s, sympy.Mul)
+    assert str(y_s) == "x_0*x_1 + cos(x_1)"
+    assert isinstance(y_s, sp.Add)
 
 
 def test_simple_model(linear_model):

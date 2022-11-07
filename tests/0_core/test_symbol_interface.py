@@ -92,7 +92,7 @@ class TestNumpyFunctionWrapping:
         expression = np.cos(x_1)
 
         assert expression.symbols() == {x}
-        with BackendContext():
-            result = expression.call({x: [0, 0, 0]})
+
+        result = expression.call({x: [0, 0, 0]})
         assert result == 1
 
