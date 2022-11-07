@@ -1141,7 +1141,6 @@ class GraphWrapper(Algebraic):
             raise ValueError('Could not create function from graph due to'
                              f'unbound symbolic variables: {unbound_symbols}')
         self.graph = graph
-        self.__impl = None
 
     def symbols(self):
         return set(self.arguments)

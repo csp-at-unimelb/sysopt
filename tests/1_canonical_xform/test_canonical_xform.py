@@ -4,7 +4,6 @@ import pytest
 from sysopt import Metadata
 from sysopt.modelling.block import Block, Composite
 from sysopt.symbolic import get_time_variable, symbolic_vector
-from sysopt.backends import BackendContext
 from sysopt.problems import canonical_transform as xform
 from sysopt.problems.wiring_tables import (
     create_tables_from_blocks, create_tables_from_block
@@ -231,8 +230,8 @@ class TestComposite:
         f = system.vector_field(*args)
         assert f.shape == system.vector_field.shape
         assert f[0] == f_n
-        with BackendContext():
-            g = system.output_map(*args)
+
+        g = system.output_map(*args)
         assert g.shape == system.output_map.shape
 
         assert g[0] == g_n
@@ -241,8 +240,7 @@ class TestComposite:
         block = self.create_composite()
         system = xform.flatten_system(block)
         args, (x0_n, f_n, g_n, h_n) = self.get_test_data()
-        with BackendContext():
-            h = system.constraints(*args)
+        h = system.constraints(*args)
 
 
 class TestSYS71Bug:
