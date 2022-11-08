@@ -8,7 +8,7 @@ from operator import mul
 from functools import reduce
 
 from sysopt.backends.casadi.expression_graph import substitute
-from sysopt.problems.problem_data import MinimumPathProblem, SolverOptions
+from sysopt.problems.problem_data import MinimumPathProblem, CollocationSolverOptions
 from sysopt.backends.casadi.path import InterpolatedPath
 
 
@@ -19,7 +19,7 @@ Problem = namedtuple(
 )
 
 
-default_options = SolverOptions()
+default_options = CollocationSolverOptions()
 
 
 def get_collocation_matrices(degree):
@@ -49,11 +49,11 @@ def get_collocation_matrices(degree):
 
 def _get_solver(t_final: float,
                 problem: Problem,
-                options: SolverOptions):
+                options: CollocationSolverOptions):
 
     # Direct Collocation method
     times, colloc_coeff, diff_coeff, quad_coeff = get_collocation_matrices(
-        options.degree
+        options.polynomial_degree
     )
 
     params = [casadi.MX.sym(str(p), p.shape) for p in problem.parameters]
@@ -77,8 +77,9 @@ def _get_solver(t_final: float,
 
     g_lower = [0]*len(problem.constraints)
     g_upper = [np.inf]*len(problem.constraints)
-    dt = 1 / options.control_hertz
-    steps = int(np.ceil(t_final / dt))
+    steps = int(options.grid_size - 1)
+    dt = 1 / steps
+
 
     decision_vars = []      # tuple (lb < x < ub)
     constraints = []    # tuple (lb < g(x,u) < ub)
@@ -112,14 +113,14 @@ def _get_solver(t_final: float,
         du = casadi.MX.sym(f'dU_{k}', dim_u)
         decision_vars_guess.append([0] * dim_u)
         decision_vars.append((du_lower, du, du_upper))
-        for j in range(options.degree):
+        for j in range(options.polynomial_degree):
             x_jk = casadi.MX.sym(f'X_{j},{k}', dim_x)
             decision_vars.append((x_lower, x_jk, x_upper))
             decision_vars_guess.append(x_0)
             collocation_points.append(x_jk)
 
         x_next = diff_coeff[0] * x
-        for j in range(1, options.degree + 1):
+        for j in range(1, options.polynomial_degree + 1):
             # Todo: Check if this indexing is right as C[:, 0] is never used
             dx = colloc_coeff[0, j] * x
             dx += sum(

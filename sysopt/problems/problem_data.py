@@ -2,7 +2,7 @@
 
 from collections import namedtuple
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple, Union, Dict
+from typing import Optional, List, Tuple, Union, Dict, Any
 
 import numpy as np
 
@@ -144,10 +144,13 @@ class ConstrainedFunctional:
 
 
 @dataclass
-class SolverOptions:
+class CollocationSolverOptions:
     """Configuration Options for Optimisation base problems."""
-    control_hertz: int = 10     # hertz
-    degree: int = 3             # Collocation polynomial degree
+    grid_size: int = 25     # hertz
+    polynomial_degree: int = 4             # Collocation polynomial degree
+    numerical_hessian: bool = False
+    nlp_solver: str = 'ipopt'
+    nlp_options: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

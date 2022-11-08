@@ -5,14 +5,12 @@ from typing import Union, Dict, Tuple, Optional
 from dataclasses import dataclass
 import numpy as np
 
-from sysopt.problems.problem_data import Domain, ConstrainedFunctional, CodesignSolution
+from sysopt.problems.problem_data import Domain, ConstrainedFunctional, CodesignSolution, CollocationSolverOptions
 from sysopt.backends.casadi.expression_graph import substitute
 from sysopt.backends.casadi.variational_solver import get_collocation_matrices
-from sysopt.symbolic import (
-    Variable,  Function, Composition,
-    PiecewiseConstantSignal
-)
+from sysopt.symbolic import Variable, PiecewiseConstantSignal
 from sysopt.backends.implementation_hooks import get_backend
+
 backend = get_backend('casadi')
 
 
@@ -213,9 +211,37 @@ class StateFactory:
         return x, x_min, x_max, x0
 
 
+# See https://coin-or.github.io/Ipopt/OPTIONS.html
+ipopt_defaults = {
+    'fixed_variable_treatment': 'make_constraint',
+    'max_iter': 3000,
+    'tol': 1e-6,
+
+}
+
+
+@backend.implements(CollocationSolverOptions)
+def map_solver_options(options: CollocationSolverOptions):
+    ipopt_options = ipopt_defaults.copy()
+    if options.numerical_hessian:
+        ipopt_options['hessian_approximation'] = 'limited-memory'
+    if options.nlp_solver != 'ipopt':
+        raise NotImplementedError(
+            f'Solver {options.nlp_solver} not implemented'
+        )
+    ipopt_options.update(options.nlp_options)
+
+    return CasadiSolverOptions(
+        polynomial_degree=options.polynomial_degree,
+        grid_size=100,
+        solver=options.nlp_solver,
+        solver_options=ipopt_options
+    )
+
+
 @dataclass
-class CodesignSolverOptions:
-    degree: int = 4
+class CasadiSolverOptions:
+    polynomial_degree: int = 4
     grid_size: int = 100
     solver: str = 'ipopt'
     solver_options: Optional[Dict] = None
@@ -260,8 +286,7 @@ class CasadiCodesignProblemData:
     """Function C(1, y(1), q(1), p) such"""
 
 
-def build_codesign_problem(problem: ConstrainedFunctional,
-                           options=CodesignSolverOptions()
+def build_codesign_problem(problem: ConstrainedFunctional
                            ) -> CasadiCodesignProblemData:
 
     p = casadi.vertcat(*[
@@ -360,27 +385,12 @@ def build_codesign_problem(problem: ConstrainedFunctional,
         terminal_constraints=terminal_constraint,
     )
 
-    grid_size = 100
-    hessian_functions = [
-        *problem.path_constraints, problem.system.vector_field,
-        problem.system.output_map, problem.system.constraints
-    ]
-    options.grid_size = int(grid_size)
-    options.solver = 'ipopt'
-
-    for f in [f_i for f_i in hessian_functions if f_i is not None] :
-        if any(isinstance(node, (Function, Composition))
-               for node in f.graph.nodes):
-            options.solver_options.update(
-                {'ipopt.hessian_approximation': 'limited-memory'}
-            )
-            break
-    return problem_data, options
+    return problem_data
 
 
 # Data = namedtuple('Data', ['symbol', 'lower', 'upper', 'initial'])
 def evaluate_problem(problem_data: CasadiCodesignProblemData,
-                     options: CodesignSolverOptions, p):
+                     options: CasadiSolverOptions, p):
 
     x0 = problem_data.initial_conditions(p)
     dim_x = problem_data.domain.states
@@ -450,18 +460,19 @@ def evaluate_problem(problem_data: CasadiCodesignProblemData,
 
 
 def transcribe_problem(problem_data: CasadiCodesignProblemData,
-                       options: CodesignSolverOptions, p_guess):
+                       options: CasadiSolverOptions, p_guess):
 
     equality_constraints = []   # all constraints == 0
     inequality_constraints = [] # all constraints >= 0
 
     times, colloc_coeff, diff_coeff, quad_coeff = get_collocation_matrices(
-        options.degree
+        options.polynomial_degree
     )
 
     param_factory = ParameterFactory(problem_data.parameters)
-    q = 0
-    s = 0
+
+    q = 0  # quadrature variables
+    s = 0  # 'progress' along path between 0 and 1
     p = param_factory(0)
 
     x0 = problem_data.initial_conditions(p)
@@ -480,10 +491,12 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
     inequality_constraints.append(problem_data.path_constraints(s, y, q, p))
 
     for k in range(options.grid_size):
-        x_jk, z_jk = state_factory.new_collocation_points(k, options.degree)
+        x_jk, z_jk = state_factory.new_collocation_points(
+            k, options.polynomial_degree
+        )
 
         x_next = diff_coeff[0] * x
-        for j in range(1, options.degree + 1):
+        for j in range(1, options.polynomial_degree + 1):
             # Todo: Check if this indexing is right as C[:, 0] is never used
             dx = colloc_coeff[0, j] * x
             dx += sum(
@@ -558,8 +571,11 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
         'lam_x0': np.zeros(nlp_init.shape),
         'lam_g0': np.zeros(c_max.shape)
     }
-    opts = options.solver_options or {}
-    solver = casadi.nlpsol('problems', 'ipopt', nlp_spec, opts)
+
+    solver = casadi.nlpsol(
+        'problem', options.solver, nlp_spec,
+        {options.solver: options.solver_options}
+    )
 
     sol_to_min_and_argmin = casadi.Function(
         'argmim',
@@ -584,7 +600,7 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
 class CodesignSolver:
     """Solver for the fixed-time codesign problem"""
     def __init__(self, problem):
-        self.data, self.options = build_codesign_problem(problem)
+        self.data = build_codesign_problem(problem)
 
     def __call__(self, *args):
         """Evaluates the constrained functional with the given parameters.
@@ -612,14 +628,17 @@ class CodesignSolver:
             point_constraints=c_final
         )
 
-    def minimise(self, initial_values) -> CodesignSolution:
+    def minimise(self,
+                 initial_values,
+                 options: CollocationSolverOptions) -> CodesignSolution:
         """Minimise the constrained function to sovle the codesign problem"""
         # set cost - problem.cost
         #
 
+        opts = options or CasadiSolverOptions()
         solver, solver_args, prob, path = transcribe_problem(
             self.data,
-            self.options,
+            opts,
             initial_values
         )
 

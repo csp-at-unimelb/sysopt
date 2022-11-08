@@ -12,7 +12,7 @@ from sysopt.symbolic import (
     is_symbolic, ConstantFunction, GraphWrapper, PiecewiseConstantSignal
 )
 from sysopt.problems.canonical_transform import flatten_system
-from sysopt.problems.problem_data import Quadratures, ConstrainedFunctional, FlattenedSystem
+from sysopt.problems.problem_data import Quadratures, ConstrainedFunctional, FlattenedSystem, CollocationSolverOptions
 from sysopt.modelling.block import Block, Composite
 from sysopt.exceptions import InvalidParameterException
 
@@ -142,6 +142,10 @@ class SolverContext:
             quadratures=self.quadratures
         )
 
+    @property
+    def backend(self):
+        return self.__ctx
+
 
 def lambdify_terminal_constraint(problem: 'Problem',
                                  constraint: symbolic.Inequality):
@@ -179,9 +183,6 @@ class Problem:
         self.arguments = arguments
         """Symbolic variables matching the unbound parameters"""
         self.constraints: List[symbolic.Inequality] = constraints or []
-
-        self._impl = None
-        self._terminal_cost = None
         self._cost = cost
 
     @property
@@ -264,7 +265,6 @@ class Problem:
             point_constraints=point_constraints,
             path_constraints=path_constraints
         )
-        self._terminal_cost = cost_fn
         return spec
 
     def __call__(self, args):
@@ -295,7 +295,7 @@ class Problem:
     def jacobian(self, args):
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
-        _ = self._get_problem_specification()
+        spec = self._get_problem_specification()
         # create a functional object
         # with
         # - vector field
@@ -303,7 +303,7 @@ class Problem:
         # - initial conditions
         # -
         integrator = self.context.get_integrator()
-        cost = self.context.get_implementation(self._terminal_cost)
+        cost = self.context.get_implementation(spec.value)
         n = len(self.arguments)
         t = self.context.t_final
         jac = np.zeros((n, 1), dtype=float)
@@ -312,16 +312,19 @@ class Problem:
             y, q, dy, dq = integrator.pushforward(
                 t, args, basis)
 
-            _, dcost = cost.pushforward(t, y, q, args,
-                                                       0, dy, dq, basis)
+            _, dcost = cost.pushforward(t, y, q, args, 0, dy, dq, basis)
             jac[i] = dcost
         return jac
 
-    def solve(self, guess):
+    def solve(self, guess, options:Optional[CollocationSolverOptions]=None):
 
         problem = self._get_problem_specification()
-        solver = get_backend().get_implementation(problem)
-        return solver.minimise(guess)
+        solver = self.context.get_implementation(problem)
+        opts = self.context.get_implementation(
+            options or CollocationSolverOptions()
+        )
+
+        return solver.minimise(guess, opts)
 
 
 def create_parameter_map(model, constants, final_time):

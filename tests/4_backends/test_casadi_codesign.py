@@ -8,7 +8,7 @@ from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal
 from sysopt.symbolic import PiecewiseConstantSignal
 from sysopt.backends.casadi.codesign_solver import (
-    CasadiCodesignProblemData, transcribe_problem, CodesignSolverOptions
+    CasadiCodesignProblemData, transcribe_problem, CasadiSolverOptions
 )
 from sysopt import Domain
 
@@ -184,9 +184,9 @@ class TestCasadiCodesign:
             final_time=t_final
         )
 
-        options = CodesignSolverOptions(
+        options = CasadiSolverOptions(
             grid_size=100,
-            degree=4
+            polynomial_degree=4
         )
         solver, solver_args, argmin, path = transcribe_problem(
             data, options, [0]

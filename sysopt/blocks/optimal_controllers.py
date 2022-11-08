@@ -10,7 +10,7 @@ from sysopt.symbolic import Function
 from sysopt.symbolic.core import (
     SymbolicArray, Variable
 )
-from sysopt.problems.problem_data import MinimumPathProblem, SolverOptions
+from sysopt.problems.problem_data import MinimumPathProblem, CollocationSolverOptions
 
 
 from sysopt.helpers import flatten
@@ -35,7 +35,7 @@ class PathPlanner(Block):
     """
     def __init__(self,
                  problem: MinimumPathProblem,
-                 solver_options: SolverOptions = None,
+                 solver_options: CollocationSolverOptions = None,
                  name=None):
 
         if problem.parameters:
@@ -52,7 +52,7 @@ class PathPlanner(Block):
         )
         super().__init__(metadata, name)
         self._problem = problem
-        self._solver_options = solver_options or SolverOptions()
+        self._solver_options = solver_options or CollocationSolverOptions()
 
         @lru_cache(1)
         def solver(t_final):
