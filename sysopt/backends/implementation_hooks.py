@@ -1,11 +1,7 @@
 """Casadi Function Factories."""
-from typing import NewType, Callable, Any
-
+import importlib
 import numpy as np
-
-from sysopt.symbolic.core import Algebraic
-
-Factory = NewType('Factory', Callable[[Any], Algebraic])
+# from sysopt.symbolic.core import Algebraic
 
 __backends = {}     # pylint: disable=invalid-name
 
@@ -28,9 +24,14 @@ class BackendContext:
     """Loads and keeps track of symbolic backend."""
 
     name = None
+    package = None
 
     def __init__(self):
         self._implementations = {}
+        self.module = importlib.import_module(
+            f'{self.package}.{self.name}',
+            f'{self.package}'
+        )
 
     def implements(self, sysopt_cls):
 
@@ -64,3 +65,12 @@ class BackendContext:
             return factory
         else:
             return factory(obj)
+
+    def get_integrator(self, *args, **kwargs):
+        return self.module.get_integrator(*args, **kwargs)
+
+    def as_array(self, *args, **kwargs):
+        return self.module.as_array(*args, **kwargs)
+
+    def get_variational_solver(self, *args, **kwargs):
+        return self.module.get_variational_solver(*args, **kwargs)
