@@ -125,8 +125,8 @@ class ConstrainedFunctional:
     system: FlattenedSystem
     """System level model which produces the path `p -> y(t; p)` """
 
-    parameters: Dict[Variable, List[int]]
-    """List of the free parameters"""
+    parameters: Dict[Variable, Tuple[float, float]]
+    """List of the free parameters and bounds"""
 
     parameter_map: Union[GraphWrapper, ConstantFunction]
     """Mapping from the free parameters to the system parameters"""
@@ -148,9 +148,11 @@ class CollocationSolverOptions:
     """Configuration Options for Optimisation base problems."""
     grid_size: int = 25     # hertz
     polynomial_degree: int = 4             # Collocation polynomial degree
+    use_nested_solver: bool = False
     numerical_hessian: bool = False
     nlp_solver: str = 'ipopt'
     nlp_options: Dict[str, Any] = field(default_factory=dict)
+    constraint_tolerance: float = 1e4
 
 
 @dataclass

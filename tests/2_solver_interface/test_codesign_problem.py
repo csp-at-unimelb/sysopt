@@ -161,7 +161,7 @@ def test_codesign_problem_with_path_variable(linear_model):
             cost=t_final,
             subject_to=constraint
         )
-        spec = problem._get_problem_specification()
+        spec = problem._get_minimisation_specification()
         assert u in spec.parameters
         assert t_final in spec.parameters
         p, = spec.parameter_map.symbols()

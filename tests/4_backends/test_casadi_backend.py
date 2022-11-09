@@ -58,7 +58,7 @@ class TestForeignFunction:
 
     def test_nonsquare_jacobian(self):
         def f_3(x, y, z):
-            return x + y, z**2
+            return x + y + x* y *z, z**2
 
         def jac_f_3(x, y, z):
             dfdx = np.zeros(shape=(2, 3), dtype=float)
@@ -83,6 +83,7 @@ class TestForeignFunction:
         expected_result = np.hstack(jac_f_3(1, 2, 3))
 
         assert (np.abs(result - expected_result) < 1e-4).all()
+
 
     def test_forwards_derivative(self):
         def f_3(x, y, z):
