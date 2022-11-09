@@ -69,9 +69,9 @@ class CasadiGraphWrapper(Algebraic):
         }
 
         f_impl = substitute(graph, self._symbols)
-        self.func = casadi.Function(name,
-                                    list(self._symbols.values()),
-                                    [f_impl])
+        self.func = casadi.Function(
+            name, list(self._symbols.values()), [f_impl]
+        )
 
     def __hash__(self):
         return id(self)

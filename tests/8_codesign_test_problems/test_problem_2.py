@@ -76,7 +76,7 @@ def test_problem_2():
 
         soln = problem.solve([1, 0])
 
-        k_min, u_min = soln.argmin
+        k_min, u_min = soln.argmin.values()
         y_final = soln.outputs[0:2, -1]
         y_start = soln.outputs[0:2, 0]
         eps = 1e-6

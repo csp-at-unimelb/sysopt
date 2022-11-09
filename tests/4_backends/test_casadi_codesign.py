@@ -8,7 +8,8 @@ from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal
 from sysopt.symbolic import PiecewiseConstantSignal
 from sysopt.backends.casadi.codesign_solver import (
-    CasadiCodesignProblemData, transcribe_problem, CasadiSolverOptions
+    CasadiCodesignProblemData, transcribe_problem, CasadiSolverOptions,
+    is_feasible
 )
 from sysopt import Domain
 
@@ -251,4 +252,86 @@ class TestCasadiCodesign:
             sol = problem.solve([0])
 
             assert sol.cost < cost_f
+
+
+class TestFeasibility:
+    def test_infeasible_parameters(self):
+        block = LinearScalarEquation()
+
+        with SolverContext(model=block, t_final=1) as solver:
+            params = solver.parameters
+
+            assert len(params) == 2
+
+            constraints = [
+                params[0] < 1,
+                0.5 < params[0],
+                0.5 < params[1],
+                params[1] < 1
+            ]
+
+            t = solver.t
+            y = block.outputs(t)
+
+            running_cost = -y ** 2
+            p0 = [0.4, 0.4]
+
+            cost = solver.integral(running_cost) - y(1)
+
+            problem = solver.problem(params, cost, constraints)
+            spec = problem._get_minimisation_specification()
+            casadi_problem = solver.get_implementation(spec)
+            soln = is_feasible(casadi_problem.data, p0)
+            assert not soln
+            soln = is_feasible(casadi_problem.data, [0.5, 0.5])
+            assert soln
+
+            soln = problem.solve_feasibility([0.5, 0.5])
+            assert soln.cost < 1e-4
+
+    def test_constrained_functional_feasibility(self):
+        # vector field
+        # dq = -p
+        # dp = q + u
+        # u = p
+        t = casadi.MX.sym('t')
+        x_0 = casadi.MX.sym('x_0')
+        x_1 = casadi.MX.sym('x_1')
+        u = casadi.MX.sym('u')
+        p = casadi.MX.sym('p')
+        q = casadi.MX.sym('q')
+        y = casadi.MX.sym('y', 3)
+        x = casadi.vertcat(x_0, x_1)
+        args = [t, x, u, p]
+        vector_field = casadi.Function('f', args, [10 * casadi.vertcat(-x_1 + u, x_0)])
+        outputs = casadi.Function('g', args, [casadi.vertcat(x_0, x_1, u)])
+        constraints = casadi.Function('h', args, [u - p])
+        quadrature = casadi.Function('q_dot', [t, y, p], [10 * y[2]])
+        intitial_conditions = casadi.Function('x0', [p], [casadi.MX([0, 1])])
+        cost = casadi.Function('cost', [t, y, q, p], [y[0] ** 2 + y[1] ** 2])
+        parameters = {
+            PiecewiseConstantSignal('u', shape=(1,), frequency=10): (-1, 1)
+        }
+        path_constraint = casadi.Function(
+            'c_t', [t, y, q, p], [casadi.MX()]
+        )
+        terminal_constraint = casadi.Function(
+            'c_T', [t, y, q, p], [casadi.MX()]
+        )
+        t_final = casadi.Function('t_f', [p], [10])
+        data = CasadiCodesignProblemData(
+            domain=Domain(1, 2, 0, 1, 1),
+            vector_field=vector_field,
+            outputs=outputs,
+            algebraic_constraint=constraints,
+            quadrature=quadrature,
+            initial_conditions=intitial_conditions,
+            cost_function=cost,
+            parameters=parameters,
+            path_constraints=path_constraint,
+            terminal_constraints=terminal_constraint,
+            final_time=t_final
+        )
+
+        assert is_feasible(data, [0])
 

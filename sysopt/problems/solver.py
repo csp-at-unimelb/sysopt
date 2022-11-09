@@ -12,7 +12,10 @@ from sysopt.symbolic import (
     is_symbolic, ConstantFunction, GraphWrapper, PiecewiseConstantSignal
 )
 from sysopt.problems.canonical_transform import flatten_system
-from sysopt.problems.problem_data import Quadratures, ConstrainedFunctional, FlattenedSystem, CollocationSolverOptions
+from sysopt.problems.problem_data import (
+    Quadratures, ConstrainedFunctional, FlattenedSystem,
+    CollocationSolverOptions, CodesignSolution
+)
 from sysopt.modelling.block import Block, Composite
 from sysopt.exceptions import InvalidParameterException
 
@@ -193,7 +196,7 @@ class Problem:
     def cost(self):
         return self._cost
 
-    def _get_problem_specification(self):
+    def _get_minimisation_specification(self):
         context = self.context
 
         t = get_time_variable()
@@ -272,7 +275,7 @@ class Problem:
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
 
-        spec = self._get_problem_specification()
+        spec = self._get_minimisation_specification()
 
         integrator = self.context.get_integrator()
 
@@ -295,7 +298,7 @@ class Problem:
     def jacobian(self, args):
         assert len(args) == len(self.arguments), \
             f'Invalid arguments: expected {self.arguments}, received {args}'
-        spec = self._get_problem_specification()
+        spec = self._get_minimisation_specification()
         # create a functional object
         # with
         # - vector field
@@ -316,15 +319,31 @@ class Problem:
             jac[i] = dcost
         return jac
 
-    def solve(self, guess, options:Optional[CollocationSolverOptions]=None):
+    def solve(self,
+              guess,
+              options: Optional[CollocationSolverOptions] = None):
 
-        problem = self._get_problem_specification()
+        problem = self._get_minimisation_specification()
         solver = self.context.get_implementation(problem)
         opts = self.context.get_implementation(
             options or CollocationSolverOptions()
         )
 
         return solver.minimise(guess, opts)
+
+    def solve_feasibility(self,
+                          guess,
+                          options: Optional[CollocationSolverOptions] = None
+                          ) -> CodesignSolution:
+
+        problem = self._get_minimisation_specification()
+        solver = self.context.get_implementation(problem)
+        opts = self.context.get_implementation(
+            options or CollocationSolverOptions()
+        )
+        soln = solver.solve_feasibility(guess, opts)
+
+        return soln
 
 
 def create_parameter_map(model, constants, final_time):

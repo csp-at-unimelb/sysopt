@@ -124,20 +124,29 @@ class ParameterFactory:
         p_0 = []
         for f in self.factories:
             pf, pf_min, pf_max, pf0 = f.finalise()
-            p.append(pf)
-            p_min.append(pf_min)
-            p_max.append(pf_max)
-            p_0.append(pf0)
+            if pf.shape != 0:
+                p.append(pf)
+                p_min.append(pf_min)
+                p_max.append(pf_max)
+                p_0.append(pf0)
+        if p:
+            result = (
+                casadi.vertcat(*p),
+                casadi.vertcat(*p_min),
+                casadi.vertcat(*p_max),
+                casadi.vertcat(*p_0)
+            )
 
-        result = (
-            casadi.vertcat(*p),
-            casadi.vertcat(*p_min),
-            casadi.vertcat(*p_max),
-            casadi.vertcat(*p_0)
-        )
-        for r in result[1:]:
-            assert r.is_constant(), r
-        return result
+            for r in result[1:]:
+                assert r.is_constant(), r
+            return result
+        else:
+            return (
+                casadi.MX.sym('p', 0),
+                casadi.DM.zeros(0, 0),
+                casadi.DM.zeros(0, 0),
+                casadi.DM.zeros(0, 0)
+            )
 
     def output_list(self):
         return [factory.output() for factory in self.factories]
@@ -235,7 +244,8 @@ def map_solver_options(options: CollocationSolverOptions):
         polynomial_degree=options.polynomial_degree,
         grid_size=100,
         solver=options.nlp_solver,
-        solver_options=ipopt_options
+        solver_options=ipopt_options,
+        constraint_tolerance=options.constraint_tolerance
     )
 
 
@@ -245,6 +255,7 @@ class CasadiSolverOptions:
     grid_size: int = 100
     solver: str = 'ipopt'
     solver_options: Optional[Dict] = None
+    constraint_tolerance:float = 1e-4
 
 
 @dataclass
@@ -280,7 +291,7 @@ class CasadiCodesignProblemData:
     """List of all parameters with the upper and lower bounds"""
 
     path_constraints: casadi.Function
-    """Function c(s,y,q) such that c >= 0 implies constraint is satisfied"""
+    """Function c(s, y, q, p) s.t. c >= 0 implies constraint is satisfied"""
 
     terminal_constraints: casadi.Function
     """Function C(1, y(1), q(1), p) such"""
@@ -388,7 +399,6 @@ def build_codesign_problem(problem: ConstrainedFunctional
     return problem_data
 
 
-# Data = namedtuple('Data', ['symbol', 'lower', 'upper', 'initial'])
 def evaluate_problem(problem_data: CasadiCodesignProblemData,
                      options: CasadiSolverOptions, p):
 
@@ -596,19 +606,56 @@ def transcribe_problem(problem_data: CasadiCodesignProblemData,
     return solver, nlp_args, sol_to_min_and_argmin, sol_to_path
 
 
+def solve(problem: CasadiCodesignProblemData,
+          initial_values,
+          options: Optional[CasadiSolverOptions] = None) -> CodesignSolution:
+    """Minimise the constrained function to sovle the codesign problem"""
+    # set cost - problem.cost
+    #
+
+    opts = options or CasadiSolverOptions()
+    solver, solver_args, prob, path = transcribe_problem(
+        problem, opts, initial_values
+    )
+
+    result = solver(**solver_args)
+    value = result['f'].full()
+    argmin_vec = prob(result['x'])
+    if len(problem.parameters) == 1:
+        argmin_vec = [argmin_vec]
+    elif len(problem.parameters) == 0:
+        argmin_vec = []
+
+    argmin = {
+        p: argmin.full() for p, argmin in zip(problem.parameters, argmin_vec)
+    }
+
+    t, y, q, c_t, c_final = [a.full() for a in path(result['x'])]
+
+    return CodesignSolution(cost=value,
+                            argmin=argmin,
+                            time=t,
+                            outputs=y,
+                            quadratures=q,
+                            path_constraints=c_t,
+                            point_constraints=c_final)
+
+
 @backend.implements(ConstrainedFunctional)
 class CodesignSolver:
     """Solver for the fixed-time codesign problem"""
     def __init__(self, problem):
         self.data = build_codesign_problem(problem)
 
-    def __call__(self, *args):
+    def __call__(self, *args, options: Optional[CasadiSolverOptions]=None):
         """Evaluates the constrained functional with the given parameters.
 
         Args: list of values for decision variables."""
-
+        opts = options or CasadiSolverOptions()
         solver, solver_args, cost_fn, path = evaluate_problem(
-            self.data, self.options, args)
+            self.data,
+            opts,
+            args)
 
         # set cost = |param - args|^2
         # solve codesign problem
@@ -630,30 +677,143 @@ class CodesignSolver:
 
     def minimise(self,
                  initial_values,
-                 options: CollocationSolverOptions) -> CodesignSolution:
+                 options: CasadiSolverOptions) -> CodesignSolution:
         """Minimise the constrained function to sovle the codesign problem"""
-        # set cost - problem.cost
-        #
 
+        return solve(self.data, initial_values, options)
+
+    def solve_feasibility(self,
+                          guess,
+                          options: Optional[CasadiSolverOptions] = None):
         opts = options or CasadiSolverOptions()
-        solver, solver_args, prob, path = transcribe_problem(
-            self.data,
-            opts,
-            initial_values
+        problem = build_feasibility_problem(
+            self.data,  guess, opts
         )
+        soln = solve(problem, [0] * len(problem.parameters), opts)
+        return soln
 
-        result = solver(**solver_args)
-        value = result['f'].full()
-        if len(initial_values) > 1:
-            argmin = [arg.full() for arg in prob(result['x'])]
+
+def build_feasibility_problem(
+            problem: CasadiCodesignProblemData,
+            guess,
+            options: CasadiSolverOptions):
+    # The feasibility problem involves adding some slack variables
+    # to the constraints, setting these variables to be in (-eps, infty)
+    # and then minimising the sum of the slack variables.
+    # This means that the cost is linear, and the constraint set is much
+    # looser than the initial problem
+    # If a feasible solution exists, the cost will be zero.
+
+    parameters = {}
+    p_guess = []
+    p_initial = []
+    p_ctrl = []
+    for i, (param, value) in enumerate(problem.parameters.items()):
+        if isinstance(param, PiecewiseConstantSignal):
+            parameters[param] = value
+            u = casadi.MX.sym(param.name)
+            p_ctrl.append(u)
+            p_guess.append(u)
+            p_initial.append(guess[i])
         else:
-            argmin = prob(result['x']).full()
-        t, y, q, c_t, c_final = [a.full() for a in path(result['x'])]
+            p_guess.append(casadi.MX(guess[i]))
 
-        return CodesignSolution(cost=value,
-                                argmin=argmin,
-                                time=t,
-                                outputs=y,
-                                quadratures=q,
-                                path_constraints=c_t,
-                                point_constraints=c_final)
+    n_path, _ = problem.path_constraints.size_out(0)
+    n_point, _ = problem.terminal_constraints.size_out(0)
+
+    for i in range(n_path):
+        mu_i = Variable(f'c_{i}')
+        parameters[mu_i] = (-options.constraint_tolerance, np.inf)
+        p_initial.append(0)
+
+    for i in range(n_point):
+        nu_i = Variable(f'C_{i}')
+        parameters[nu_i] = (-options.constraint_tolerance, np.inf)
+        p_initial.append(0)
+
+    tau = casadi.MX.sym('tau')
+    x = casadi.MX.sym('x',  problem.domain.states)
+    zu = casadi.MX.sym('zu', problem.domain.constraints + problem.domain.inputs)
+    p_guess = casadi.vertcat(*p_guess)
+
+    mu_sym = casadi.MX.sym('mu', n_path)
+    nu_sym = casadi.MX.sym('nu', n_point)
+    p = casadi.vertcat(*p_ctrl, mu_sym, nu_sym)
+
+    args = [tau, x, zu, p]
+    args_inner = [tau, x, zu, p_guess]
+    f = casadi.Function(
+        'f', args, [problem.vector_field(*args_inner)]
+    )
+    g = casadi.Function(
+        'g', args, [problem.outputs(*args_inner)]
+    )
+
+    x0 = casadi.Function(
+        'x0', [p], [problem.initial_conditions(p_guess)]
+    )
+    h = casadi.Function(
+        'h', args, [problem.algebraic_constraint(*args_inner)]
+    )
+
+    q = casadi.MX.sym('q', *problem.quadrature.size_out(0))
+    y = casadi.MX.sym('y', *problem.outputs.size_out(0))
+
+    q_dot = casadi.Function(
+        'q_dot', [tau, y, p], [problem.quadrature(tau, y, p_guess)]
+    )
+    ones_mu = casadi.MX.ones(*mu_sym.shape)
+    ones_nu = casadi.MX.ones(*nu_sym.shape)
+    cost = casadi.Function(
+        'cost', [tau, y, q, p], [ones_mu.T @ mu_sym + ones_nu.T @ nu_sym]
+    )
+    path_constraint = casadi.Function(
+        'c_t',
+        [tau, y, q, p],
+        [mu_sym if n_path == 0
+         else mu_sym + problem.path_constraints(tau, y, q, p_guess)]
+    )
+    termina_constraint = casadi.Function(
+        'c_T',
+        [tau, y, q, p],
+        [nu_sym if n_point == 0
+         else nu_sym + problem.terminal_constraints(tau, y, q, p_guess)
+         ]
+    )
+    t_final = casadi.Function(
+        't_f',
+        [p],
+        [problem.final_time(p_guess)]
+    )
+
+    feasability_problem = CasadiCodesignProblemData(
+        domain=problem.domain,
+        vector_field=f,
+        outputs=g,
+        final_time=t_final,
+        algebraic_constraint=h,
+        initial_conditions=x0,
+        quadrature=q_dot,
+        cost_function=cost,
+        parameters=parameters,
+        path_constraints=path_constraint,
+        terminal_constraints=termina_constraint
+    )
+    return feasability_problem
+
+
+def is_feasible(data: CasadiCodesignProblemData,
+                parameters,
+                options: Optional[CasadiSolverOptions] = None):
+    assert len(parameters) == len(data.parameters)
+    opts = options or CasadiSolverOptions()
+    problem = build_feasibility_problem(
+        data,
+        parameters,
+        opts
+    )
+    soln = solve(problem,
+                 [0] * len(problem.parameters),
+                 options)
+    return soln.cost < opts.constraint_tolerance
+

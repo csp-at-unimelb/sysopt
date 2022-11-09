@@ -69,6 +69,5 @@ def test_problem_3():
             subject_to=constraints
         )
         soln = problem.solve([0, 0])
-        k_min, u_min = soln.argmin
+        k_min, u_min = soln.argmin.values()
         assert abs(k_min - k_star) < 1e-2
-
