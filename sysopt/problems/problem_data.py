@@ -152,7 +152,7 @@ class CollocationSolverOptions:
     numerical_hessian: bool = False
     nlp_solver: str = 'ipopt'
     nlp_options: Dict[str, Any] = field(default_factory=dict)
-    constraint_tolerance: float = 1e4
+    constraint_tolerance: float = 1e-4
 
 
 @dataclass
