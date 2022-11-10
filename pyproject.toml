@@ -1,3 +1,8 @@
 [build-system]
 requires = ["setuptools >=64.0.0", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
+
+# pyproject.toml
+
+[tool.setuptools_scm]
+write_to = "sysopt/version.py"
