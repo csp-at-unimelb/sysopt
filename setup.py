@@ -20,12 +20,10 @@ setuptools.setup(
     url="https://github.com/csp-at-unimelb/sysopt",
     description="Component-based systems modelling library.",
     classifiers=[
-        "Programming Language:: Python:: 3",
-        "License:: OSI Approved:: Apache Software License",
-        "Operating System:: OS Independent Development",
-        "Status:: 3 - Alpha",
-        "Topic:: Scientific / Engineering",
-        "Topic:: Software Development:: Libraries"
+        "Programming Language :: Python",
+        "License :: OSI Approved :: Apache Software License",
+        "Topic :: Scientific/Engineering",
+        "Topic :: Software Development :: Libraries"
     ],
     packages=['sysopt'],
     package_dir={'sysopt': 'sysopt'},
