@@ -8,9 +8,13 @@ with open("requirements.txt", 'r') as fh:
 if platform.machine().startswith("arm"):
     warnings.warn("Please ensure you installed CasADI from source")
 
+with open("version", 'r') as fp:
+    major, minor, revision = fp.readline().split('.')
+    version = f'{major}.{minor}.{revision}'
+
 setuptools.setup(
     name="sysopt",
-    version="0.0.3",
+    version=version,
     author="Peter Cudmore",
     author_email="peter.cudmore@unimelb.edu.au",
     url="https://github.com/csp-at-unimelb/sysopt",

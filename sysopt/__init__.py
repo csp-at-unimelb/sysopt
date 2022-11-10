@@ -20,7 +20,6 @@ Bug reports:
 
 """
 
-from sysopt.env import version
 from sysopt.modelling import *
 from sysopt.symbolic import *
 from sysopt.problems import *
