@@ -23,7 +23,7 @@ setuptools.setup(
         "Programming Language:: Python:: 3",
         "License:: OSI Approved:: Apache Software License",
         "Operating System:: OS Independent Development",
-        "Status:: 3 - Alpha"
+        "Status:: 3 - Alpha",
         "Topic:: Scientific / Engineering",
         "Topic:: Software Development:: Libraries"
     ],
