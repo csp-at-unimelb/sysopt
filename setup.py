@@ -16,7 +16,7 @@ setuptools.setup(
     name="sysopt",
     version=version,
     author="Peter Cudmore",
-    author_email="peter.cudmore@unimelb.edu.au",
+    author_email="peter.cudmore@uqconnect.edu.au",
     url="https://github.com/csp-at-unimelb/sysopt",
     description="Component-based systems modelling library.",
     classifiers=[
