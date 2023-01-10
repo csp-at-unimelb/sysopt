@@ -10,6 +10,7 @@ from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal, Gain
 from sysopt import Composite, Metadata, PiecewiseConstantSignal, Variable
 from sysopt.problems import SolverContext
+from sysopt.backends.casadi import codesign_solver
 
 
 def dxdt(t, x, u, p):
