@@ -11,6 +11,7 @@ from sysopt.problems.wiring_tables import (
 from sysopt.blocks.common import Gain, LowPassFilter, Oscillator
 from sysopt import exceptions
 from dataclasses import asdict
+from sysopt.backends.casadi import codesign_solver
 
 from tests.mocks import LinearScalarEquation
 md = Metadata(

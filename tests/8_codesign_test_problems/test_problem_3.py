@@ -13,6 +13,7 @@ from sysopt.problems import SolverContext
 from sysopt.modelling.builders import FullStateOutput
 from sysopt.blocks import ConstantSignal
 from sysopt.symbolic import PiecewiseConstantSignal, Variable
+from sysopt.backends.casadi import codesign_solver
 
 J = 1
 

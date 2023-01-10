@@ -12,6 +12,7 @@ from sysopt.blocks import ConstantSignal
 from sysopt import Metadata, Composite
 from sysopt.symbolic import Variable, PiecewiseConstantSignal
 from sysopt.problems import SolverContext
+from sysopt.backends.casadi import codesign_solver
 
 
 def dxdt(t, x, u, p):
